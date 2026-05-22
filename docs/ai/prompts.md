@@ -21,3 +21,15 @@ The AI explained that the `nsjail` Makefile tries to run `git submodule update -
 
 **What we used / didn't use:**
 i used the host side initialization trick. it works perfectly because `make` in the nsjail folder sees `kafel/Makefile` and skips the git commands. i didnt use the alternative of modifying the dockerfile to fake a git tree because that felt too brittle.
+
+## [2026-05-25] [Context: Core Handlers Validation & Route Wiring]
+
+**Prompt:**
+we need to implement the POST /run handler based on the spec.md. generate the go structs that exactly match the JSON contract, and then write the handler that reads the body and returns the right 400 errors if it's bad. also, make sure to add a 256KiB max read limit and a strict path traversal check on the filenames right now so the foundation is totally secure from day one.
+
+**Response summary:**
+The AI generated `internal/api/models.go` with strict JSON tags mapping to the spec, and `internal/api/handlers.go`. It used `http.MaxBytesReader` for the 256KiB limit and wrote a custom `isValidFilename` function to block path traversals (checking for slashes and `..`). It also provided unit tests for validation rules.
+
+**What we used / didn't use:**
+used exact structs and handlers as suggested. I requested the max size limit and path validation specifically because security is a top priority for this architecture, and laying down a rock solid secure foundation early prevents massive refactors later. wired it up with clean tests, zero lint errors. foundation is super solid now and we are in a great spot.
+
