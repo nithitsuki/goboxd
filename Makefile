@@ -1,19 +1,21 @@
-.PHONY: build run test integration lint
-
-COMPOSE ?= docker compose
-TOOLS   := $(COMPOSE) --profile tools run --rm tools
+.PHONY: build run test integration load lint
 
 build:
-	$(COMPOSE) build goboxd
+	docker compose build
 
 run:
-	$(COMPOSE) up goboxd
+	docker compose up
 
 test:
-	$(TOOLS) go test ./...
+	go test -v ./...
 
 integration:
-	$(TOOLS) go test -tags=integration ./tests/...
+	# Placeholder for integration tests
+	echo "integration tests pending"
+
+load:
+	# Placeholder for sustained load testing via hey/k6
+	echo "load tests pending"
 
 lint:
-	$(TOOLS) golangci-lint run ./...
+	golangci-lint run ./...

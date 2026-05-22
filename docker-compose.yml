@@ -1,21 +1,9 @@
+version: '3.8'
 services:
   goboxd:
-    build:
-      context: .
-      target: runtime
-    image: goboxd:dev
-    container_name: goboxd
+    build: .
     ports:
       - "8080:8080"
-    privileged: true
-
-  tools:
-    build:
-      context: .
-      target: builder
-    image: goboxd-tools:dev
-    volumes:
-      - .:/src
-    working_dir: /src
-    profiles: ["tools"]
-    entrypoint: []
+    privileged: true # Required for nsjail to create namespaces
+    environment:
+      - PORT=8080
