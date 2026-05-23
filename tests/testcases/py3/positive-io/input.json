@@ -1,0 +1,10 @@
+{
+  "language": "py3",
+  "source": "n = int(input())\nfor i in range(n):\n    print(f\"Line {i+1}\")",
+  "tests": [
+    {
+      "stdin": "3",
+      "expected_stdout": "Line 1\nLine 2\nLine 3\n"
+    }
+  ]
+}

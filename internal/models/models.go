@@ -50,14 +50,17 @@ type TestResult struct {
 // RunResponse is the outgoing payload for POST /run (HTTP 200)
 type RunResponse struct {
 	Status string       `json:"status"`
-	Build  *BuildResult `json:"build,omitempty"`
+	Build  BuildResult  `json:"build"`
 	Tests  []TestResult `json:"tests"`
 }
 
 // APIError represents the standard error format for HTTP 400 responses
 type APIError struct {
-	Error struct {
-		Code    string `json:"code"`
-		Message string `json:"message"`
-	} `json:"error"`
+	Error ErrorDetail `json:"error"`
+}
+
+// ErrorDetail holds the code and message for an API error.
+type ErrorDetail struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
 }

@@ -15,11 +15,11 @@ func TestExecuteRun(t *testing.T) {
 	}
 
 	py3Config := config.LanguageConfig{
-		ID:               "py3",
-		Name:             "Python 3",
-		Version:          "Python 3.11",
-		RunCmd:           []string{"/usr/bin/python3", "main.py"},
-		SourceFilename:   "main.py",
+		ID:             "py3",
+		Name:           "Python 3",
+		Version:        "Python 3.11",
+		RunCmd:         []string{"/usr/bin/python3", "main.py"},
+		SourceFilename: "main.py",
 		DefaultLimits: config.Limits{
 			WallTimeS:    2,
 			MemoryKB:     102400,
@@ -39,7 +39,7 @@ func TestExecuteRun(t *testing.T) {
 			testCases: []models.TestCase{
 				{Stdin: "", ExpectedStdout: "Hello from Python 3!\n"},
 			},
-			expectedStatus: "ok",
+			expectedStatus: "accepted",
 		},
 		{
 			name:   "timeout moderate",
@@ -47,7 +47,7 @@ func TestExecuteRun(t *testing.T) {
 			testCases: []models.TestCase{
 				{Stdin: "", ExpectedStdout: ""},
 			},
-			expectedStatus: "timeout",
+			expectedStatus: "time_exceeded",
 		},
 		{
 			name:   "runtime error (syntax)",
@@ -55,7 +55,7 @@ func TestExecuteRun(t *testing.T) {
 			testCases: []models.TestCase{
 				{Stdin: "", ExpectedStdout: ""},
 			},
-			expectedStatus: "runtime_error", // Exits with error code
+			expectedStatus: "runtime_error",
 		},
 		{
 			name:   "memory limit (OOM)",
@@ -63,15 +63,15 @@ func TestExecuteRun(t *testing.T) {
 			testCases: []models.TestCase{
 				{Stdin: "", ExpectedStdout: ""},
 			},
-			expectedStatus: "runtime_error", // OOM kill usually returns a runtime error or signal kill
+			expectedStatus: "runtime_error",
 		},
 		{
-			name:   "wrong answer",
+			name:   "wrong output",
 			source: "print('wrong')",
 			testCases: []models.TestCase{
 				{Stdin: "", ExpectedStdout: "right\n"},
 			},
-			expectedStatus: "wrong_answer",
+			expectedStatus: "wrong_output",
 		},
 	}
 
@@ -94,18 +94,15 @@ func TestExecuteRun(t *testing.T) {
 
 			res := results[0]
 
-			// Memory kills usually manifest as a Killed signal (timeout maps killed signals to "timeout" 
-			// temporarily, but sometimes segfaults or memory errors read as runtime_error depending on Python 3's handling of MemoryErrors.
-			// Let's accept both for OOMs depending on the environment)
-			if tt.name == "memory limit (OOM)" && (res.Status == "timeout" || res.Status == "runtime_error") {
-				return // valid handling
+			// Memory kills: sigkill from nsjail could surface as time_exceeded or runtime_error
+			if tt.name == "memory limit (OOM)" && (res.Status == "time_exceeded" || res.Status == "runtime_error") {
+				return
 			}
 
-			// Timeout can return 'timeout' or 'runtime_error' depending on whether nsjail sent a fatal SIGKILL or Python exited with signal 9.
-			if tt.name == "timeout moderate" && (res.Status == "timeout" || res.Status == "runtime_error") {
-				return // valid handling
+			// Timeout: nsjail sigkill can read as time_exceeded or runtime_error
+			if tt.name == "timeout moderate" && (res.Status == "time_exceeded" || res.Status == "runtime_error") {
+				return
 			}
-
 
 			if res.Status != tt.expectedStatus {
 				t.Errorf("expected status %q, got %q (stderr: %q)", tt.expectedStatus, res.Status, res.Stderr)

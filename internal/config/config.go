@@ -17,6 +17,7 @@ type LanguageConfig struct {
 	SourceFilename   string   `yaml:"source_filename"`
 	ArtifactFilename string   `yaml:"artifact_filename"`
 	DefaultLimits    Limits   `yaml:"default_run_limits"`
+	FlagAllowlist    []string `yaml:"flag_allowlist"`
 }
 
 // Stub for hardcoded py3 config until we implement the YAML registry
@@ -33,4 +34,10 @@ var Py3Stub = LanguageConfig{
 		MemoryKB:     102400, // 100 MiB
 		MaxProcesses: 100,
 	},
+	FlagAllowlist: nil, // no flags for interpreted languages
+}
+
+// DefaultRegistry is used by the handler to look up language configs.
+var DefaultRegistry = map[string]LanguageConfig{
+	"py3": Py3Stub,
 }

@@ -4,36 +4,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"net/http"
-	"os"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/thesouldev/goboxd/internal/models"
 )
-
-func getAPIURL() string {
-	url := os.Getenv("API_URL")
-	if url == "" {
-		url = "http://localhost:8080"
-	}
-	return url
-}
-
-func waitForHealthy(t *testing.T, count int) {
-	for i := 0; i < count; i++ {
-		resp, err := http.Get(getAPIURL() + "/healthz")
-		if err == nil && resp.StatusCode == 200 {
-			resp.Body.Close()
-			return
-		}
-		if resp != nil {
-			resp.Body.Close()
-		}
-		time.Sleep(1 * time.Second)
-	}
-	t.Fatalf("API never became healthy at %s", getAPIURL())
-}
 
 func sendRun(t *testing.T, req models.RunRequest) models.RunResponse {
 	b, _ := json.Marshal(req)
@@ -57,42 +32,40 @@ func sendRun(t *testing.T, req models.RunRequest) models.RunResponse {
 }
 
 func TestE2E_Python3(t *testing.T) {
-	waitForHealthy(t, 5)
-
 	tests := []struct {
 		name           string
 		source         string
 		stdin          string
 		expectedStdout string
-		expectedStatus string // the test result status
+		expectedStatus string
 	}{
 		{
 			name:           "positive-basic",
 			source:         "print(\"Hello from Python 3!\")",
 			stdin:          "",
 			expectedStdout: "Hello from Python 3!\n",
-			expectedStatus: "ok",
+			expectedStatus: "accepted",
 		},
 		{
 			name:           "positive-advanced",
 			source:         "print(\"Python 3 advanced test\")\nimport sys\ndata = list(range(100))\nprint(f\"Processed {len(data)} items\")",
 			stdin:          "",
 			expectedStdout: "Python 3 advanced test\nProcessed 100 items\n",
-			expectedStatus: "ok",
+			expectedStatus: "accepted",
 		},
 		{
 			name:           "positive-io",
 			source:         "n = int(input())\nfor i in range(n):\n    print(f\"Line {i+1}\")",
 			stdin:          "3\n",
 			expectedStdout: "Line 1\nLine 2\nLine 3\n",
-			expectedStatus: "ok",
+			expectedStatus: "accepted",
 		},
 		{
 			name:           "memorylimit-high",
 			source:         "data = [1, 2, 3, 4, 5] * 1000\nprint(\"Memory test completed\")",
 			stdin:          "",
 			expectedStdout: "Memory test completed\n",
-			expectedStatus: "ok",
+			expectedStatus: "accepted",
 		},
 	}
 
@@ -122,9 +95,8 @@ func TestE2E_Python3(t *testing.T) {
 			if testRes.Stdout != tt.expectedStdout {
 				t.Errorf("expected stdout %q, got %q", tt.expectedStdout, testRes.Stdout)
 			}
-			
-			// Silenced nsjail leakage check
-			if strings.Contains(testRes.Stderr, "UID/EUID=0") {
+
+			if strings.Contains(testRes.Stderr, "UID/EUID") {
 				t.Errorf("expected nsjail warnings to be silenced, but got leakage in stderr: %q", testRes.Stderr)
 			}
 		})

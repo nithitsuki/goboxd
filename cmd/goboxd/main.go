@@ -6,9 +6,13 @@ import (
 	"os"
 
 	"github.com/thesouldev/goboxd/internal/api"
+	"github.com/thesouldev/goboxd/internal/runner"
 )
 
 func main() {
+	// Security hole #7: sweep orphan jail dirs on startup
+	runner.SweepOrphans()
+
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"

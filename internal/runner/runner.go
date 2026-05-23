@@ -9,6 +9,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
+	"syscall"
 	"time"
 
 	"github.com/thesouldev/goboxd/internal/config"
@@ -18,11 +20,20 @@ import (
 // maxOutputBytes caps the output to prevent unbounded child output OOMs (Security Hole #6)
 const maxOutputBytes = 64 * 1024 // 64 KiB
 
-func ExecuteRun(req models.RunRequest, lc config.LanguageConfig) (*models.BuildResult, []models.TestResult, error) {
+func ExecuteRun(req models.RunRequest, lc config.LanguageConfig) (models.BuildResult, []models.TestResult, error) {
+	buildRes := models.BuildResult{
+		Status:     "ok",
+		Stdout:     "",
+		Stderr:     "",
+		DurationMs: 0,
+	}
+
 	// Security Hole #5: UID collisions. os.MkdirTemp guarantees unique, non-colliding directories.
 	jailDir, err := os.MkdirTemp("", "goboxd-jail-*")
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create jail dir: %w", err)
+		buildRes.Status = "internal_error"
+		buildRes.Stderr = fmt.Sprintf("failed to create jail dir: %v", err)
+		return buildRes, nil, fmt.Errorf("failed to create jail dir: %w", err)
 	}
 	// Security Hole #7: Stale jail directories. Defer cleanup immediately.
 	defer func() {
@@ -37,7 +48,9 @@ func ExecuteRun(req models.RunRequest, lc config.LanguageConfig) (*models.BuildR
 	}
 
 	if err := os.WriteFile(filepath.Join(jailDir, srcName), []byte(req.Source), 0644); err != nil {
-		return nil, nil, fmt.Errorf("failed to write source: %w", err)
+		buildRes.Status = "internal_error"
+		buildRes.Stderr = fmt.Sprintf("failed to write source: %v", err)
+		return buildRes, nil, fmt.Errorf("failed to write source: %w", err)
 	}
 
 	// TODO: Handle build stage if lc.BuildCmd exists
@@ -48,7 +61,7 @@ func ExecuteRun(req models.RunRequest, lc config.LanguageConfig) (*models.BuildR
 		results = append(results, res)
 	}
 
-	return nil, results, nil
+	return buildRes, results, nil
 }
 
 func runSingleTest(tc models.TestCase, lc config.LanguageConfig, jailDir string, runOpts *models.StageConfig) models.TestResult {
@@ -70,16 +83,15 @@ func runSingleTest(tc models.TestCase, lc config.LanguageConfig, jailDir string,
 		procs = *runOpts.Limits.MaxProcesses
 	}
 
-	// Minimal capabilities. Map required system dirs and mount jailDir to /app
 	args := []string{
-		"-Q",                             // Really quiet
-		"--log", "/dev/null",             // Silence nsjail's internal warnings so they don't bleed into stderr
-		"-Mo",                            // Mount options (don't keep mounted)
+		"-Q",
+		"--log", "/dev/null",
+		"-Mo",
 		"--time_limit", strconv.Itoa(wallTime),
 		"--rlimit_as", strconv.Itoa(memBytes),
 		"--rlimit_nproc", strconv.Itoa(procs),
-		"--rlimit_fsize", "100",          // 100 MB max file size created by program
-		"-E", "PATH=/usr/local/bin:/usr/bin:/bin", // Pass PATH so it can resolve program names
+		"--rlimit_fsize", "100",
+		"-E", "PATH=/usr/local/bin:/usr/bin:/bin",
 		"-B", "/bin",
 		"-B", "/usr",
 		"-B", "/lib",
@@ -92,12 +104,10 @@ func runSingleTest(tc models.TestCase, lc config.LanguageConfig, jailDir string,
 	}
 	args = append(args, lc.RunCmd...)
 
-	// Append any user provided flags (whitelisting should happen before this stage ideally)
 	if runOpts != nil {
 		args = append(args, runOpts.Flags...)
 	}
 
-	// Set up context for strict timeout at the Go level as a backup
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(wallTime+1)*time.Second)
 	defer cancel()
 
@@ -120,17 +130,14 @@ func runSingleTest(tc models.TestCase, lc config.LanguageConfig, jailDir string,
 		return failResult("internal_error", err.Error(), start)
 	}
 
-	// Read outputs concurrently with limits
 	outChan := make(chan string)
 	errChan := make(chan string)
 
 	go func() {
-		b, _ := io.ReadAll(io.LimitReader(stdoutPipe, maxOutputBytes))
-		outChan <- string(b)
+		outChan <- readCapped(stdoutPipe)
 	}()
 	go func() {
-		b, _ := io.ReadAll(io.LimitReader(stderrPipe, maxOutputBytes))
-		errChan <- string(b)
+		errChan <- readCapped(stderrPipe)
 	}()
 
 	stdoutRaw := <-outChan
@@ -139,23 +146,92 @@ func runSingleTest(tc models.TestCase, lc config.LanguageConfig, jailDir string,
 	err = cmd.Wait()
 	duration := int(time.Since(start).Milliseconds())
 
-	status := "ok"
-	if ctx.Err() == context.DeadlineExceeded || (err != nil && err.Error() == "signal: killed") {
-		status = "timeout"
-	} else if err != nil {
-		status = "runtime_error"
-	} else if tc.ExpectedStdout != "" && stdoutRaw != tc.ExpectedStdout {
-		status = "wrong_answer"
-	}
+	status := computeTestStatus(ctx, err, stdoutRaw, tc.ExpectedStdout, cmd.ProcessState)
 
 	return models.TestResult{
-		Status:     status,
-		Stdout:     stdoutRaw,
-		Stderr:     stderrRaw,
-		DurationMs: duration,
-		// Placeholder for peak mem, parsing rusage or ps goes here in future
+		Status:       status,
+		Stdout:       stdoutRaw,
+		Stderr:       stderrRaw,
+		DurationMs:   duration,
 		MemoryPeakKB: 0,
 	}
+}
+
+// signalKillReason checks if the process was killed by a signal and determines why.
+func signalKillReason(ps *os.ProcessState) string {
+	if ps == nil {
+		return ""
+	}
+	status, ok := ps.Sys().(syscall.WaitStatus)
+	if !ok || !status.Signaled() {
+		return ""
+	}
+	sig := status.Signal()
+	switch sig {
+	case syscall.SIGKILL:
+		return "time_exceeded"
+	case syscall.SIGSEGV, syscall.SIGABRT:
+		return "memory_exceeded"
+	default:
+		return "runtime_error"
+	}
+}
+
+func computeTestStatus(ctx context.Context, err error, stdout, expected string, ps *os.ProcessState) string {
+	if ctx.Err() == context.DeadlineExceeded {
+		return "time_exceeded"
+	}
+	if err != nil {
+		if reason := signalKillReason(ps); reason != "" {
+			return reason
+		}
+		return "runtime_error"
+	}
+	if expected == "" {
+		return "accepted"
+	}
+	if stdout == expected {
+		return "accepted"
+	}
+	if strings.TrimSpace(stdout) == strings.TrimSpace(expected) {
+		return "output_whitespace_mismatch"
+	}
+	return "wrong_output"
+}
+
+// SweepOrphans removes jail dirs older than 30 minutes. Call at startup.
+func SweepOrphans() {
+	entries, err := os.ReadDir(os.TempDir())
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "orphan sweep: reading temp dir: %v\n", err)
+		return
+	}
+	now := time.Now()
+	for _, e := range entries {
+		if !strings.HasPrefix(e.Name(), "goboxd-jail-") {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		if now.Sub(info.ModTime()) > 30*time.Minute {
+			path := filepath.Join(os.TempDir(), e.Name())
+			if err := os.RemoveAll(path); err != nil {
+				fmt.Fprintf(os.Stderr, "orphan sweep: removing %s: %v\n", path, err)
+			}
+		}
+	}
+}
+
+// readCapped reads from r up to maxOutputBytes+1, truncates with a marker if capped.
+func readCapped(r io.Reader) string {
+	raw, _ := io.ReadAll(io.LimitReader(r, maxOutputBytes+1))
+	if len(raw) > maxOutputBytes {
+		raw = raw[:maxOutputBytes]
+		raw = append(raw, []byte("\n... [output truncated]")...)
+	}
+	return string(raw)
 }
 
 func failResult(status, stderr string, start time.Time) models.TestResult {
