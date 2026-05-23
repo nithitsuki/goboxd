@@ -10,9 +10,7 @@ test:
 	go test -v ./...
 
 integration:
-	# Placeholder for integration tests
-	echo "integration tests pending"
-
+	API_URL=http://localhost:8080 go test -v ./tests/integration/...
 load:
 	# Placeholder for sustained load testing via hey/k6
 	echo "load tests pending"

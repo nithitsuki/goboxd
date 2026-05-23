@@ -1,4 +1,4 @@
-package api
+package models
 
 // Limits represents the resource constraints for build or run stages.
 type Limits struct {

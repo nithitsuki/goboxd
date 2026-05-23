@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/thesouldev/goboxd/internal/models"
 )
 
 func TestHandleHealthz(t *testing.T) {
@@ -91,7 +93,7 @@ func TestHandleRunValidation(t *testing.T) {
 			}
 
 			if tt.errorCode != "" {
-				var apiErr APIError
+				var apiErr models.APIError
 				if err := json.NewDecoder(res.Body).Decode(&apiErr); err == nil {
 					if apiErr.Error.Code != tt.errorCode {
 						t.Errorf("expected error code %s, got %s", tt.errorCode, apiErr.Error.Code)

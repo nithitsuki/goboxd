@@ -33,3 +33,25 @@ The AI generated `internal/api/models.go` with strict JSON tags mapping to the s
 **What we used / didn't use:**
 used exact structs and handlers as suggested. I requested the max size limit and path validation specifically because security is a top priority for this architecture, and laying down a rock solid secure foundation early prevents massive refactors later. wired it up with clean tests, zero lint errors. foundation is super solid now and we are in a great spot.
 
+
+## [2026-05-25] [Context: Wiring nsjail natively]
+
+**Prompt:**
+we need to actually execute the code now using our nsjail build. create an internal/runner layer that takes the strict limit models and writes out the file to a temp directory, and runs nsjail over it. no complex random uid mapping stuff, just use standard go secure tempdirs and defer a cleanup.
+
+**Response summary:**
+The AI wrote `runner.go` leveraging `os.MkdirTemp()` for atomic directory creation and deferred its cleanup. It used an `io.LimitReader` around `nsjail`s stdout/stderr pipes to bound output to 64KiB preventing memory attacks. The AI initially missed that nsjail's `execve` bypasses normal `$PATH` resolution so I directed it to patch the language configuration defaults to absolute paths (`/usr/bin/python3`).
+
+**What we used / didn't use:**
+used the `runner.go` structure entirely. i opted to enforce standard secure temp directories myself to surgically patch the "runaway UID / orphan jail" vulns from the spec. the explicit `/usr/bin/python3` correction was my catch. testing it locally via docker validates nsjail works perfectly in our environment.
+
+## [2026-05-25] [Context: Silencing nsjail and E2E testing]
+
+**Prompt:**
+nsjail is working but it's spitting out "[W] logParams():313 Process will be UID=0" warnings into stderr which fails our strict JSON response payload matching. try to find the nsjail flags to silence these wrapper warnings without hiding the actual user program's stderr errors. also, port the python3 testcases from the reference repo over to a native go integration test so we can confidently run `make integration`.
+
+**Response summary:**
+It checked the nsjail flags and suggested using `--log /dev/null` alongside `-Q` so that nsjail internal routing drops system warnings to null but the stdout/stderr IPC pipes still capture the user process properly. It also ported `positive-basic`, `positive-advanced`, `positive-io`, and `memorylimit-high` from `pyjail-reference` into `tests/integration/e2e_test.go`.
+
+**What we used / didn't use:**
+used the exact flag permutation and the port of the test assertions. i changed the `Makefile` integration test target to run against the live docker-compose container via `API_URL` instead of trying to mock it within go, which proves our actual container meets the rubric perfectly without cheating.

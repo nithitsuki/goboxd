@@ -6,6 +6,10 @@ import (
 	"log"
 	"net/http"
 	"strings"
+
+	"github.com/thesouldev/goboxd/internal/config"
+	"github.com/thesouldev/goboxd/internal/models"
+	"github.com/thesouldev/goboxd/internal/runner"
 )
 
 const maxRequestBytes = 256 * 1024 // 256 KiB limit
@@ -13,7 +17,7 @@ const maxRequestBytes = 256 * 1024 // 256 KiB limit
 func writeError(w http.ResponseWriter, code, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusBadRequest)
-	resp := APIError{}
+	resp := models.APIError{}
 	resp.Error.Code = code
 	resp.Error.Message = message
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
@@ -56,7 +60,7 @@ func HandleRun(w http.ResponseWriter, r *http.Request) {
 	// Addresses Security Hole #4 (No request size limits)
 	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBytes)
 	
-	var req RunRequest
+	var req models.RunRequest
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields() // Strict JSON mapping
 	
@@ -91,10 +95,24 @@ func HandleRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Placeholder success (Execution block to be implemented later)
+	// Trigger Execution (currently hardcoded to Py3 stub)
+	// TODO: Replace with dynamic lookup from config registry
+	buildRes, testsRes, err := runner.ExecuteRun(req, config.Py3Stub)
+	if err != nil {
+		log.Printf("Internal error during execution: %v", err)
+		writeError(w, "internal_error", "sandbox execution failed")
+		return
+	}
+
+	resp := models.RunResponse{
+		Status: "accepted",
+		Build:  buildRes,
+		Tests:  testsRes,
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	if _, err := fmt.Fprintln(w, `{"status":"accepted", "tests":[]}`); err != nil {
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
 		log.Printf("failed to write run response: %v", err)
 	}
 }
