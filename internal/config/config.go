@@ -37,7 +37,41 @@ var Py3Stub = LanguageConfig{
 	FlagAllowlist: nil, // no flags for interpreted languages
 }
 
+var CStub = LanguageConfig{
+	ID:               "c",
+	Name:             "C",
+	Version:          "gcc 14",
+	BuildCmd:         []string{"/usr/bin/gcc", "-o", "solution", "solution.c"},
+	RunCmd:           []string{"./solution"},
+	SourceFilename:   "solution.c",
+	ArtifactFilename: "solution",
+	DefaultLimits: Limits{
+		WallTimeS:    5,
+		MemoryKB:     1048576, // 1024 MiB
+		MaxProcesses: 100,
+	},
+	FlagAllowlist: []string{"-O0", "-O1", "-O2", "-O3", "-Wall", "-Wextra", "-std=*"},
+}
+
+var CppStub = LanguageConfig{
+	ID:               "cpp",
+	Name:             "C++",
+	Version:          "g++ 14",
+	BuildCmd:         []string{"/usr/bin/g++", "-o", "solution", "solution.cpp"},
+	RunCmd:           []string{"./solution"},
+	SourceFilename:   "solution.cpp",
+	ArtifactFilename: "solution",
+	DefaultLimits: Limits{
+		WallTimeS:    5,
+		MemoryKB:     1048576,
+		MaxProcesses: 100,
+	},
+	FlagAllowlist: []string{"-O0", "-O1", "-O2", "-O3", "-Wall", "-Wextra", "-std=*"},
+}
+
 // DefaultRegistry is used by the handler to look up language configs.
 var DefaultRegistry = map[string]LanguageConfig{
 	"py3": Py3Stub,
+	"c":   CStub,
+	"cpp": CppStub,
 }

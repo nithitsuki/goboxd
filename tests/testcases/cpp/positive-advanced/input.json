@@ -1,0 +1,6 @@
+{
+  "language": "cpp",
+  "source": "#include <iostream>\n#include <vector>\nint main() {\n  std::vector<int> v = {1, 2, 3, 4, 5};\n  for(auto& x : v) std::cout << x << \" \";\n  return 0;\n}",
+  "build": { "limits": { "wall_time_s": 5, "memory_kb": 102400, "max_processes": 100 } },
+  "tests": [{ "stdin": "", "expected_stdout": "1 2 3 4 5 " }]
+}

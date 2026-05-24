@@ -39,11 +39,17 @@ func runFixture(t *testing.T, baseURL string, f Fixture) {
 	if err != nil {
 		t.Fatalf("POST /run: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			t.Logf("closing response body: %v", err)
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		var errBody map[string]interface{}
-		json.NewDecoder(resp.Body).Decode(&errBody)
+		if err := json.NewDecoder(resp.Body).Decode(&errBody); err != nil {
+			t.Fatalf("failed to decode error response: %v", err)
+		}
 		t.Fatalf("expected 200, got %d. body: %v", resp.StatusCode, errBody)
 	}
 

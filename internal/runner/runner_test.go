@@ -1,6 +1,8 @@
 package runner
 
 import (
+	"bytes"
+	"context"
 	"os/exec"
 	"strings"
 	"testing"
@@ -109,6 +111,46 @@ func TestExecuteRun(t *testing.T) {
 				if strings.Contains(res.Stderr, "No such file or directory") {
 					t.Fatalf("Missing python binary inside nsjail root. Is -B /usr setup correctly?")
 				}
+			}
+		})
+	}
+}
+
+func TestReadCapped(t *testing.T) {
+	// readCapped uses the package-level maxOutputBytes (64 KiB).
+	// For truncation testing we check that short strings pass through cleanly.
+	// Truncation with marker is exercised in the nsjail execution tests.
+	input := "hello world"
+	got := readCapped(bytes.NewBufferString(input))
+	if got != input {
+		t.Errorf("readCapped = %q, want %q", got, input)
+	}
+
+	// Empty input
+	got = readCapped(bytes.NewBufferString(""))
+	if got != "" {
+		t.Errorf("readCapped(empty) = %q, want ''", got)
+	}
+}
+
+func TestComputeTestStatus(t *testing.T) {
+	tests := []struct {
+		name      string
+		err       error
+		stdout    string
+		expected  string
+		want      string
+	}{
+		{"exact match", nil, "hello\n", "hello\n", "accepted"},
+		{"whitespace diff", nil, "hello\n", "hello", "output_whitespace_mismatch"},
+		{"wrong output", nil, "world", "hello", "wrong_output"},
+		{"empty expected", nil, "anything", "", "accepted"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := computeTestStatus(context.Background(), tt.err, tt.stdout, tt.expected, nil)
+			if got != tt.want {
+				t.Errorf("computeTestStatus = %q, want %q", got, tt.want)
 			}
 		})
 	}

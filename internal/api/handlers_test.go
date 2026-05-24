@@ -205,3 +205,54 @@ func TestComputeTopLevelStatus(t *testing.T) {
 		})
 	}
 }
+
+func TestIsValidFilename(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  bool
+	}{
+		{"empty is ok", "", true},
+		{"simple name", "solution.py", true},
+		{"with dots", "test.file.go", true},
+		{"path traversal forward slash", "../etc/passwd", false},
+		{"path traversal backslash", "..\\etc\\passwd", false},
+		{"leading dot", ".hidden", false},
+		{"double dot", "foo..bar", false},
+		{"too long", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isValidFilename(tt.input)
+			if got != tt.want {
+				t.Errorf("isValidFilename(%q) = %v, want %v", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestValidateFlags(t *testing.T) {
+	allowlist := []string{"-O0", "-O1", "-O2", "-O3", "-Wall", "-Wextra", "-std=*"}
+
+	tests := []struct {
+		name  string
+		flags []string
+		want  bool
+	}{
+		{"empty flags", []string{}, true},
+		{"exact match", []string{"-O2"}, true},
+		{"prefix match", []string{"-std=c99"}, true},
+		{"another prefix", []string{"-std=c17"}, true},
+		{"multiple allowed", []string{"-O2", "-Wall", "-std=c99"}, true},
+		{"injected flag", []string{"-fplugin=evil.so"}, false},
+		{"response file", []string{"@payload"}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, _ := validateFlags(tt.flags, allowlist)
+			if got != tt.want {
+				t.Errorf("validateFlags(%v) = %v, want %v", tt.flags, got, tt.want)
+			}
+		})
+	}
+}

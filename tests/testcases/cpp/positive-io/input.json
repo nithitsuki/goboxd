@@ -1,0 +1,6 @@
+{
+  "language": "cpp",
+  "source": "#include <iostream>\nint main() {\n  int n;\n  std::cin >> n;\n  for(int i = 1; i <= n; i++) {\n    std::cout << \"Line \" << i << std::endl;\n  }\n  return 0;\n}",
+  "build": { "limits": { "wall_time_s": 5, "memory_kb": 102400, "max_processes": 100 } },
+  "tests": [{ "stdin": "3", "expected_stdout": "Line 1\nLine 2\nLine 3\n" }]
+}

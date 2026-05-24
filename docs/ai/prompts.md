@@ -121,3 +121,36 @@ Suggested extracting the signal from process state via syscall.WaitStatus. SIGKI
 
 **What we used / didn't use:**
 used the signalKillReason approach. its not perfect since nsjail can send SIGKILL for other reasons too, but its good enough for the spec requirement. the function falls through to runtime_error for anything it cant classify.
+
+## [2026-05-28] [Context: Adding C language with build step]
+
+**Prompt:**
+stage 1 needs two languages end to end. we have py3 (interpreted) but no compiled language yet. need to add C with a compile step that runs inside nsjail before execution.
+
+**Response summary:**
+Suggested adding CStub to the registry with gcc build command, and creating a runBuild function that runs the compiler inside nsjail via execInJail, then falls through to test execution if build succeeds. also recommended adding build flags from the request.
+
+**What we used / didn't use:**
+used the full approach. runBuild copies BuildCmd, appends user flags, and runs through execInJail. if build fails the build result gets failed status and tests dont run. also added C++ the same way since its nearly identical. added fixture test cases for both from the reference.
+
+## [2026-05-28] [Context: Making /readyz and /info return real data]
+
+**Prompt:**
+/readyz is still a stub that always returns 200. /info has hardcoded placeholders. need both to reflect actual server state for stage 1 judging criteria.
+
+**Response summary:**
+Suggested a probeReadiness function that checks nsjail binary and each language runtime with --version, returning 200 or 503. for /info suggested pulling git commit from debug.ReadBuildInfo, probing nsjail path, getting actual disk free with statfs, and adding a stats tracker with atomic counters.
+
+**What we used / didn't use:**
+used everything. /readyz now returns proper 503 with per-language breakdown when things are missing. /info shows real git commit (first 7 chars), real nsjail path from LookPath, real language versions from probing, real disk free, and live job stats from atomic counters.
+
+## [2026-05-28] [Context: Writing docs for stage 1 submission]
+
+**Prompt:**
+spec says docs/ needs api.md, languages.md, security.md, architecture.md at minimum. also the ai-use checklist recommends architecture.md for describing request flow and key decisions.
+
+**Response summary:**
+Suggested writing all four with consistent structure. api.md as the API reference with request/response examples. languages.md documenting the registry format and how to add. security.md listing all 7 holes with file:line references. architecture.md showing the request flow diagram and package layout.
+
+**What we used / didn't use:**
+wrote all four. architecture.md documents the full request flow through the handler into the runner and back, plus the package layout and key decisions (stdlib routing, fixture tests, status vocabulary). security.md has the exact file:line for each fix which is what the PR description needs.

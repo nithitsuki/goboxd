@@ -7,12 +7,51 @@ import (
 	"net/http"
 	"os/exec"
 	"runtime"
+	"runtime/debug"
 	"strings"
+	"sync"
+	"sync/atomic"
+	"syscall"
+	"time"
 
 	"github.com/thesouldev/goboxd/internal/config"
 	"github.com/thesouldev/goboxd/internal/models"
 	"github.com/thesouldev/goboxd/internal/runner"
 )
+
+// Stats tracker for /info endpoint
+var (
+	jobStats struct {
+		InFlight       int64
+		Total          int64
+		FailedInternal int64
+	}
+	jobStatsMu      sync.Mutex
+	lastInternalErr time.Time
+)
+
+// jobStatsSnapshot is a thread-safe copy of the stats.
+type jobStatsSnapshot struct {
+	InFlight       int
+	Total          int64
+	FailedInternal int64
+	LastErrorAt    *time.Time
+}
+
+// GetStats returns a snapshot of the current job stats.
+func GetStats() jobStatsSnapshot {
+	jobStatsMu.Lock()
+	defer jobStatsMu.Unlock()
+	s := jobStatsSnapshot{
+		InFlight:       int(atomic.LoadInt64(&jobStats.InFlight)),
+		Total:          atomic.LoadInt64(&jobStats.Total),
+		FailedInternal: atomic.LoadInt64(&jobStats.FailedInternal),
+	}
+	if !lastInternalErr.IsZero() {
+		s.LastErrorAt = &lastInternalErr
+	}
+	return s
+}
 
 const maxRequestBytes = 256 * 1024 // 256 KiB limit
 const maxTests = 50               // max test cases per request
@@ -117,27 +156,121 @@ func HandleHealthz(w http.ResponseWriter, r *http.Request) {
 }
 
 func HandleReadyz(w http.ResponseWriter, r *http.Request) {
-	// Stub for Stage 2 plug-and-play validation
+	ready := probeReadiness()
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	if _, err := fmt.Fprintln(w, `{"status":"ok"}`); err != nil {
-		log.Printf("failed to write readyz response: %v", err)
+	if ready.AllOK {
+		w.WriteHeader(http.StatusOK)
+		if err := json.NewEncoder(w).Encode(map[string]string{"status": "ok"}); err != nil {
+			log.Printf("failed to write readyz OK response: %v", err)
+		}
+	} else {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		if err := json.NewEncoder(w).Encode(ready); err != nil {
+			log.Printf("failed to write readyz degraded response: %v", err)
+		}
+	}
+}
+
+// readyState holds the /readyz probe results.
+type readyState struct {
+	AllOK     bool                           `json:"-"`
+	Status    string                         `json:"status"`
+	Nsjail    *readyProbe                    `json:"nsjail"`
+	Languages map[string]*readyProbe         `json:"languages"`
+}
+
+type readyProbe struct {
+	OK      bool   `json:"ok"`
+	Version string `json:"version,omitempty"`
+	Error   string `json:"error,omitempty"`
+}
+
+func probeReadiness() readyState {
+	state := readyState{
+		AllOK:     true,
+		Status:    "ok",
+		Nsjail:    probeExec("nsjail", "--version"),
+		Languages: make(map[string]*readyProbe),
+	}
+	if !state.Nsjail.OK {
+		state.AllOK = false
+	}
+
+	for id, lc := range config.DefaultRegistry {
+		// Probe the runtime (first element of RunCmd) or build command if present
+		probeCmd := lc.RunCmd[0]
+		if len(lc.BuildCmd) > 0 {
+			probeCmd = lc.BuildCmd[0]
+		}
+		p := probeExec(probeCmd, "--version")
+		state.Languages[id] = p
+		if !p.OK {
+			state.AllOK = false
+		}
+	}
+
+	if !state.AllOK {
+		state.Status = "degraded"
+	}
+	return state
+}
+
+func probeExec(binary, arg string) *readyProbe {
+	out, err := exec.Command(binary, arg).Output()
+	if err != nil {
+		return &readyProbe{
+			OK:    false,
+			Error: fmt.Sprintf("%s not found or failed: %v", binary, err),
+		}
+	}
+	return &readyProbe{
+		OK:      true,
+		Version: strings.TrimSpace(string(out)),
 	}
 }
 
 func HandleInfo(w http.ResponseWriter, r *http.Request) {
-	// Probe nsjail version
-	nsjailVersion := "unknown"
-	if out, err := exec.Command("nsjail", "--version").Output(); err == nil {
-		nsjailVersion = strings.TrimSpace(string(out))
+	// Git commit from build info
+	commit := "dev"
+	if bi, ok := debug.ReadBuildInfo(); ok {
+		for _, s := range bi.Settings {
+			if s.Key == "vcs.revision" {
+				commit = s.Value
+				if len(commit) > 7 {
+					commit = commit[:7]
+				}
+				break
+			}
+		}
 	}
 
+	// Probe nsjail
+	nsjailProbe := probeExec("nsjail", "--version")
+	nsjailPath := "/usr/bin/nsjail"
+	if _, err := exec.LookPath("nsjail"); err == nil {
+		nsjailPath, _ = exec.LookPath("nsjail")
+	}
+	nsjailVersion := ""
+	if nsjailProbe.OK {
+		nsjailVersion = nsjailProbe.Version
+	}
+
+	// Probe each language for its real version
 	langs := make([]map[string]interface{}, 0, len(config.DefaultRegistry))
-	for _, lc := range config.DefaultRegistry {
+	for id, lc := range config.DefaultRegistry {
+		ver := lc.Version
+		probeCmd := lc.RunCmd[0]
+		if len(lc.BuildCmd) > 0 {
+			probeCmd = lc.BuildCmd[0]
+		}
+		if p := probeExec(probeCmd, "--version"); p.OK {
+			ver = strings.SplitN(p.Version, "\n", 2)[0]
+		}
+		_ = id
 		langs = append(langs, map[string]interface{}{
 			"id":      lc.ID,
 			"name":    lc.Name,
-			"version": lc.Version,
+			"version": ver,
 			"default_run_limits": map[string]interface{}{
 				"wall_time_s":   lc.DefaultLimits.WallTimeS,
 				"memory_kb":     lc.DefaultLimits.MemoryKB,
@@ -146,14 +279,20 @@ func HandleInfo(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
+	// Disk free for jail dir
+	diskFree := diskFreeBytes("/tmp")
+
+	// Stats from the global tracker
+	s := GetStats()
+
 	info := map[string]interface{}{
 		"build_info": map[string]interface{}{
 			"version":    "0.1.0",
-			"commit":     "dev",
+			"commit":     commit,
 			"go_version": runtime.Version(),
 		},
 		"nsjail": map[string]interface{}{
-			"path":    "/usr/bin/nsjail",
+			"path":    nsjailPath,
 			"version": nsjailVersion,
 		},
 		"languages": langs,
@@ -163,11 +302,11 @@ func HandleInfo(w http.ResponseWriter, r *http.Request) {
 			"max_concurrent_jobs": runtime.NumCPU(),
 		},
 		"stats": map[string]interface{}{
-			"in_flight_jobs":           0,
-			"jobs_total":               0,
-			"jobs_failed_internal":     0,
-			"last_internal_error_at":   nil,
-			"disk_free_bytes_jail_dir": 0,
+			"in_flight_jobs":         s.InFlight,
+			"jobs_total":             s.Total,
+			"jobs_failed_internal":   s.FailedInternal,
+			"last_internal_error_at": s.LastErrorAt,
+			"disk_free_bytes_jail_dir": diskFree,
 		},
 	}
 
@@ -176,6 +315,14 @@ func HandleInfo(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(info); err != nil {
 		log.Printf("failed to write info response: %v", err)
 	}
+}
+
+func diskFreeBytes(path string) int64 {
+	var fs syscall.Statfs_t
+	if err := syscall.Statfs(path, &fs); err != nil {
+		return 0
+	}
+	return int64(fs.Bavail) * fs.Bsize
 }
 
 func HandleRun(w http.ResponseWriter, r *http.Request) {
@@ -242,10 +389,17 @@ func HandleRun(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Execute
+	// Execute with stats tracking
+	atomic.AddInt64(&jobStats.InFlight, 1)
+	atomic.AddInt64(&jobStats.Total, 1)
 	buildRes, testsRes, err := runner.ExecuteRun(req, lc)
+	atomic.AddInt64(&jobStats.InFlight, -1)
 	if err != nil {
 		log.Printf("Internal error during execution: %v", err)
+		atomic.AddInt64(&jobStats.FailedInternal, 1)
+		jobStatsMu.Lock()
+		lastInternalErr = time.Now()
+		jobStatsMu.Unlock()
 		writeInternalError(w, "sandbox execution failed")
 		return
 	}

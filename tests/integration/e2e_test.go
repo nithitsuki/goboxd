@@ -11,16 +11,25 @@ import (
 )
 
 func sendRun(t *testing.T, req models.RunRequest) models.RunResponse {
-	b, _ := json.Marshal(req)
+	b, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
 	resp, err := http.Post(getAPIURL()+"/run", "application/json", bytes.NewBuffer(b))
 	if err != nil {
 		t.Fatalf("POST /run failed: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			t.Logf("closing response body: %v", err)
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		var errData models.APIError
-		json.NewDecoder(resp.Body).Decode(&errData)
+		if err := json.NewDecoder(resp.Body).Decode(&errData); err != nil {
+			t.Fatalf("failed to decode error response: %v", err)
+		}
 		t.Fatalf("expected 200 OK, got %d: %s", resp.StatusCode, errData.Error.Message)
 	}
 

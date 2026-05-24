@@ -53,7 +53,21 @@ func ExecuteRun(req models.RunRequest, lc config.LanguageConfig) (models.BuildRe
 		return buildRes, nil, fmt.Errorf("failed to write source: %w", err)
 	}
 
-	// TODO: Handle build stage if lc.BuildCmd exists
+	// Build step for compiled languages
+	buildStart := time.Now()
+	if len(lc.BuildCmd) > 0 {
+		buildRes, err = runBuild(jailDir, req, lc)
+		buildRes.DurationMs = int(time.Since(buildStart).Milliseconds())
+		if err != nil {
+			return buildRes, nil, err
+		}
+		if buildRes.Status != "ok" {
+			// Build failed, don't run tests
+			return buildRes, nil, nil
+		}
+	} else {
+		buildRes.DurationMs = 0
+	}
 
 	var results []models.TestResult
 	for _, tc := range req.Tests {
@@ -62,6 +76,99 @@ func ExecuteRun(req models.RunRequest, lc config.LanguageConfig) (models.BuildRe
 	}
 
 	return buildRes, results, nil
+}
+
+// runBuild compiles the source inside nsjail using lc.BuildCmd.
+func runBuild(jailDir string, req models.RunRequest, lc config.LanguageConfig) (models.BuildResult, error) {
+	wallTime := 30
+	memKB := 1048576
+	procs := 100
+	if req.Build != nil && req.Build.Limits != nil {
+		if req.Build.Limits.WallTimeS != nil {
+			wallTime = *req.Build.Limits.WallTimeS
+		}
+		if req.Build.Limits.MemoryKB != nil {
+			memKB = *req.Build.Limits.MemoryKB
+		}
+		if req.Build.Limits.MaxProcesses != nil {
+			procs = *req.Build.Limits.MaxProcesses
+		}
+	}
+
+	cmdArgs := make([]string, len(lc.BuildCmd))
+	copy(cmdArgs, lc.BuildCmd)
+	if req.Build != nil {
+		cmdArgs = append(cmdArgs, req.Build.Flags...)
+	}
+
+	stdout, stderr, err := execInJail(jailDir, cmdArgs, wallTime, memKB, procs)
+	res := models.BuildResult{
+		Status: "ok",
+		Stdout: stdout,
+		Stderr: stderr,
+	}
+	if err != nil {
+		res.Status = "failed"
+		if strings.Contains(stderr, "internal_error") || strings.Contains(stdout, "internal_error") {
+			res.Status = "internal_error"
+		}
+	}
+	return res, err
+}
+
+func execInJail(jailDir string, cmdArgs []string, wallTime, memKB, procs int) (string, string, error) {
+	memBytes := memKB * 1024
+	args := []string{
+		"-Q",
+		"--log", "/dev/null",
+		"-Mo",
+		"--time_limit", strconv.Itoa(wallTime),
+		"--rlimit_as", strconv.Itoa(memBytes),
+		"--rlimit_nproc", strconv.Itoa(procs),
+		"--rlimit_fsize", "100",
+		"-E", "PATH=/usr/local/bin:/usr/bin:/bin",
+		"-B", "/bin",
+		"-B", "/usr",
+		"-B", "/lib",
+		"-B", "/lib64",
+		"-B", "/dev",
+		"-B", "/etc",
+		"-R", fmt.Sprintf("%s:/app", jailDir),
+		"--cwd", "/app",
+		"--",
+	}
+	args = append(args, cmdArgs...)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(wallTime+1)*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "nsjail", args...)
+
+	stdoutPipe, err := cmd.StdoutPipe()
+	if err != nil {
+		return "", "", fmt.Errorf("stdout pipe: %w", err)
+	}
+	stderrPipe, err := cmd.StderrPipe()
+	if err != nil {
+		return "", "", fmt.Errorf("stderr pipe: %w", err)
+	}
+
+	if err := cmd.Start(); err != nil {
+		return "", "", fmt.Errorf("start: %w", err)
+	}
+
+	stdout := readCapped(stdoutPipe)
+	stderr := readCapped(stderrPipe)
+
+	err = cmd.Wait()
+	if ctx.Err() == context.DeadlineExceeded {
+		stderr += "\n... [build timed out]"
+		return stdout, stderr, fmt.Errorf("build timed out")
+	}
+	if err != nil {
+		return stdout, stderr, err
+	}
+	return stdout, stderr, nil
 }
 
 func runSingleTest(tc models.TestCase, lc config.LanguageConfig, jailDir string, runOpts *models.StageConfig) models.TestResult {
