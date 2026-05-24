@@ -53,8 +53,9 @@ func GetStats() jobStatsSnapshot {
 	return s
 }
 
-const maxRequestBytes = 256 * 1024 // 256 KiB limit
-const maxTests = 50               // max test cases per request
+const maxRequestBytes = 256 * 1024  // 256 KiB limit
+const maxTests = 50                // max test cases per request
+const maxFieldBytes = 64 * 1024    // 64 KiB per stdin/expected_stdout field
 
 func writeError(w http.ResponseWriter, code, message string) {
 	w.Header().Set("Content-Type", "application/json")
@@ -360,6 +361,16 @@ func HandleRun(w http.ResponseWriter, r *http.Request) {
 	if len(req.Tests) > maxTests {
 		writeError(w, "too_many_tests", fmt.Sprintf("test count exceeds maximum of %d", maxTests))
 		return
+	}
+	for i, tc := range req.Tests {
+		if len(tc.Stdin) > maxFieldBytes {
+			writeError(w, "test_too_large", fmt.Sprintf("tests[%d].stdin exceeds %d bytes", i, maxFieldBytes))
+			return
+		}
+		if len(tc.ExpectedStdout) > maxFieldBytes {
+			writeError(w, "test_too_large", fmt.Sprintf("tests[%d].expected_stdout exceeds %d bytes", i, maxFieldBytes))
+			return
+		}
 	}
 
 	// Complex Validations

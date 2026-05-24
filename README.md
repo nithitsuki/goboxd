@@ -12,4 +12,4 @@ Commands:
 - `make load` to run load tests
 - `make lint` to run static analysis
 
-See the `docs/` folder for architecture details, API specifications, and benchmarks.
+See the `docs/` folder for architecture details, API specifications, and security documentation.
