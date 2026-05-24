@@ -197,14 +197,13 @@ func probeReadiness() readyState {
 		state.AllOK = false
 	}
 
-	for id, lc := range config.DefaultRegistry {
-		// Probe the runtime (first element of RunCmd) or build command if present
+	for lid, lc := range config.DefaultRegistry {
 		probeCmd := lc.RunCmd[0]
 		if len(lc.BuildCmd) > 0 {
 			probeCmd = lc.BuildCmd[0]
 		}
 		p := probeExec(probeCmd, "--version")
-		state.Languages[id] = p
+		state.Languages[lid] = p
 		if !p.OK {
 			state.AllOK = false
 		}
@@ -258,7 +257,7 @@ func HandleInfo(w http.ResponseWriter, r *http.Request) {
 
 	// Probe each language for its real version
 	langs := make([]map[string]interface{}, 0, len(config.DefaultRegistry))
-	for id, lc := range config.DefaultRegistry {
+	for _, lc := range config.DefaultRegistry {
 		ver := lc.Version
 		probeCmd := lc.RunCmd[0]
 		if len(lc.BuildCmd) > 0 {
@@ -267,7 +266,6 @@ func HandleInfo(w http.ResponseWriter, r *http.Request) {
 		if p := probeExec(probeCmd, "--version"); p.OK {
 			ver = strings.SplitN(p.Version, "\n", 2)[0]
 		}
-		_ = id
 		langs = append(langs, map[string]interface{}{
 			"id":      lc.ID,
 			"name":    lc.Name,

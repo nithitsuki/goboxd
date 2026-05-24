@@ -117,9 +117,7 @@ func TestExecuteRun(t *testing.T) {
 }
 
 func TestReadCapped(t *testing.T) {
-	// readCapped uses the package-level maxOutputBytes (64 KiB).
-	// For truncation testing we check that short strings pass through cleanly.
-	// Truncation with marker is exercised in the nsjail execution tests.
+	// Short string passes through unchanged
 	input := "hello world"
 	got := readCapped(bytes.NewBufferString(input))
 	if got != input {
@@ -130,6 +128,25 @@ func TestReadCapped(t *testing.T) {
 	got = readCapped(bytes.NewBufferString(""))
 	if got != "" {
 		t.Errorf("readCapped(empty) = %q, want ''", got)
+	}
+
+	// Input larger than maxOutputBytes triggers truncation with marker
+	truncationMarker := "\n... [output truncated]"
+	big := strings.Repeat("A", int(maxOutputBytes)+1)
+	got = readCapped(bytes.NewBufferString(big))
+	if !strings.HasSuffix(got, truncationMarker) {
+		t.Errorf("expected output to end with %q, got suffix %q", truncationMarker, got[len(got)-40:])
+	}
+	// Total should be maxOutputBytes + marker
+	expectedLen := int(maxOutputBytes) + len(truncationMarker)
+	if len(got) != expectedLen {
+		t.Errorf("expected length %d (cap + marker), got %d", expectedLen, len(got))
+	}
+	// First maxOutputBytes bytes should be the original input
+	prefix := got[:int(maxOutputBytes)]
+	expectedPrefix := strings.Repeat("A", int(maxOutputBytes))
+	if prefix != expectedPrefix {
+		t.Errorf("first %d bytes dont match original input", maxOutputBytes)
 	}
 }
 
