@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"os/exec"
 	"runtime"
 	"runtime/debug"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -51,6 +53,37 @@ func GetStats() jobStatsSnapshot {
 		s.LastErrorAt = &lastInternalErr
 	}
 	return s
+}
+
+// Concurrency semaphore — bounded global limit, requests queue when full.
+var (
+	jobSem      chan struct{}
+	jobSemOnce  sync.Once
+	maxJobs     int
+)
+
+func initSemaphore() {
+	n := runtime.NumCPU()
+	if e := os.Getenv("GOBOXD_MAX_JOBS"); e != "" {
+		if v, err := strconv.Atoi(e); err == nil && v > 0 {
+			n = v
+		}
+	}
+	maxJobs = n
+	jobSem = make(chan struct{}, n)
+	// Fill the semaphore so acquire is send, release is receive
+	for i := 0; i < n; i++ {
+		jobSem <- struct{}{}
+	}
+}
+
+func acquireSlot() {
+	jobSemOnce.Do(initSemaphore)
+	<-jobSem
+}
+
+func releaseSlot() {
+	jobSem <- struct{}{}
 }
 
 const maxRequestBytes = 256 * 1024  // 256 KiB limit
@@ -298,7 +331,7 @@ func HandleInfo(w http.ResponseWriter, r *http.Request) {
 		"limits": map[string]interface{}{
 			"max_source_bytes":    262144,
 			"max_tests":           50,
-			"max_concurrent_jobs": runtime.NumCPU(),
+			"max_concurrent_jobs": maxJobs,
 		},
 		"stats": map[string]interface{}{
 			"in_flight_jobs":         s.InFlight,
@@ -398,11 +431,13 @@ func HandleRun(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Execute with stats tracking
+	// Execute with concurrency semaphore + stats tracking
+	acquireSlot()
 	atomic.AddInt64(&jobStats.InFlight, 1)
 	atomic.AddInt64(&jobStats.Total, 1)
 	buildRes, testsRes, err := runner.ExecuteRun(req, lc)
 	atomic.AddInt64(&jobStats.InFlight, -1)
+	releaseSlot()
 	if err != nil {
 		log.Printf("Internal error during execution: %v", err)
 		atomic.AddInt64(&jobStats.FailedInternal, 1)
