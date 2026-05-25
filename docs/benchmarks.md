@@ -5,12 +5,10 @@
 - Tool: [hey](https://github.com/rakyll/hey) v0.1.5
 - Scenario: `POST /run` with trivial `print(42)` Python 3 payload, 1000 requests per level
 - Metrics: requests/sec, p50/p95/p99 latency
-- Environment: clean Docker run on bare metal (x86_64)
+- Environment: clean Docker run on bare metal (x86_64, 24 cores)
 - Server: goboxd running in Docker with `--privileged` for nsjail namespaces
 
-## Results
-
-### 2026-05-31 — x86_64
+## Baseline — without concurrency semaphore
 
 | Clients | Requests/s | p50 (ms) | p95 (ms) | p99 (ms) |
 |---|---|---|---|---|
@@ -23,9 +21,25 @@
 | 150 | 10982 | 8.00 | 35.30 | 42.70 |
 | 200 | 11023 | 10.20 | 45.40 | 59.60 |
 
+## With bounded concurrency semaphore (GOBOXD_MAX_JOBS=24)
+
+| Clients | Requests/s | p50 (ms) | p95 (ms) | p99 (ms) |
+|---|---|---|---|---|
+| 1 | 1931 | 0.50 | 0.60 | 0.70 |
+| 10 | 8791 | 0.90 | 1.40 | 19.00 |
+| 25 | 9207 | 2.00 | 5.00 | 18.60 |
+| 50 | 10304 | 4.20 | 7.60 | 14.70 |
+| 75 | 8962 | 6.40 | 26.30 | 32.00 |
+| 100 | 8352 | 7.80 | 31.80 | 52.60 |
+| 150 | 10119 | 10.80 | 32.70 | 33.30 |
+| 200 | 10583 | 12.90 | 47.90 | 50.90 |
+
 ## Observations
 
-- Throughput peaks around 50 concurrent clients (~11,900 req/s) and stays flat through 200.
-- Latency p50 stays under 10ms even at 200 concurrency.
-- p95/p99 show the nsjail sandbox overhead varies: at low concurrency most requests complete in <1ms, but tail latency grows to ~60ms at 200 clients.
-- No errors, no dropped requests at any level — nsjail handles the load without crashing.
+- Both runs show similar peak throughput (~10,500-11,900 req/s) — the semaphore
+  doesnt significantly cap performance at 24 slots on this hardware.
+- Latency is marginally higher with the semaphore at high concurrency, as
+  expected from queuing. Still well within acceptable range.
+- No errors or dropped requests in either run.
+- The semaphore prevents runaway nsjail process counts during bursts,
+  trading a small latency increase for predictable resource usage.
