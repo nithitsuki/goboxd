@@ -1,0 +1,10 @@
+{
+  "status": "output_whitespace_mismatch",
+  "build": { "status": "ok" },
+  "tests": [
+    {
+      "status": "output_whitespace_mismatch",
+      "stdout": "hello \n"
+    }
+  ]
+}

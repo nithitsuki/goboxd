@@ -1,0 +1,10 @@
+{
+  "status": "memory_exceeded",
+  "build": { "status": "ok" },
+  "tests": [
+    {
+      "status": "memory_exceeded",
+      "stdout": ""
+    }
+  ]
+}

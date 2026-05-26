@@ -1,0 +1,10 @@
+{
+  "status": "wrong_output",
+  "build": { "status": "ok" },
+  "tests": [
+    {
+      "status": "wrong_output",
+      "stdout": "hello from python\n"
+    }
+  ]
+}
