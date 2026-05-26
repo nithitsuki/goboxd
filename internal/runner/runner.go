@@ -267,13 +267,14 @@ func runSingleTest(tc models.TestCase, lc config.LanguageConfig, jailDir string,
 	duration := int(time.Since(start).Milliseconds())
 
 	status := computeTestStatus(ctx, err, stdoutRaw, tc.ExpectedStdout, cmd.ProcessState)
+	memPeak := readMemoryPeakKB(cmd.ProcessState)
 
 	return models.TestResult{
 		Status:       status,
 		Stdout:       stdoutRaw,
 		Stderr:       stderrRaw,
 		DurationMs:   duration,
-		MemoryPeakKB: 0,
+		MemoryPeakKB: memPeak,
 	}
 }
 
@@ -295,6 +296,71 @@ func signalKillReason(ps *os.ProcessState) string {
 	default:
 		return "runtime_error"
 	}
+}
+
+// readMemoryPeakKB tries to read peak memory usage from cgroup stats.
+// Falls back to 0 if cgroup is not accessible.
+func readMemoryPeakKB(ps *os.ProcessState) int {
+	// Try cgroup v2 memory.peak (most reliable)
+	peak, err := readCgroupFile("memory.peak")
+	if err == nil && peak > 0 {
+		return int(peak / 1024)
+	}
+
+	// Try cgroup v1 memory.max_usage_in_bytes
+	max, err := readCgroupFile("memory.max_usage_in_bytes")
+	if err == nil && max > 0 {
+		return int(max / 1024)
+	}
+
+	// Try reading from /proc/PID/status for the child process
+	if ps != nil {
+		if pid := ps.Pid(); pid > 0 {
+			if rss, err := readProcRSS(pid); err == nil && rss > 0 {
+				return rss
+			}
+		}
+	}
+
+	return 0
+}
+
+// readCgroupFile attempts to read a value from cgroup memory stat files.
+func readCgroupFile(name string) (int64, error) {
+	paths := []string{
+		"/sys/fs/cgroup/memory/",
+		"/sys/fs/cgroup/",
+	}
+	for _, base := range paths {
+		data, err := os.ReadFile(filepath.Join(base, name))
+		if err == nil {
+			val := strings.TrimSpace(string(data))
+			if i, err := strconv.ParseInt(val, 10, 64); err == nil && i > 0 {
+				return i, nil
+			}
+		}
+	}
+	return 0, fmt.Errorf("cgroup file %s not found", name)
+}
+
+// readProcRSS reads the VmRSS value from /proc/PID/status.
+func readProcRSS(pid int) (int, error) {
+	data, err := os.ReadFile(fmt.Sprintf("/proc/%d/status", pid))
+	if err != nil {
+		return 0, err
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		if strings.HasPrefix(line, "VmRSS:") {
+			fields := strings.Fields(line)
+			if len(fields) >= 2 {
+				val, err := strconv.Atoi(fields[1])
+				if err == nil {
+					return val, nil
+				}
+			}
+		}
+	}
+	return 0, fmt.Errorf("VmRSS not found")
 }
 
 func computeTestStatus(ctx context.Context, err error, stdout, expected string, ps *os.ProcessState) string {
