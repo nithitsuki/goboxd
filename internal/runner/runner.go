@@ -108,12 +108,25 @@ func runBuild(jailDir string, req models.RunRequest, lc config.LanguageConfig) (
 		Stderr: stderr,
 	}
 	if err != nil {
-		res.Status = "failed"
-		if strings.Contains(stderr, "internal_error") || strings.Contains(stdout, "internal_error") {
+		// Distinguish infrastructure errors from compiler errors.
+		// Pipe/start failures are infrastructure (return 500).
+		// Compiler exit codes and timeouts are user errors (return 200 with build_failed).
+		if isInfraError(err) {
 			res.Status = "internal_error"
+			return res, err
 		}
+		res.Status = "failed"
 	}
-	return res, err
+	return res, nil
+}
+
+// isInfraError checks if the error is from infrastructure (pipe, start) vs user code.
+func isInfraError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "pipe:") || strings.Contains(msg, "start:")
 }
 
 func execInJail(jailDir string, cmdArgs []string, wallTime, memKB, procs int) (string, string, error) {

@@ -450,8 +450,11 @@ func HandleRun(w http.ResponseWriter, r *http.Request) {
 
 	topStatus := computeTopLevelStatus(buildRes, testsRes)
 
-	// If build failed, mark all tests as not_executed per spec
+	// If build failed, construct not_executed entries for all tests per spec
 	if topStatus == "build_failed" || topStatus == "internal_error" {
+		if testsRes == nil && len(req.Tests) > 0 {
+			testsRes = make([]models.TestResult, len(req.Tests))
+		}
 		for i := range testsRes {
 			testsRes[i].Status = "not_executed"
 		}
