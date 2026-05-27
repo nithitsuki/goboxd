@@ -48,7 +48,11 @@ func ExecuteRun(req models.RunRequest, lc config.LanguageConfig) (models.BuildRe
 	}
 
 	srcDir := filepath.Join(jailDir, "app")
-	os.MkdirAll(srcDir, 0755)
+	if err := os.MkdirAll(srcDir, 0755); err != nil {
+		buildRes.Status = "internal_error"
+		buildRes.Stderr = fmt.Sprintf("failed to create app dir: %v", err)
+		return buildRes, nil, fmt.Errorf("failed to create app dir: %w", err)
+	}
 	if err := os.WriteFile(filepath.Join(srcDir, srcName), []byte(req.Source), 0644); err != nil {
 		buildRes.Status = "internal_error"
 		buildRes.Stderr = fmt.Sprintf("failed to write source: %v", err)
@@ -133,9 +137,10 @@ func isInfraError(err error) bool {
 
 func execInJail(jailDir string, cmdArgs []string, wallTime, memKB, procs int) (string, string, error) {
 	memBytes := memKB * 1024
-	// Create a writable app dir inside jailDir
 	appDir := filepath.Join(jailDir, "app")
-	os.MkdirAll(appDir, 0755)
+	if err := os.MkdirAll(appDir, 0755); err != nil {
+		return "", "", fmt.Errorf("app dir: %w", err)
+	}
 
 	args := []string{
 		"-Q",
@@ -268,8 +273,8 @@ func runSingleTest(tc models.TestCase, lc config.LanguageConfig, jailDir string,
 	err = cmd.Wait()
 	duration := int(time.Since(start).Milliseconds())
 
-	status := computeTestStatus(ctx, err, stdoutRaw, tc.ExpectedStdout, cmd.ProcessState)
 	memPeak := readMemoryPeakKB(cmd.ProcessState)
+	status := computeTestStatus(ctx, err, stdoutRaw, tc.ExpectedStdout, cmd.ProcessState, memPeak, memKB, wallTime)
 
 	return models.TestResult{
 		Status:       status,
@@ -300,28 +305,26 @@ func signalKillReason(ps *os.ProcessState) string {
 	}
 }
 
-// readMemoryPeakKB tries to read peak memory usage from cgroup stats.
-// Falls back to 0 if cgroup is not accessible.
+// readMemoryPeakKB reads peak memory from nsjail cgroup or falls back to 0.
 func readMemoryPeakKB(ps *os.ProcessState) int {
-	// Try cgroup v2 memory.peak (most reliable)
+	base := "/sys/fs/cgroup/"
+	dirs, err := os.ReadDir(base)
+	if err == nil {
+		for _, d := range dirs {
+			if !d.IsDir() || !strings.HasPrefix(d.Name(), "NSJAIL") {
+				continue
+			}
+			peak, err := readCgroupFile(filepath.Join(d.Name(), "memory.peak"))
+			if err == nil && peak > 0 {
+				return int(peak / 1024)
+			}
+		}
+	}
+
+	// Try root cgroup memory.peak (cgroup v2, fallback)
 	peak, err := readCgroupFile("memory.peak")
 	if err == nil && peak > 0 {
 		return int(peak / 1024)
-	}
-
-	// Try cgroup v1 memory.max_usage_in_bytes
-	max, err := readCgroupFile("memory.max_usage_in_bytes")
-	if err == nil && max > 0 {
-		return int(max / 1024)
-	}
-
-	// Try reading from /proc/PID/status for the child process
-	if ps != nil {
-		if pid := ps.Pid(); pid > 0 {
-			if rss, err := readProcRSS(pid); err == nil && rss > 0 {
-				return rss
-			}
-		}
 	}
 
 	return 0
@@ -345,32 +348,20 @@ func readCgroupFile(name string) (int64, error) {
 	return 0, fmt.Errorf("cgroup file %s not found", name)
 }
 
-// readProcRSS reads the VmRSS value from /proc/PID/status.
-func readProcRSS(pid int) (int, error) {
-	data, err := os.ReadFile(fmt.Sprintf("/proc/%d/status", pid))
-	if err != nil {
-		return 0, err
-	}
-	for _, line := range strings.Split(string(data), "\n") {
-		if strings.HasPrefix(line, "VmRSS:") {
-			fields := strings.Fields(line)
-			if len(fields) >= 2 {
-				val, err := strconv.Atoi(fields[1])
-				if err == nil {
-					return val, nil
-				}
-			}
-		}
-	}
-	return 0, fmt.Errorf("VmRSS not found")
-}
-
-func computeTestStatus(ctx context.Context, err error, stdout, expected string, ps *os.ProcessState) string {
+func computeTestStatus(ctx context.Context, err error, stdout, expected string, ps *os.ProcessState, memPeakKB int, memLimitKB int, wallTime int) string {
+	// Check context deadline first — Go or nsjail killed the process on timeout.
 	if ctx.Err() == context.DeadlineExceeded {
 		return "time_exceeded"
 	}
 	if err != nil {
 		if reason := signalKillReason(ps); reason != "" {
+			// SIGKILL could be timeout or memory. Use memory peak as signal.
+			// Only trust memPeakKB if it's within a reasonable range (not host mem).
+			if reason == "time_exceeded" && memLimitKB > 0 &&
+				memPeakKB > 0 && memPeakKB <= memLimitKB*2 &&
+				memPeakKB >= memLimitKB*9/10 {
+				return "memory_exceeded"
+			}
 			return reason
 		}
 		return "runtime_error"

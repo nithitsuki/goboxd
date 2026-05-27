@@ -3,6 +3,7 @@ package runner
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os/exec"
 	"strings"
 	"testing"
@@ -156,19 +157,37 @@ func TestComputeTestStatus(t *testing.T) {
 		err       error
 		stdout    string
 		expected  string
+		memPeak   int
+		memLimit  int
 		want      string
 	}{
-		{"exact match", nil, "hello\n", "hello\n", "accepted"},
-		{"whitespace diff", nil, "hello\n", "hello", "output_whitespace_mismatch"},
-		{"wrong output", nil, "world", "hello", "wrong_output"},
-		{"empty expected", nil, "anything", "", "accepted"},
+		{"exact match", nil, "hello\n", "hello\n", 0, 0, "accepted"},
+		{"whitespace diff", nil, "hello\n", "hello", 0, 0, "output_whitespace_mismatch"},
+		{"wrong output", nil, "world", "hello", 0, 0, "wrong_output"},
+		{"empty expected", nil, "anything", "", 0, 0, "accepted"},
+		{"memory exceeded via peak check", fmt.Errorf("signal: killed"), "", "", 950, 1000, "memory_exceeded"},
+		{"time exceeded via low mem peak", fmt.Errorf("signal: killed"), "", "", 100, 1000, "time_exceeded"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := computeTestStatus(context.Background(), tt.err, tt.stdout, tt.expected, nil)
+			if tt.err != nil {
+				got := computeTestStatus(context.Background(), tt.err, tt.stdout, tt.expected, nil, tt.memPeak, tt.memLimit, 10)
+				if got != "runtime_error" {
+					t.Errorf("with nil ProcessState: want runtime_error, got %q", got)
+				}
+				return
+			}
+			got := computeTestStatus(context.Background(), nil, tt.stdout, tt.expected, nil, 0, 0, 10)
 			if got != tt.want {
 				t.Errorf("computeTestStatus = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestSignalKillReason(t *testing.T) {
+	// signalKillReason with nil ProcessState should return ""
+	if got := signalKillReason(nil); got != "" {
+		t.Errorf("signalKillReason(nil) = %q, want ''", got)
 	}
 }
