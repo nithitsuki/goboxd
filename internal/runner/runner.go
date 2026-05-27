@@ -47,7 +47,9 @@ func ExecuteRun(req models.RunRequest, lc config.LanguageConfig) (models.BuildRe
 		srcName = lc.SourceFilename
 	}
 
-	if err := os.WriteFile(filepath.Join(jailDir, srcName), []byte(req.Source), 0644); err != nil {
+	srcDir := filepath.Join(jailDir, "app")
+	os.MkdirAll(srcDir, 0755)
+	if err := os.WriteFile(filepath.Join(srcDir, srcName), []byte(req.Source), 0644); err != nil {
 		buildRes.Status = "internal_error"
 		buildRes.Stderr = fmt.Sprintf("failed to write source: %v", err)
 		return buildRes, nil, fmt.Errorf("failed to write source: %w", err)
@@ -131,28 +133,29 @@ func isInfraError(err error) bool {
 
 func execInJail(jailDir string, cmdArgs []string, wallTime, memKB, procs int) (string, string, error) {
 	memBytes := memKB * 1024
+	// Create a writable app dir inside jailDir
+	appDir := filepath.Join(jailDir, "app")
+	os.MkdirAll(appDir, 0755)
+
 	args := []string{
 		"-Q",
 		"--log", "/dev/null",
 		"-Mo",
+		"--bindmount", appDir + ":/app:rw",
+		"--cwd", "/app",
 		"--time_limit", strconv.Itoa(wallTime),
 		"--rlimit_as", strconv.Itoa(memBytes),
 		"--rlimit_nproc", strconv.Itoa(procs),
 		"--rlimit_fsize", "100",
 		"-E", "PATH=/usr/local/bin:/usr/bin:/bin",
-		"-B", "/bin",
 		"-B", "/usr",
 		"-B", "/lib",
 		"-B", "/lib64",
-		"-B", "/dev",
-		"-B", "/etc",
-		"-R", fmt.Sprintf("%s:/app", jailDir),
-		"--cwd", "/app",
 		"--",
 	}
 	args = append(args, cmdArgs...)
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(wallTime+1)*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(wallTime)*time.Second)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, "nsjail", args...)
@@ -203,23 +206,21 @@ func runSingleTest(tc models.TestCase, lc config.LanguageConfig, jailDir string,
 		procs = *runOpts.Limits.MaxProcesses
 	}
 
+	appDir := filepath.Join(jailDir, "app")
 	args := []string{
 		"-Q",
 		"--log", "/dev/null",
 		"-Mo",
+		"--bindmount", appDir + ":/app:rw",
+		"--cwd", "/app",
 		"--time_limit", strconv.Itoa(wallTime),
 		"--rlimit_as", strconv.Itoa(memBytes),
 		"--rlimit_nproc", strconv.Itoa(procs),
 		"--rlimit_fsize", "100",
 		"-E", "PATH=/usr/local/bin:/usr/bin:/bin",
-		"-B", "/bin",
 		"-B", "/usr",
 		"-B", "/lib",
 		"-B", "/lib64",
-		"-B", "/dev",
-		"-B", "/etc",
-		"-R", fmt.Sprintf("%s:/app", jailDir),
-		"--cwd", "/app",
 		"--",
 	}
 	args = append(args, lc.RunCmd...)
@@ -228,7 +229,8 @@ func runSingleTest(tc models.TestCase, lc config.LanguageConfig, jailDir string,
 		args = append(args, runOpts.Flags...)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(wallTime+1)*time.Second)
+	// Go context deadline matches nsjail's time_limit so both fire together
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(wallTime)*time.Second)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, "nsjail", args...)
