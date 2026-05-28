@@ -32,4 +32,5 @@ go.work.sum
 # .vscode/
 
 pyjail-reference
-*.log
+*.logbin/
+goboxd
