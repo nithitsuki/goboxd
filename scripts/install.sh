@@ -9,7 +9,13 @@ apt-get install -y --no-install-recommends \
     curl \
     wget \
     unzip \
-    build-essential
+    build-essential \
+    gcc \
+    g++ \
+    libprotobuf32 \
+    libprotobuf-c1 \
+    libnl-3-200 \
+    libnl-route-3-200
 
 echo "Running language installation scripts..."
 SCRIPT_DIR="$(dirname "$0")"

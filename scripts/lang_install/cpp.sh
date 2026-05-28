@@ -4,7 +4,7 @@ set -e
 
 if ! command -v /usr/bin/g++ &> /dev/null; then
     echo "g++ is not installed. Installing g++ using apt-get..."
-    sudo apt-get install -y g++
+    apt-get install -y g++
 fi
 
 temp_file=$(mktemp /tmp/test_cpp.XXXXXX.cpp)

@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/thesouldev/goboxd/internal/api"
-	"github.com/thesouldev/goboxd/internal/runner"
+	"github.com/thesouldev/goboxd/boxd/api"
+	"github.com/thesouldev/goboxd/boxd/runner"
 )
 
 func main() {

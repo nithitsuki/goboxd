@@ -4,7 +4,7 @@ set -e
 
 if ! command -v /usr/bin/gcc &> /dev/null; then
     echo "GCC is not installed. Installing GCC..."
-    sudo apt-get install -y gcc
+    apt-get install -y gcc
 fi
 
 TEMP_C_FILE=$(mktemp /tmp/test_c_program.XXXX.c)

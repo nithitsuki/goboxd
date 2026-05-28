@@ -4,13 +4,13 @@
 
 | # | Hole | Fix | Location |
 |---|---|---|---|
-| 1 | Path traversal via filename | `isValidFilename` rejects slashes, leading dots, `..` | `internal/api/handlers.go:72` |
-| 2 | Shell-style directory commands | Use `os.MkdirTemp` and `os.RemoveAll`, no shell exec | `internal/runner/runner.go:22` |
-| 3 | Compiler-flag injection | Per-language allow-list with exact and prefix matching | `internal/api/handlers.go:88` |
-| 4 | No request size limits | `http.MaxBytesReader` (256 KiB), `rlimit_fsize` (100 MB), test count cap (50), output capped at 64 KiB | `internal/api/handlers.go:330`, `internal/runner/runner.go:11` |
-| 5 | UID collisions under load | `os.MkdirTemp` guarantees unique directory names | `internal/runner/runner.go:22` |
-| 6 | Unbounded child output | `io.LimitReader` caps stdout/stderr at 64 KiB, `readCapped` adds truncation marker | `internal/runner/runner.go:240` |
-| 7 | Stale jail directories | `defer os.RemoveAll` after jail dir creation + startup orphan sweep | `internal/runner/runner.go:28`, `cmd/goboxd/main.go:12` |
+| 1 | Path traversal via filename | `isValidFilename` rejects slashes, leading dots, `..` | `boxd/api/handlers.go:72` |
+| 2 | Shell-style directory commands | Use `os.MkdirTemp` and `os.RemoveAll`, no shell exec | `boxd/runner/runner.go:22` |
+| 3 | Compiler-flag injection | Per-language allow-list with exact and prefix matching | `boxd/api/handlers.go:88` |
+| 4 | No request size limits | `http.MaxBytesReader` (256 KiB), `rlimit_fsize` (100 MB), test count cap (50), output capped at 64 KiB | `boxd/api/handlers.go:330`, `boxd/runner/runner.go:11` |
+| 5 | UID collisions under load | `os.MkdirTemp` guarantees unique directory names | `boxd/runner/runner.go:22` |
+| 6 | Unbounded child output | `io.LimitReader` caps stdout/stderr at 64 KiB, `readCapped` adds truncation marker | `boxd/runner/runner.go:240` |
+| 7 | Stale jail directories | `defer os.RemoveAll` after jail dir creation + startup orphan sweep | `boxd/runner/runner.go:28`, `cmd/goboxd/main.go:12` |
 
 ## What each fix does
 

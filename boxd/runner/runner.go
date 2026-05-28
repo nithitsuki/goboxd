@@ -13,8 +13,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/thesouldev/goboxd/internal/config"
-	"github.com/thesouldev/goboxd/internal/models"
+	"github.com/thesouldev/goboxd/boxd/config"
+	"github.com/thesouldev/goboxd/boxd/models"
 )
 
 // maxOutputBytes caps the output to prevent unbounded child output OOMs (Security Hole #6)
