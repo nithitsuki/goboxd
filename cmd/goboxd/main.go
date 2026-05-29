@@ -5,11 +5,17 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/thesouldev/goboxd/boxd/api"
-	"github.com/thesouldev/goboxd/boxd/runner"
+	"github.com/thesouldev/goboxd/internal/api"
+	"github.com/thesouldev/goboxd/internal/config"
+	"github.com/thesouldev/goboxd/internal/runner"
 )
 
 func main() {
+	// Load language registry from YAML
+	if err := config.LoadRegistry(); err != nil {
+		log.Fatalf("Loading language registry: %v", err)
+	}
+
 	// Security hole #7: sweep orphan jail dirs on startup
 	runner.SweepOrphans()
 

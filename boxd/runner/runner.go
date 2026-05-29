@@ -17,6 +17,22 @@ import (
 	"github.com/thesouldev/goboxd/boxd/models"
 )
 
+// expandFlags replaces {{flags}} in cmdArgs with the provided flags.
+// If no flags are given and {{flags}} is present, it is removed entirely.
+func expandFlags(cmdArgs []string, flags []string) []string {
+	result := make([]string, 0, len(cmdArgs))
+	for _, arg := range cmdArgs {
+		if arg == "{{flags}}" {
+			if len(flags) > 0 {
+				result = append(result, flags...)
+			}
+			continue
+		}
+		result = append(result, arg)
+	}
+	return result
+}
+
 // maxOutputBytes caps the output to prevent unbounded child output OOMs (Security Hole #6)
 const maxOutputBytes = 64 * 1024 // 64 KiB
 
@@ -103,9 +119,11 @@ func runBuild(jailDir string, req models.RunRequest, lc config.LanguageConfig) (
 
 	cmdArgs := make([]string, len(lc.BuildCmd))
 	copy(cmdArgs, lc.BuildCmd)
-	if req.Build != nil {
-		cmdArgs = append(cmdArgs, req.Build.Flags...)
+	flags := []string{}
+	if req.Build != nil && len(req.Build.Flags) > 0 {
+		flags = req.Build.Flags
 	}
+	cmdArgs = expandFlags(cmdArgs, flags)
 
 	stdout, stderr, err := execInJail(jailDir, cmdArgs, wallTime, memKB, procs)
 	res := models.BuildResult{
@@ -228,11 +246,11 @@ func runSingleTest(tc models.TestCase, lc config.LanguageConfig, jailDir string,
 		"-B", "/lib64",
 		"--",
 	}
-	args = append(args, lc.RunCmd...)
-
-	if runOpts != nil {
-		args = append(args, runOpts.Flags...)
+	runFlags := []string{}
+	if runOpts != nil && len(runOpts.Flags) > 0 {
+		runFlags = runOpts.Flags
 	}
+	args = append(args, expandFlags(lc.RunCmd, runFlags)...)
 
 	// Go context deadline matches nsjail's time_limit so both fire together
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(wallTime)*time.Second)

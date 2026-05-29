@@ -1,77 +1,124 @@
 package config
 
-// Limits represents the resource constraints for build or run stages.
+import (
+	"fmt"
+	"os"
+	"strings"
+
+	"gopkg.in/yaml.v3"
+)
+
+// Limits represents resource constraints for build or run stages.
 type Limits struct {
 	WallTimeS    int `yaml:"wall_time_s"`
 	MemoryKB     int `yaml:"memory_kb"`
 	MaxProcesses int `yaml:"max_processes"`
 }
 
-// LanguageConfig holds the execution parameters for a programming language.
+// StageCmd describes a build or run command with template variables.
+// {{source}} and {{artifact}} are expanded per-request.
+// {{flags}} is replaced with user-supplied flags at request time.
+type StageCmd struct {
+	Cmd            string   `yaml:"cmd"`
+	Args           []string `yaml:"args"`
+	Limits         Limits   `yaml:"limits"`
+	FlagAllowlist  []string `yaml:"flag_allowlist,omitempty"`
+}
+
+// LanguageYAML is the per-language YAML config structure.
+type LanguageYAML struct {
+	ID               string    `yaml:"id"`
+	Name             string    `yaml:"name"`
+	SourceFilename   string    `yaml:"source_filename"`
+	Artifact         string    `yaml:"artifact,omitempty"`
+	Build            *StageCmd `yaml:"build,omitempty"`
+	Run              StageCmd  `yaml:"run"`
+}
+
+// ConfigYAML is the top-level YAML structure.
+type ConfigYAML struct {
+	Languages []LanguageYAML `yaml:"languages"`
+}
+
+// LanguageConfig holds the fully-resolved execution parameters for a language.
 type LanguageConfig struct {
-	ID               string   `yaml:"id"`
-	Name             string   `yaml:"name"`
-	Version          string   `yaml:"version"`
-	BuildCmd         []string `yaml:"build_cmd"`
-	RunCmd           []string `yaml:"run_cmd"`
-	SourceFilename   string   `yaml:"source_filename"`
-	ArtifactFilename string   `yaml:"artifact_filename"`
-	DefaultLimits    Limits   `yaml:"default_run_limits"`
-	FlagAllowlist    []string `yaml:"flag_allowlist"`
+	ID               string
+	Name             string
+	SourceFilename   string
+	ArtifactFilename string
+	BuildCmd         []string // pre-expanded build command + args (empty for interpreted)
+	RunCmd           []string // pre-expanded run command + args
+	DefaultLimits    Limits
+	FlagAllowlist    []string
 }
 
-// Stub for hardcoded py3 config until we implement the YAML registry
-var Py3Stub = LanguageConfig{
-	ID:               "py3",
-	Name:             "Python 3",
-	Version:          "Python 3.11", // Exact version will be probed later
-	BuildCmd:         nil,
-	RunCmd:           []string{"/usr/bin/python3", "main.py"},
-	SourceFilename:   "main.py",
-	ArtifactFilename: "",
-	DefaultLimits: Limits{
-		WallTimeS:    9,
-		MemoryKB:     102400, // 100 MiB
-		MaxProcesses: 100,
-	},
-	FlagAllowlist: nil, // no flags for interpreted languages
+// DefaultRegistry is populated at startup from YAML, with hardcoded fallback.
+var DefaultRegistry = map[string]LanguageConfig{}
+
+// RegistryPath is the path to the YAML config file. Override for testing.
+var RegistryPath = "config/languages.yml"
+
+// LoadRegistry reads the YAML config and populates DefaultRegistry.
+func LoadRegistry() error {
+	data, err := os.ReadFile(RegistryPath)
+	if err != nil {
+		return fmt.Errorf("reading %s: %w", RegistryPath, err)
+	}
+
+	var cfg ConfigYAML
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return fmt.Errorf("parsing %s: %w", RegistryPath, err)
+	}
+
+	if len(cfg.Languages) == 0 {
+		return fmt.Errorf("no languages defined in %s", RegistryPath)
+	}
+
+	DefaultRegistry = make(map[string]LanguageConfig, len(cfg.Languages))
+	for _, lang := range cfg.Languages {
+		if lang.ID == "" {
+			return fmt.Errorf("language with empty id in %s", RegistryPath)
+		}
+
+		lc := LanguageConfig{
+			ID:             lang.ID,
+			Name:           lang.Name,
+			SourceFilename: lang.SourceFilename,
+		}
+
+		// Expand build command
+		if lang.Build != nil {
+			lc.BuildCmd = expandCmd(lang.Build.Cmd, lang.Build.Args, lang.SourceFilename, lang.Artifact)
+			lc.ArtifactFilename = lang.Artifact
+			lc.FlagAllowlist = lang.Build.FlagAllowlist
+		}
+
+		// Expand run command
+		lc.RunCmd = expandCmd(lang.Run.Cmd, lang.Run.Args, lang.SourceFilename, lang.Artifact)
+
+		// Merge limits: build limits take priority for build, run limits for run
+		if lang.Build != nil {
+			lc.DefaultLimits = lang.Build.Limits
+		} else {
+			lc.DefaultLimits = lang.Run.Limits
+		}
+
+		if _, exists := DefaultRegistry[lang.ID]; exists {
+			return fmt.Errorf("duplicate language id %q in %s", lang.ID, RegistryPath)
+		}
+		DefaultRegistry[lang.ID] = lc
+	}
+
+	return nil
 }
 
-var CStub = LanguageConfig{
-	ID:               "c",
-	Name:             "C",
-	Version:          "gcc 14",
-	BuildCmd:         []string{"/usr/bin/gcc", "-o", "solution", "solution.c"},
-	RunCmd:           []string{"./solution"},
-	SourceFilename:   "solution.c",
-	ArtifactFilename: "solution",
-	DefaultLimits: Limits{
-		WallTimeS:    5,
-		MemoryKB:     1048576, // 1024 MiB
-		MaxProcesses: 100,
-	},
-	FlagAllowlist: []string{"-O0", "-O1", "-O2", "-O3", "-Wall", "-Wextra", "-std=*"},
-}
-
-var CppStub = LanguageConfig{
-	ID:               "cpp",
-	Name:             "C++",
-	Version:          "g++ 14",
-	BuildCmd:         []string{"/usr/bin/g++", "-o", "solution", "solution.cpp"},
-	RunCmd:           []string{"./solution"},
-	SourceFilename:   "solution.cpp",
-	ArtifactFilename: "solution",
-	DefaultLimits: Limits{
-		WallTimeS:    5,
-		MemoryKB:     1048576,
-		MaxProcesses: 100,
-	},
-	FlagAllowlist: []string{"-O0", "-O1", "-O2", "-O3", "-Wall", "-Wextra", "-std=*"},
-}
-
-// DefaultRegistry is used by the handler to look up language configs.
-var DefaultRegistry = map[string]LanguageConfig{
-	"py3": Py3Stub,
-	"c":   CStub,
-	"cpp": CppStub,
+// expandCmd replaces {{source}} and {{artifact}} templates and builds the arg slice.
+func expandCmd(cmd string, args []string, srcName, artifact string) []string {
+	result := []string{cmd}
+	for _, arg := range args {
+		arg = strings.ReplaceAll(arg, "{{source}}", srcName)
+		arg = strings.ReplaceAll(arg, "{{artifact}}", artifact)
+		result = append(result, arg)
+	}
+	return result
 }

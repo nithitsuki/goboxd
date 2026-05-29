@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"os/exec"
 	"strings"
 	"testing"
 
-	"github.com/thesouldev/goboxd/boxd/models"
+	"github.com/thesouldev/goboxd/internal/config"
+	"github.com/thesouldev/goboxd/internal/models"
 )
 
 func TestHandleHealthz(t *testing.T) {
@@ -88,7 +90,7 @@ func TestHandleRunValidation(t *testing.T) {
 		},
 		{
 			name:         "unknown language",
-			body:         `{"language":"rust","source":"fn main() {}","tests":[{"stdin":"","expected_stdout":""}]}`,
+			body:         `{"language":"haskell","source":"main = putStrLn \"hi\"","tests":[{"stdin":"","expected_stdout":""}]}`,
 			expectedCode: http.StatusBadRequest,
 			errorCode:    "unknown_language",
 		},
@@ -254,5 +256,19 @@ func TestValidateFlags(t *testing.T) {
 				t.Errorf("validateFlags(%v) = %v, want %v", tt.flags, got, tt.want)
 			}
 		})
+	}
+}
+
+func init() {
+	// Try to load YAML config from project root
+	cfgPath := config.RegistryPath
+	for i := 0; i < 5; i++ {
+		if _, err := os.Stat(cfgPath); err == nil {
+			config.RegistryPath = cfgPath
+			if err := config.LoadRegistry(); err == nil {
+				return
+			}
+		}
+		cfgPath = "../" + cfgPath
 	}
 }

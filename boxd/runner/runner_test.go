@@ -20,7 +20,6 @@ func TestExecuteRun(t *testing.T) {
 	py3Config := config.LanguageConfig{
 		ID:             "py3",
 		Name:           "Python 3",
-		Version:        "Python 3.11",
 		RunCmd:         []string{"/usr/bin/python3", "main.py"},
 		SourceFilename: "main.py",
 		DefaultLimits: config.Limits{
