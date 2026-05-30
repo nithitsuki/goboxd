@@ -1,9 +1,9 @@
 {
-  "status": "time_exceeded",
+  "status": "memory_exceeded",
   "build": { "status": "ok" },
   "tests": [
     {
-      "status": "time_exceeded",
+      "status": "memory_exceeded",
       "stdout": ""
     }
   ]

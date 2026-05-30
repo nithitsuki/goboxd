@@ -272,3 +272,34 @@ func init() {
 		cfgPath = "../" + cfgPath
 	}
 }
+
+func TestSecurityHole2NoShellCommands(t *testing.T) {
+	// Security hole #2: verify we use os.MkdirTemp and os.RemoveAll
+	// instead of shell-based directory commands.
+	// Read runner.go to check for shell patterns
+	data, err := os.ReadFile("../runner/runner.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := string(data)
+
+	// Should use os.MkdirTemp for unique directories
+	if !strings.Contains(src, "os.MkdirTemp") {
+		t.Error("runner.go does not use os.MkdirTemp (security hole #2)")
+	}
+
+	// Should use os.RemoveAll for cleanup
+	if !strings.Contains(src, "os.RemoveAll") {
+		t.Error("runner.go does not use os.RemoveAll (security hole #2)")
+	}
+
+	// Should NOT use exec.Command with "sh" or "bash"
+	if strings.Contains(src, `exec.Command("sh"`) {
+		t.Error("runner.go uses shell commands (security hole #2)")
+	}
+	if strings.Contains(src, `exec.Command("bash"`) {
+		t.Error("runner.go uses bash commands (security hole #2)")
+	}
+
+	t.Log("Security hole #2: closed — uses Go filesystem APIs, no shell")
+}

@@ -324,46 +324,14 @@ func signalKillReason(ps *os.ProcessState) string {
 }
 
 // readMemoryPeakKB reads peak memory from nsjail cgroup or falls back to 0.
+// readMemoryPeakKB reads peak memory via getrusage (child processes).
+// This captures nsjail + user process memory without needing cgroups.
 func readMemoryPeakKB(ps *os.ProcessState) int {
-	base := "/sys/fs/cgroup/"
-	dirs, err := os.ReadDir(base)
-	if err == nil {
-		for _, d := range dirs {
-			if !d.IsDir() || !strings.HasPrefix(d.Name(), "NSJAIL") {
-				continue
-			}
-			peak, err := readCgroupFile(filepath.Join(d.Name(), "memory.peak"))
-			if err == nil && peak > 0 {
-				return int(peak / 1024)
-			}
-		}
+	var ru syscall.Rusage
+	if err := syscall.Getrusage(syscall.RUSAGE_CHILDREN, &ru); err == nil && ru.Maxrss > 0 {
+		return int(ru.Maxrss)
 	}
-
-	// Try root cgroup memory.peak (cgroup v2, fallback)
-	peak, err := readCgroupFile("memory.peak")
-	if err == nil && peak > 0 {
-		return int(peak / 1024)
-	}
-
 	return 0
-}
-
-// readCgroupFile attempts to read a value from cgroup memory stat files.
-func readCgroupFile(name string) (int64, error) {
-	paths := []string{
-		"/sys/fs/cgroup/memory/",
-		"/sys/fs/cgroup/",
-	}
-	for _, base := range paths {
-		data, err := os.ReadFile(filepath.Join(base, name))
-		if err == nil {
-			val := strings.TrimSpace(string(data))
-			if i, err := strconv.ParseInt(val, 10, 64); err == nil && i > 0 {
-				return i, nil
-			}
-		}
-	}
-	return 0, fmt.Errorf("cgroup file %s not found", name)
 }
 
 func computeTestStatus(ctx context.Context, err error, stdout, expected string, ps *os.ProcessState, memPeakKB int, memLimitKB int, wallTime int) string {
