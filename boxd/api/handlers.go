@@ -291,7 +291,7 @@ func HandleInfo(w http.ResponseWriter, r *http.Request) {
 	// Probe each language for its real version
 	langs := make([]map[string]interface{}, 0, len(config.DefaultRegistry))
 	for _, lc := range config.DefaultRegistry {
-		ver := lc.Version
+		ver := lc.Name
 		probeCmd := lc.RunCmd[0]
 		if len(lc.BuildCmd) > 0 {
 			probeCmd = lc.BuildCmd[0]

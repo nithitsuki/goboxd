@@ -25,7 +25,8 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o goboxd ./cmd/goboxd
 # Stage 2: Runtime environment with languages
 FROM debian:bookworm-slim
 
-# Copy the reference install scripts
+# Copy config, install scripts, and set up the runtime
+COPY config/ /app/config/
 COPY scripts/ /app/scripts/
 WORKDIR /app
 
