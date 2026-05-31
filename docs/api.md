@@ -69,7 +69,7 @@ Top-level status rules:
 { "error": { "code": "invalid_filename", "message": "filename must be a single path component" } }
 ```
 
-Error codes: `invalid_request`, `missing_language`, `unknown_language`, `missing_source`, `missing_tests`, `too_many_tests`, `invalid_filename`, `invalid_flags`, `internal_error`.
+Error codes: `invalid_request`, `missing_language`, `unknown_language`, `missing_source`, `missing_tests`, `too_many_tests`, `test_too_large`, `invalid_filename`, `invalid_flags`, `internal_error`.
 
 ## GET /healthz
 
@@ -85,7 +85,8 @@ Readiness probe. Returns 200 if nsjail and all language runtimes pass `--version
   "nsjail": { "ok": true, "version": "3.4" },
   "languages": {
     "py3": { "ok": true, "version": "Python 3.11.2" },
-    "java": { "ok": false, "error": "javac not found at /usr/bin/javac" }
+    "c": { "ok": true, "version": "gcc 14" },
+    "rust": { "ok": false, "error": "rustc not found at /usr/bin/rustc" }
   }
 }
 ```

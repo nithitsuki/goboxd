@@ -21,7 +21,7 @@ internal/runner/runner.go
   │                 ├─ defer os.RemoveAll (cleanup on any exit)
   │                 ├─ Write source file into jail dir
   │                 ├─ Build step (if language has BuildCmd):
-  │                 │   └─ execInJail: nsjail + gcc/g++/javac
+  │                 │   └─ execInJail: nsjail + gcc/g++/rustc/go
   │                 ├─ Test loop:
   │                 │   └─ runSingleTest: nsjail + runtime
   │                 │       ├─ io.LimitReader (64 KiB cap)
