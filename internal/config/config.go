@@ -114,6 +114,8 @@ func LoadRegistry() error {
 
 // expandCmd replaces {{source}} and {{artifact}} templates and builds the arg slice.
 func expandCmd(cmd string, args []string, srcName, artifact string) []string {
+	cmd = strings.ReplaceAll(cmd, "{{source}}", srcName)
+	cmd = strings.ReplaceAll(cmd, "{{artifact}}", artifact)
 	result := []string{cmd}
 	for _, arg := range args {
 		arg = strings.ReplaceAll(arg, "{{source}}", srcName)

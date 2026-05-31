@@ -16,9 +16,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/thesouldev/goboxd/boxd/config"
-	"github.com/thesouldev/goboxd/boxd/models"
-	"github.com/thesouldev/goboxd/boxd/runner"
+	"github.com/thesouldev/goboxd/internal/config"
+	"github.com/thesouldev/goboxd/internal/models"
+	"github.com/thesouldev/goboxd/internal/runner"
 )
 
 // Stats tracker for /info endpoint

@@ -154,3 +154,25 @@ Suggested writing all four with consistent structure. api.md as the API referenc
 
 **What we used / didn't use:**
 wrote all four. architecture.md documents the full request flow through the handler into the runner and back, plus the package layout and key decisions (stdlib routing, fixture tests, status vocabulary). security.md has the exact file:line for each fix which is what the PR description needs.
+
+## [2026-05-30] [Context: Fixing security hole #2 test properly]
+
+**Prompt:**
+the test i wrote for security hole #2 only checks for "sh" and "bash" but what if someone uses ash or zsh or any other shell? the test is security theater
+
+**Response summary:**
+Suggested scanning ALL Go source files for exec.Command calls with any known shell binary (sh, bash, dash, ash, zsh, csh, tcsh, ksh, fish). Also checking that os.MkdirTemp and os.RemoveAll are used instead.
+
+**What we used / didn't use:**
+used the comprehensive shell list approach. the test walks all .go files in internal/ and cmd/ and checks for ANY shell interpreter invocation. also removed the fragile string matching in favor of filepath.Glob-based scanning.
+
+## [2026-05-30] [Context: Fixing memory_exceeded with getrusage]
+
+**Prompt:**
+memory_exceeded detection uses cgroup scanning but cgroups are unreliable in Docker. the root cgroup gives host memory (18 GB) which causes false positives. need a different approach that works without cgroups
+
+**Response summary:**
+Suggested using getrusage(RUSAGE_CHILDREN) which gives the peak RSS of all child processes combined (nsjail + user code). This is more reliable than cgroup scanning and works without any cgroup setup.
+
+**What we used / didn't use:**
+used getrusage. removed the entire cgroup scanning code including readCgroupFile and readProcRSS since they were reading wrong values. memory-exceeded fixture now passes correctly with the real peak memory.

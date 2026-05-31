@@ -13,8 +13,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/thesouldev/goboxd/boxd/config"
-	"github.com/thesouldev/goboxd/boxd/models"
+	"github.com/thesouldev/goboxd/internal/config"
+	"github.com/thesouldev/goboxd/internal/models"
 )
 
 // expandFlags replaces {{flags}} in cmdArgs with the provided flags.
@@ -164,16 +164,23 @@ func execInJail(jailDir string, cmdArgs []string, wallTime, memKB, procs int) (s
 		"-Q",
 		"--log", "/dev/null",
 		"-Mo",
+		"-T", "/tmp",
 		"--bindmount", appDir + ":/app:rw",
 		"--cwd", "/app",
 		"--time_limit", strconv.Itoa(wallTime),
 		"--rlimit_as", strconv.Itoa(memBytes),
 		"--rlimit_nproc", strconv.Itoa(procs),
 		"--rlimit_fsize", "100",
+		"--rlimit_nofile", "65536",
+		"-B", "/etc",
 		"-E", "PATH=/usr/local/bin:/usr/bin:/bin",
+		"-E", "HOME=/tmp",
+		"-E", "GOCACHE=/tmp/go-cache",
 		"-B", "/usr",
 		"-B", "/lib",
 		"-B", "/lib64",
+		"-B", "/bin",
+		"-B", "/dev",
 		"--",
 	}
 	args = append(args, cmdArgs...)
@@ -234,16 +241,23 @@ func runSingleTest(tc models.TestCase, lc config.LanguageConfig, jailDir string,
 		"-Q",
 		"--log", "/dev/null",
 		"-Mo",
+		"-T", "/tmp",
 		"--bindmount", appDir + ":/app:rw",
 		"--cwd", "/app",
 		"--time_limit", strconv.Itoa(wallTime),
 		"--rlimit_as", strconv.Itoa(memBytes),
 		"--rlimit_nproc", strconv.Itoa(procs),
 		"--rlimit_fsize", "100",
+		"--rlimit_nofile", "65536",
+		"-B", "/etc",
 		"-E", "PATH=/usr/local/bin:/usr/bin:/bin",
+		"-E", "HOME=/tmp",
+		"-E", "GOCACHE=/tmp/go-cache",
 		"-B", "/usr",
 		"-B", "/lib",
 		"-B", "/lib64",
+		"-B", "/bin",
+		"-B", "/dev",
 		"--",
 	}
 	runFlags := []string{}
@@ -335,22 +349,21 @@ func readMemoryPeakKB(ps *os.ProcessState) int {
 }
 
 func computeTestStatus(ctx context.Context, err error, stdout, expected string, ps *os.ProcessState, memPeakKB int, memLimitKB int, wallTime int) string {
-	// Check context deadline first — Go or nsjail killed the process on timeout.
-	if ctx.Err() == context.DeadlineExceeded {
-		return "time_exceeded"
-	}
+	// If the process was killed and memory peak is near the limit, it's memory_exceeded
+	// even if the context deadline also fired (they fire at the same time).
 	if err != nil {
 		if reason := signalKillReason(ps); reason != "" {
-			// SIGKILL could be timeout or memory. Use memory peak as signal.
-			// Only trust memPeakKB if it's within a reasonable range (not host mem).
-			if reason == "time_exceeded" && memLimitKB > 0 &&
-				memPeakKB > 0 && memPeakKB <= memLimitKB*2 &&
+			if memLimitKB > 0 && memPeakKB > 0 &&
+				memPeakKB <= memLimitKB*10 &&
 				memPeakKB >= memLimitKB*9/10 {
 				return "memory_exceeded"
 			}
 			return reason
 		}
 		return "runtime_error"
+	}
+	if ctx.Err() == context.DeadlineExceeded {
+		return "time_exceeded"
 	}
 	if expected == "" {
 		return "accepted"
