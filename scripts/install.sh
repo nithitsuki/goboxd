@@ -14,10 +14,10 @@ echo "Installing language toolchains..."
 apt-get install -y --no-install-recommends python3 python3-pip python3-dev
 
 # Rust (bonus language)
-apt-get install -y --no-install-recommends rustc cargo || true
+apt-get install -y --no-install-recommends rustc cargo
 
 # Go (bonus language)
-apt-get install -y --no-install-recommends golang-go || true
+apt-get install -y --no-install-recommends golang-go
 
 # Verify
 python3 --version && gcc --version && g++ --version
