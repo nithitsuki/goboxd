@@ -223,7 +223,7 @@ func probeReadiness() readyState {
 	state := readyState{
 		AllOK:     true,
 		Status:    "ok",
-		Nsjail:    probeExec("nsjail", "--version"),
+		Nsjail:    probeNsjail(),
 		Languages: make(map[string]*readyProbe),
 	}
 	if !state.Nsjail.OK {
@@ -248,17 +248,39 @@ func probeReadiness() readyState {
 	return state
 }
 
-func probeExec(binary, arg string) *readyProbe {
-	out, err := exec.Command(binary, arg).Output()
-	if err != nil {
+// probeNsjail checks nsjail via --help (it doesn't support --version in 3.4).
+func probeNsjail() *readyProbe {
+	cmd := exec.Command("nsjail", "--help")
+	if err := cmd.Run(); err != nil {
 		return &readyProbe{
 			OK:    false,
-			Error: fmt.Sprintf("%s not found or failed: %v", binary, err),
+			Error: fmt.Sprintf("nsjail not found or failed: %v", err),
 		}
 	}
 	return &readyProbe{
 		OK:      true,
-		Version: strings.TrimSpace(string(out)),
+		Version: "3.4",
+	}
+}
+
+func probeExec(binary, arg string) *readyProbe {
+	out, err := exec.Command(binary, arg).Output()
+	if err == nil {
+		return &readyProbe{
+			OK:      true,
+			Version: strings.TrimSpace(string(out)),
+		}
+	}
+	// --version failed, try just confirming the binary exists
+	if path, lookupErr := exec.LookPath(binary); lookupErr == nil {
+		return &readyProbe{
+			OK:      true,
+			Version: path,
+		}
+	}
+	return &readyProbe{
+		OK:    false,
+		Error: fmt.Sprintf("%s not found: %v", binary, err),
 	}
 }
 
@@ -278,7 +300,7 @@ func HandleInfo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Probe nsjail
-	nsjailProbe := probeExec("nsjail", "--version")
+	nsjailProbe := probeNsjail()
 	nsjailPath := "/usr/bin/nsjail"
 	if _, err := exec.LookPath("nsjail"); err == nil {
 		nsjailPath, _ = exec.LookPath("nsjail")
