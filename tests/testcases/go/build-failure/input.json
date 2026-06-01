@@ -1,8 +1,1 @@
-{
-  "language": "go",
-  "source": "this is not valid go code",
-  "build": { "limits": { "wall_time_s": 15, "memory_kb": 1048576, "max_processes": 100 } },
-  "tests": [
-    { "stdin": "", "expected_stdout": "" }
-  ]
-}
+{"language":"go","source":"this is not valid go code at all","build":{"limits":{"wall_time_s":5,"memory_kb":102400,"max_processes":100}},"tests":[{"stdin":"","expected_stdout":""}]}

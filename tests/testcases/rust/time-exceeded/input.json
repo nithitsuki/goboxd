@@ -1,0 +1,1 @@
+{"language":"rust","source":"fn main(){loop{}}","build":{"limits":{"wall_time_s":3,"memory_kb":102400,"max_processes":100}},"run":{"limits":{"wall_time_s":2,"memory_kb":102400,"max_processes":100}},"tests":[{"stdin":"","expected_stdout":""}]}

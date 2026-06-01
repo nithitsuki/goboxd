@@ -1,1 +1,1 @@
-{"language":"java","source":"public class Main { this is not valid java","source_filename":"Main.java","build":{"limits":{"wall_time_s":6,"memory_kb":102400,"max_processes":100}},"tests":[{"stdin":"","expected_stdout":""}]}
+{"language":"java","source":"this is not valid java code at all","build":{"limits":{"wall_time_s":5,"memory_kb":102400,"max_processes":100}},"tests":[{"stdin":"","expected_stdout":""}]}

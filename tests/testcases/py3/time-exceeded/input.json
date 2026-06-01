@@ -1,11 +1,1 @@
-{
-  "language": "py3",
-  "source": "import time\nwhile True:\n    time.sleep(1)",
-  "run": { "limits": { "wall_time_s": 1, "memory_kb": 102400, "max_processes": 100 } },
-  "tests": [
-    {
-      "stdin": "",
-      "expected_stdout": ""
-    }
-  ]
-}
+{"language":"py3","source":"import time\nwhile True:\n  time.sleep(1)","run":{"limits":{"wall_time_s":2,"memory_kb":102400,"max_processes":100}},"tests":[{"stdin":"","expected_stdout":""}]}
