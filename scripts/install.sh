@@ -19,6 +19,21 @@ apt-get install -y --no-install-recommends default-jdk
 # JavaScript / Node.js (in-scope)
 apt-get install -y --no-install-recommends nodejs
 
+# Haskell (functional)
+apt-get install -y --no-install-recommends ghc
+
+# OCaml (functional)
+apt-get install -y --no-install-recommends ocaml
+
+# R (statistical)
+apt-get install -y --no-install-recommends r-base
+
+# D / GDC (systems)
+apt-get install -y --no-install-recommends gdc
+
+# LuaJIT (scripting)
+apt-get install -y --no-install-recommends luajit
+
 # Verilog (in-scope)
 apt-get install -y --no-install-recommends iverilog
 

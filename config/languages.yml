@@ -145,3 +145,91 @@ languages:
         wall_time_s: 5
         memory_kb: 524288
         max_processes: 64
+
+  - id: haskell
+    name: Haskell
+    source_filename: solution.hs
+    artifact: solution
+    build:
+      cmd: /usr/bin/ghc
+      args: ["-O2", "-dynamic", "-o", "{{artifact}}", "{{source}}"]
+      limits:
+        wall_time_s: 15
+        memory_kb: 1048576
+        max_processes: 100
+    run:
+      cmd: ./{{artifact}}
+      limits:
+        wall_time_s: 5
+        memory_kb: 524288
+        max_processes: 64
+
+  - id: ocaml
+    name: OCaml
+    source_filename: solution.ml
+    artifact: solution
+    build:
+      cmd: /usr/bin/ocamlopt
+      args: ["-o", "{{artifact}}", "{{source}}"]
+      limits:
+        wall_time_s: 10
+        memory_kb: 1048576
+        max_processes: 100
+    run:
+      cmd: ./{{artifact}}
+      limits:
+        wall_time_s: 5
+        memory_kb: 524288
+        max_processes: 64
+
+  - id: r
+    name: R
+    source_filename: solution.R
+    run:
+      cmd: /usr/bin/Rscript
+      args: ["{{source}}"]
+      limits:
+        wall_time_s: 9
+        memory_kb: 102400
+        max_processes: 100
+
+  - id: d
+    name: D (GDC)
+    source_filename: solution.d
+    artifact: solution
+    build:
+      cmd: /usr/bin/gdc
+      args: ["-o", "{{artifact}}", "{{source}}"]
+      limits:
+        wall_time_s: 10
+        memory_kb: 1048576
+        max_processes: 100
+    run:
+      cmd: ./{{artifact}}
+      limits:
+        wall_time_s: 5
+        memory_kb: 524288
+        max_processes: 64
+
+  - id: lua
+    name: Lua (LuaJIT)
+    source_filename: solution.lua
+    run:
+      cmd: /usr/bin/luajit
+      args: ["{{source}}"]
+      limits:
+        wall_time_s: 9
+        memory_kb: 102400
+        max_processes: 100
+
+  - id: perl
+    name: Perl
+    source_filename: solution.pl
+    run:
+      cmd: /usr/bin/perl
+      args: ["{{source}}"]
+      limits:
+        wall_time_s: 9
+        memory_kb: 102400
+        max_processes: 100
+

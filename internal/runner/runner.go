@@ -181,6 +181,7 @@ func execInJail(jailDir string, cmdArgs []string, wallTime, memKB, procs int) (s
 		"-B", "/lib64",
 		"-B", "/bin",
 		"-B", "/dev",
+		"-B", "/var/lib",
 		"--",
 	}
 	args = append(args, cmdArgs...)
@@ -259,6 +260,7 @@ func runSingleTest(tc models.TestCase, lc config.LanguageConfig, jailDir string,
 		"-B", "/lib64",
 		"-B", "/bin",
 		"-B", "/dev",
+		"-B", "/var/lib",
 		"--",
 	}
 	runFlags := []string{}

@@ -1,0 +1,1 @@
+{"language":"d","source":"import std.stdio;\nvoid main() {\n  writeln(\"Hello from D!\");\n}","build":{"limits":{"wall_time_s":10,"memory_kb":1048576,"max_processes":100}},"tests":[{"stdin":"","expected_stdout":"Hello from D!\n"}]}

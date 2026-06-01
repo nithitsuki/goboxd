@@ -1,0 +1,1 @@
+{"language":"ocaml","source":"print_string \"Hello from OCaml!\\n\"","build":{"limits":{"wall_time_s":10,"memory_kb":1048576,"max_processes":100}},"tests":[{"stdin":"","expected_stdout":"Hello from OCaml!\n"}]}

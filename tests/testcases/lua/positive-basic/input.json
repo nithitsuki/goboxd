@@ -1,0 +1,1 @@
+{"language":"lua","source":"print(\"Hello from Lua!\")","tests":[{"stdin":"","expected_stdout":"Hello from Lua!\n"}]}
