@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/thesouldev/goboxd/boxd/models"
+	"github.com/thesouldev/goboxd/internal/models"
 )
 
 func sendRun(t *testing.T, req models.RunRequest) models.RunResponse {

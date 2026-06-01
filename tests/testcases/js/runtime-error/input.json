@@ -1,0 +1,1 @@
+{"language":"js","source":"throw new Error('crash')","tests":[{"stdin":"","expected_stdout":""}]}

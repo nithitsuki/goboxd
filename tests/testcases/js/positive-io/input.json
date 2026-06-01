@@ -1,0 +1,1 @@
+{"language":"js","source":"const readline = require('readline');\nconst rl = readline.createInterface({input:process.stdin});\nrl.on('line', (line) => {\n  const n = parseInt(line);\n  for(let i = 1; i <= n; i++) console.log('Line ' + i);\n  rl.close();\n});","tests":[{"stdin":"3","expected_stdout":"Line 1\nLine 2\nLine 3\n"}]}

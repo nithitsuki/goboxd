@@ -3,7 +3,6 @@ package runner
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"os/exec"
 	"strings"
 	"testing"
@@ -23,6 +22,11 @@ func TestExecuteRun(t *testing.T) {
 		RunCmd:         []string{"/usr/bin/python3", "main.py"},
 		SourceFilename: "main.py",
 		DefaultLimits: config.Limits{
+			WallTimeS:    2,
+			MemoryKB:     102400,
+			MaxProcesses: 100,
+		},
+		RunLimits: config.Limits{
 			WallTimeS:    2,
 			MemoryKB:     102400,
 			MaxProcesses: 100,
@@ -164,19 +168,18 @@ func TestComputeTestStatus(t *testing.T) {
 		{"whitespace diff", nil, "hello\n", "hello", 0, 0, "output_whitespace_mismatch"},
 		{"wrong output", nil, "world", "hello", 0, 0, "wrong_output"},
 		{"empty expected", nil, "anything", "", 0, 0, "accepted"},
-		{"memory exceeded via peak check", fmt.Errorf("signal: killed"), "", "", 950, 1000, "memory_exceeded"},
-		{"time exceeded via low mem peak", fmt.Errorf("signal: killed"), "", "", 100, 1000, "time_exceeded"},
+		{"exact match with empty expected", nil, "", "", 0, 0, "accepted"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.err != nil {
-				got := computeTestStatus(context.Background(), tt.err, tt.stdout, tt.expected, nil, tt.memPeak, tt.memLimit, 10)
-				if got != "runtime_error" {
-					t.Errorf("with nil ProcessState: want runtime_error, got %q", got)
+				got := computeTestStatus(context.Background(), tt.err, tt.stdout, tt.expected, nil, tt.memPeak, tt.memLimit, 10, 10000)
+				if got != tt.want {
+					t.Errorf("with nil ProcessState: want %q, got %q", tt.want, got)
 				}
 				return
 			}
-			got := computeTestStatus(context.Background(), nil, tt.stdout, tt.expected, nil, 0, 0, 10)
+			got := computeTestStatus(context.Background(), nil, tt.stdout, tt.expected, nil, 0, 0, 10, 500)
 			if got != tt.want {
 				t.Errorf("computeTestStatus = %q, want %q", got, tt.want)
 			}

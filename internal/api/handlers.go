@@ -439,6 +439,19 @@ func HandleRun(w http.ResponseWriter, r *http.Request) {
 	atomic.AddInt64(&jobStats.InFlight, -1)
 	releaseSlot()
 	if err != nil {
+		// If buildRes already has internal_error status, return 200 with it
+		// (per spec: internal_error is a status in the response body, not a 5xx)
+		if buildRes.Status == "internal_error" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			if err := json.NewEncoder(w).Encode(models.RunResponse{
+				Status: "internal_error",
+				Build:  buildRes,
+			}); err != nil {
+				log.Printf("failed to write internal_error response: %v", err)
+			}
+			return
+		}
 		log.Printf("Internal error during execution: %v", err)
 		atomic.AddInt64(&jobStats.FailedInternal, 1)
 		jobStatsMu.Lock()

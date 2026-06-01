@@ -16,7 +16,7 @@ languages:
     artifact: solution
     build:
       cmd: /usr/bin/gcc
-      args: ["{{flags}}", "-o", "{{artifact}}", "{{source}}"]
+      args: ["-x", "c", "{{flags}}", "-o", "{{artifact}}", "{{source}}"]
       limits:
         wall_time_s: 5
         memory_kb: 1048576
@@ -35,7 +35,7 @@ languages:
     artifact: solution
     build:
       cmd: /usr/bin/g++
-      args: ["{{flags}}", "-o", "{{artifact}}", "{{source}}"]
+      args: ["-x", "c++", "{{flags}}", "-o", "{{artifact}}", "{{source}}"]
       limits:
         wall_time_s: 5
         memory_kb: 1048576
@@ -47,6 +47,66 @@ languages:
         wall_time_s: 5
         memory_kb: 524288
         max_processes: 64
+
+  - id: java
+    name: Java
+    source_filename: Main.java
+    artifact: Main
+    build:
+      cmd: /usr/bin/javac
+      args: ["{{source}}"]
+      limits:
+        wall_time_s: 6
+        memory_kb: 102400
+        max_processes: 100
+    run:
+      cmd: /usr/bin/java
+      args: ["-cp", ".", "{{artifact}}"]
+      limits:
+        wall_time_s: 6
+        memory_kb: 102400
+        max_processes: 100
+
+  - id: bash
+    name: Bash
+    source_filename: solution.sh
+    run:
+      cmd: /usr/bin/bash
+      args: ["{{source}}"]
+      limits:
+        wall_time_s: 9
+        memory_kb: 102400
+        max_processes: 100
+
+  - id: js
+    name: JavaScript (Node)
+    source_filename: solution.js
+    run:
+      cmd: /usr/bin/node
+      args: ["{{source}}"]
+      limits:
+        wall_time_s: 9
+        memory_kb: 102400
+        max_processes: 100
+
+  - id: verilog
+    name: Verilog
+    source_filename: solution.v
+    artifact: solution
+    build:
+      cmd: /usr/bin/iverilog
+      args: ["-o", "{{artifact}}", "{{source}}"]
+      limits:
+        wall_time_s: 6
+        memory_kb: 102400
+        max_processes: 100
+    run:
+      cmd: /usr/bin/vvp
+      args: ["{{artifact}}"]
+      limits:
+        wall_time_s: 6
+        memory_kb: 102400
+        max_processes: 100
 
   - id: rust
     name: Rust

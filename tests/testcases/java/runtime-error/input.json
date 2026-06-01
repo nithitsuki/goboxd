@@ -1,0 +1,1 @@
+{"language":"java","source":"public class Main { public static void main(String[] args) { int x = 1/0; } }","source_filename":"Main.java","artifact_filename":"Main","build":{"limits":{"wall_time_s":6,"memory_kb":102400,"max_processes":100}},"tests":[{"stdin":"","expected_stdout":""}]}

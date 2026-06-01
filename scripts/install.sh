@@ -13,6 +13,15 @@ echo "Installing language toolchains..."
 # Python 3 (interpreted)
 apt-get install -y --no-install-recommends python3 python3-pip python3-dev
 
+# Java (in-scope)
+apt-get install -y --no-install-recommends default-jdk
+
+# JavaScript / Node.js (in-scope)
+apt-get install -y --no-install-recommends nodejs
+
+# Verilog (in-scope)
+apt-get install -y --no-install-recommends iverilog
+
 # Rust (bonus language)
 apt-get install -y --no-install-recommends rustc cargo
 
@@ -21,6 +30,9 @@ apt-get install -y --no-install-recommends golang-go
 
 # Verify
 python3 --version && gcc --version && g++ --version
+java -version 2>&1 | head -1
+node --version
+which iverilog 2>/dev/null && iverilog -V 2>&1 | head -1 || echo "iverilog not installed"
 which rustc 2>/dev/null && rustc --version || echo "rustc not installed"
 which go 2>/dev/null && go version || echo "go not installed"
 

@@ -48,7 +48,9 @@ type LanguageConfig struct {
 	ArtifactFilename string
 	BuildCmd         []string // pre-expanded build command + args (empty for interpreted)
 	RunCmd           []string // pre-expanded run command + args
-	DefaultLimits    Limits
+	DefaultLimits    Limits   // merged limits (build limits for compiled, run for interpreted)
+	BuildLimits      Limits   // YAML build limits (for compiled languages)
+	RunLimits        Limits   // YAML run limits
 	FlagAllowlist    []string
 }
 
@@ -96,10 +98,13 @@ func LoadRegistry() error {
 		// Expand run command
 		lc.RunCmd = expandCmd(lang.Run.Cmd, lang.Run.Args, lang.SourceFilename, lang.Artifact)
 
-		// Merge limits: build limits take priority for build, run limits for run
+		// Store separate build and run limits from YAML
 		if lang.Build != nil {
+			lc.BuildLimits = lang.Build.Limits
 			lc.DefaultLimits = lang.Build.Limits
-		} else {
+		}
+		lc.RunLimits = lang.Run.Limits
+		if lang.Build == nil {
 			lc.DefaultLimits = lang.Run.Limits
 		}
 

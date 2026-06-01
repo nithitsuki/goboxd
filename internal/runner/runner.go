@@ -102,9 +102,9 @@ func ExecuteRun(req models.RunRequest, lc config.LanguageConfig) (models.BuildRe
 
 // runBuild compiles the source inside nsjail using lc.BuildCmd.
 func runBuild(jailDir string, req models.RunRequest, lc config.LanguageConfig) (models.BuildResult, error) {
-	wallTime := 30
-	memKB := 1048576
-	procs := 100
+	wallTime := lc.BuildLimits.WallTimeS
+	memKB := lc.BuildLimits.MemoryKB
+	procs := lc.BuildLimits.MaxProcesses
 	if req.Build != nil && req.Build.Limits != nil {
 		if req.Build.Limits.WallTimeS != nil {
 			wallTime = *req.Build.Limits.WallTimeS
@@ -220,18 +220,19 @@ func execInJail(jailDir string, cmdArgs []string, wallTime, memKB, procs int) (s
 func runSingleTest(tc models.TestCase, lc config.LanguageConfig, jailDir string, runOpts *models.StageConfig) models.TestResult {
 	start := time.Now()
 
-	wallTime := lc.DefaultLimits.WallTimeS
+	// Use language-specific run limits, not build limits
+	wallTime := lc.RunLimits.WallTimeS
 	if runOpts != nil && runOpts.Limits != nil && runOpts.Limits.WallTimeS != nil {
 		wallTime = *runOpts.Limits.WallTimeS
 	}
 
-	memKB := lc.DefaultLimits.MemoryKB
+	memKB := lc.RunLimits.MemoryKB
 	if runOpts != nil && runOpts.Limits != nil && runOpts.Limits.MemoryKB != nil {
 		memKB = *runOpts.Limits.MemoryKB
 	}
 	memBytes := memKB * 1024
 
-	procs := lc.DefaultLimits.MaxProcesses
+	procs := lc.RunLimits.MaxProcesses
 	if runOpts != nil && runOpts.Limits != nil && runOpts.Limits.MaxProcesses != nil {
 		procs = *runOpts.Limits.MaxProcesses
 	}
@@ -306,7 +307,7 @@ func runSingleTest(tc models.TestCase, lc config.LanguageConfig, jailDir string,
 	duration := int(time.Since(start).Milliseconds())
 
 	memPeak := readMemoryPeakKB(cmd.ProcessState)
-	status := computeTestStatus(ctx, err, stdoutRaw, tc.ExpectedStdout, cmd.ProcessState, memPeak, memKB, wallTime)
+	status := computeTestStatus(ctx, err, stdoutRaw, tc.ExpectedStdout, cmd.ProcessState, memPeak, memKB, wallTime, duration)
 
 	return models.TestResult{
 		Status:       status,
@@ -348,22 +349,21 @@ func readMemoryPeakKB(ps *os.ProcessState) int {
 	return 0
 }
 
-func computeTestStatus(ctx context.Context, err error, stdout, expected string, ps *os.ProcessState, memPeakKB int, memLimitKB int, wallTime int) string {
-	// If the process was killed and memory peak is near the limit, it's memory_exceeded
-	// even if the context deadline also fired (they fire at the same time).
-	if err != nil {
-		if reason := signalKillReason(ps); reason != "" {
-			if memLimitKB > 0 && memPeakKB > 0 &&
-				memPeakKB <= memLimitKB*10 &&
-				memPeakKB >= memLimitKB*9/10 {
-				return "memory_exceeded"
-			}
-			return reason
-		}
-		return "runtime_error"
-	}
+func computeTestStatus(ctx context.Context, err error, stdout, expected string, ps *os.ProcessState, memPeakKB int, memLimitKB int, wallTime int, durationMs int) string {
+	// Check context deadline first (Go killed the process)
 	if ctx.Err() == context.DeadlineExceeded {
 		return "time_exceeded"
+	}
+	if err != nil {
+		if reason := signalKillReason(ps); reason != "" {
+			return reason
+		}
+		// nsjail exits non-zero when enforcing --time_limit.
+		// Signal detection failed (ps is nil or no signal), so check duration.
+		if wallTime > 0 && durationMs >= (wallTime-1)*1000 {
+			return "time_exceeded"
+		}
+		return "runtime_error"
 	}
 	if expected == "" {
 		return "accepted"
