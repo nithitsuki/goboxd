@@ -92,6 +92,8 @@ function App() {
   const [code, setCode] = useState(LANGUAGES['py3'].defaultCode);
   const [stdin, setStdin] = useState('');
   const [output, setOutput] = useState('');
+  const [rawJson, setRawJson] = useState<any>(null);
+  const [showRaw, setShowRaw] = useState(false);
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState<'play' | 'bench'>('play');
   const LI = LANGUAGES[lang];
@@ -112,10 +114,13 @@ function App() {
   async function run() {
     setLoading(true);
     setOutput('');
+    setRawJson(null);
+    setShowRaw(false);
     const body: any = { language: lang, source: code, tests: [{ stdin: stdin || '', expected_stdout: '' }] };
     try {
       const res = await fetch(API + '/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const data = await res.json();
+      setRawJson(data);
       if (data.error) { setOutput('error: ' + data.error.message); }
       else {
         let out = 'status: ' + data.status + '\n';
@@ -123,9 +128,17 @@ function App() {
         if (data.tests && data.tests.length > 0) {
           const t = data.tests[0];
           out += 'test status: ' + t.status + '\n';
-          out += '---stdout---\n' + t.stdout;
-          if (t.stderr) out += '\n---stderr---\n' + t.stderr;
-          if (t.memory_peak_kb > 0) out += '\nmemory: ' + t.memory_peak_kb + ' KB';
+          out += '---stdout---\n' + (t.stdout || '(empty)') + '\n';
+          out += '---stderr---\n' + (t.stderr || '(empty)') + '\n';
+          if (t.memory_peak_kb > 0) out += 'memory: ' + t.memory_peak_kb + ' KB\n';
+          out += 'duration: ' + t.duration_ms + 'ms\n';
+          if (t.status === 'runtime_error' && !t.stderr) {
+            out += 'note: crash signal may not appear in stderr (kernel kills silently)\n';
+            out += 'try running locally or check exit code\n';
+          }
+        }
+        if (data.build && data.build.status === 'ok' && (lang === 'c' || lang === 'cpp' || lang === 'rust' || lang === 'go')) {
+          out += '\n(hint: compiled artifacts exist in the container but download is not yet implemented)\n';
         }
         setOutput(out);
       }
@@ -181,8 +194,12 @@ function App() {
           onClick: run, disabled: loading,
           style: { padding: '10px', fontSize: '16px', cursor: loading ? 'wait' : 'pointer', background: loading ? '#ccc' : '#4CAF50', color: 'white', border: 'none', borderRadius: '4px' }
         }, loading ? 'running...' : 'run'),
+        output && rawJson && React.createElement('button', {
+          onClick: () => setShowRaw(!showRaw),
+          style: { fontSize: '12px', cursor: 'pointer', padding: '2px 8px', background: '#333', color: '#ccc', border: '1px solid #555', borderRadius: '3px' }
+        }, showRaw ? 'hide raw' : 'view raw'),
         React.createElement('div', { style: { flex: 1, background: '#1e1e1e', color: '#d4d4d4', padding: '10px', fontFamily: 'monospace', fontSize: '13px', whiteSpace: 'pre-wrap', overflow: 'auto', borderRadius: '4px', minHeight: '200px' } },
-          output || 'output will appear here'),
+          showRaw && rawJson ? JSON.stringify(rawJson, null, 2) : (output || 'output will appear here')),
       ),
     ),
   );
