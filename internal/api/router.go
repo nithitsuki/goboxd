@@ -10,6 +10,10 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("GET /readyz", HandleReadyz)
 	mux.HandleFunc("GET /info", HandleInfo)
 	mux.HandleFunc("POST /run", HandleRun)
+	if PlaygroundExists() {
+		mux.Handle("GET /playground", http.RedirectHandler("/playground/", http.StatusMovedPermanently))
+		mux.Handle("GET /playground/", http.StripPrefix("/playground", http.HandlerFunc(HandlePlayground)))
+	}
 
 	return LoggingMiddleware(mux)
 }
