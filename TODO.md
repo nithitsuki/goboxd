@@ -22,7 +22,7 @@
 
 ## Phase 4 — Security Hardening
 
-- [ ] Add seccomp Kafel policy blocking dangerous syscalls (ptrace, bpf, mount, etc.)
+- [ ] Add seccomp Kafel policy — blocked by nsjail 3.4 kafel parser limitations (max 9 syscalls per rule, multi-rule policies fail). Requires nsjail upgrade or different seccomp approach.
 - [ ] Add cgroup v2 memory tracking with per-jail memory.peak polling
 - [ ] Add Slowloris mitigation (ReadHeaderTimeout, etc.)
 - [ ] Add TOCTOU symlink protection (O_EXCL | O_NOFOLLOW)
