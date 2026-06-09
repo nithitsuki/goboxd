@@ -1,3 +1,10 @@
+// Package config loads and exposes the language registry from a YAML
+// configuration file. Each language has a source filename, optional build
+// command, run command, and resource limits. The registry is populated once
+// at startup by LoadRegistry and is read-only thereafter.
+//
+// Template variables ({{source}}, {{artifact}}, {{flags}}) are expanded in
+// command arguments at request time.
 package config
 
 import (

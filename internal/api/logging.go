@@ -1,3 +1,5 @@
+// Package api implements the HTTP handlers, routing, request validation,
+// and structured logging for the goboxd service.
 package api
 
 import (
@@ -11,7 +13,8 @@ import (
 
 var reqIDCounter int64
 
-// bodyRecorder captures both status code and response body for structured logs.
+// bodyRecorder wraps http.ResponseWriter to capture the status code and
+// response body for structured request logging.
 type bodyRecorder struct {
 	http.ResponseWriter
 	statusCode int

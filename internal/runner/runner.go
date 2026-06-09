@@ -1,3 +1,19 @@
+// Package runner executes untrusted user code inside nsjail sandboxes.
+//
+// Each request gets a unique temporary jail directory created via
+// os.MkdirTemp. The source code is written to disk inside the jail,
+// optionally compiled (for compiled languages), then executed against
+// each test case. Every invocation of the compiler or the user's program
+// is wrapped in nsjail for namespace isolation, resource limits, and
+// filesystem containment.
+//
+// Resource limits (wall time, memory, process count) are enforced by
+// nsjail's --time_limit and --rlimit flags. Output is capped at 64 KiB
+// per stream to prevent unbounded memory consumption.
+//
+// Infrastructure errors (nsjail itself failing) are distinguished from
+// user-code errors so they produce internal_error status rather than
+// misleading build_failed or runtime_error.
 package runner
 
 import (
@@ -144,13 +160,21 @@ func runBuild(jailDir string, req models.RunRequest, lc config.LanguageConfig) (
 	return res, nil
 }
 
-// isInfraError checks if the error is from infrastructure (pipe, start) vs user code.
+// isInfraError checks if the error is from infrastructure (pipe, start, nsjail) vs user code.
 func isInfraError(err error) bool {
 	if err == nil {
 		return false
 	}
 	msg := err.Error()
-	return strings.Contains(msg, "pipe:") || strings.Contains(msg, "start:")
+	if strings.Contains(msg, "pipe:") || strings.Contains(msg, "start:") {
+		return true
+	}
+	// nsjail exits with non-zero when it can't set up namespaces/mounts internally,
+	// but the command inside may also exit non-zero. Check for nsjail-specific patterns.
+	if strings.Contains(msg, "exit status 255") {
+		return true
+	}
+	return false
 }
 
 func execInJail(jailDir string, cmdArgs []string, wallTime, memKB, procs int) (string, string, error) {
@@ -167,6 +191,8 @@ func execInJail(jailDir string, cmdArgs []string, wallTime, memKB, procs int) (s
 		"-T", "/tmp",
 		"--bindmount", appDir + ":/app:rw",
 		"--cwd", "/app",
+		"--chroot", "/",
+		"--proc_path", "/proc",
 		"--time_limit", strconv.Itoa(wallTime),
 		"--rlimit_as", strconv.Itoa(memBytes),
 		"--rlimit_nproc", strconv.Itoa(procs),
@@ -246,6 +272,8 @@ func runSingleTest(tc models.TestCase, lc config.LanguageConfig, jailDir string,
 		"-T", "/tmp",
 		"--bindmount", appDir + ":/app:rw",
 		"--cwd", "/app",
+		"--chroot", "/",
+		"--proc_path", "/proc",
 		"--time_limit", strconv.Itoa(wallTime),
 		"--rlimit_as", strconv.Itoa(memBytes),
 		"--rlimit_nproc", strconv.Itoa(procs),
@@ -307,6 +335,18 @@ func runSingleTest(tc models.TestCase, lc config.LanguageConfig, jailDir string,
 
 	err = cmd.Wait()
 	duration := int(time.Since(start).Milliseconds())
+
+	// Check for nsjail infrastructure failures first (nsjail itself crashed,
+	// not the user code). Treat these as internal errors.
+	if err != nil && isInfraError(err) {
+		return models.TestResult{
+			Status:       "internal_error",
+			Stdout:       stdoutRaw,
+			Stderr:       stderrRaw,
+			DurationMs:   duration,
+			MemoryPeakKB: 0,
+		}
+	}
 
 	memPeak := readMemoryPeakKB(cmd.ProcessState)
 	status := computeTestStatus(ctx, err, stdoutRaw, tc.ExpectedStdout, cmd.ProcessState, memPeak, memKB, wallTime, duration)

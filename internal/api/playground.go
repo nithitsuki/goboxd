@@ -10,6 +10,8 @@ import (
 //go:embed playground/index.html playground/assets/*
 var playgroundFS embed.FS
 
+// HandlePlayground serves the embedded web playground for interactive testing.
+// It rewrites requests to serve files from the embedded playground/ directory.
 func HandlePlayground(w http.ResponseWriter, r *http.Request) {
 	filePath := strings.TrimPrefix(r.URL.Path, "/playground")
 	if filePath == "" || filePath == "/" {

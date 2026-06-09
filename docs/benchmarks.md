@@ -2,11 +2,11 @@
 
 ## Methodology
 
-- Tool: [hey](https://github.com/rakyll/hey) v0.1.5
-- Scenario: `POST /run` with trivial `print(42)` Python 3 payload, 1000 requests per level
-- Metrics: requests/sec, p50/p95/p99 latency
-- Environment: clean Docker run on bare metal (x86_64, 24 cores)
-- Server: goboxd running in Docker with `--privileged` for nsjail namespaces
+- **Tool**: [hey](https://github.com/rakyll/hey) v0.1.5
+- **Scenario**: `POST /run` with trivial `print(42)` Python 3 payload, 1000 requests per level
+- **Metrics**: requests/sec, p50/p95/p99 latency
+- **Environment**: Clean Docker run on bare metal (x86_64, 24 cores)
+- **Server**: goboxd running in Docker with `--privileged` for nsjail namespaces
 
 ## Baseline — without concurrency semaphore
 
@@ -21,7 +21,7 @@
 | 150 | 10982 | 8.00 | 35.30 | 42.70 |
 | 200 | 11023 | 10.20 | 45.40 | 59.60 |
 
-## With bounded concurrency semaphore (GOBOXD_MAX_JOBS=24)
+## With bounded concurrency semaphore (`GOBOXD_MAX_JOBS=24`)
 
 | Clients | Requests/s | p50 (ms) | p95 (ms) | p99 (ms) |
 |---|---|---|---|---|
@@ -36,10 +36,10 @@
 
 ## Observations
 
-- Both runs show similar peak throughput (~10,500-11,900 req/s) — the semaphore
-  doesnt significantly cap performance at 24 slots on this hardware.
+- Both runs show similar peak throughput (~10,500–11,900 req/s). The semaphore
+  doesn't significantly cap performance at 24 slots on this hardware.
 - Latency is marginally higher with the semaphore at high concurrency, as
   expected from queuing. Still well within acceptable range.
 - No errors or dropped requests in either run.
-- The semaphore prevents runaway nsjail process counts during bursts,
+- The semaphore prevents runaway nsjail process counts during burst load,
   trading a small latency increase for predictable resource usage.

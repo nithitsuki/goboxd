@@ -1,6 +1,10 @@
+// Package models defines the shared data types for the goboxd API.
+// These types are used by the HTTP handlers, the runner, and the test
+// fixtures. The JSON serialization tags match the public API specification.
 package models
 
-// Limits represents the resource constraints for build or run stages.
+// Limits represents resource constraints for build or run stages.
+// All fields are optional pointers; nil means "use language default".
 type Limits struct {
 	WallTimeS    *int `json:"wall_time_s,omitempty"`
 	MemoryKB     *int `json:"memory_kb,omitempty"`

@@ -1,8 +1,20 @@
+// Package api implements the HTTP handlers, routing, request validation,
+// and structured logging for the goboxd service.
+//
+// Routes are registered using Go 1.22's method-pattern mux syntax.
+// All responses are JSON. POST /run requests are validated and dispatched
+// to the runner package for sandboxed execution inside nsjail.
 package api
 
 import "net/http"
 
 // NewRouter constructs and wires up the API routes with structured logging.
+// Registered endpoints:
+//   GET  /healthz     — liveness check
+//   GET  /readyz      — readiness probe (checks nsjail + all languages)
+//   GET  /info        — service metadata and runtime stats
+//   POST /run         — execute untrusted code
+//   GET  /playground  — web UI (if embedded via embed.FS)
 func NewRouter() http.Handler {
 	mux := http.NewServeMux()
 

@@ -21,7 +21,7 @@ import (
 	"github.com/thesouldev/goboxd/internal/runner"
 )
 
-// Stats tracker for /info endpoint
+// Global stats counters for the /info endpoint.
 var (
 	jobStats struct {
 		InFlight       int64
