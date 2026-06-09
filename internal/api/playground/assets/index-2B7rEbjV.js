@@ -39,7 +39,10 @@ endmodule`,monaco:`verilog`},rust:{label:`Rust`,defaultCode:`fn main() {
 import "fmt"
 func main() {
   fmt.Println("hello from go")
-}`,monaco:`go`}},gt={py3:[{label:`hello world`,source:`print("hello world")`,stdin:``,expected:`hello world
+}`,monaco:`go`},haskell:{label:`Haskell`,defaultCode:`main = putStrLn "hello from haskell"`,monaco:`haskell`},ocaml:{label:`OCaml`,defaultCode:`print_string "hello from ocaml\\n"`,monaco:`ocaml`},r:{label:`R`,defaultCode:`cat("hello from r\\n")`,hasStdin:!0,monaco:`r`},d:{label:`D (GDC)`,defaultCode:`import std.stdio;
+void main() {
+  writeln("hello from d");
+}`,monaco:`cpp`},lua:{label:`Lua (LuaJIT)`,defaultCode:`print("hello from lua")`,monaco:`lua`},perl:{label:`Perl`,defaultCode:`print "hello from perl\\n"`,monaco:`perl`}},gt={py3:[{label:`hello world`,source:`print("hello world")`,stdin:``,expected:`hello world
 `},{label:`fibonacci`,source:`def fib(n):
   a, b = 0, 1
   for _ in range(n):
@@ -179,18 +182,53 @@ done`,stdin:``,expected:`line 1
 line 2
 line 3
 `},{label:`[bad] fork bomb`,source:`f() { f|f & }; f`}],js:[{label:`hello world`,source:`console.log("hello world");`,stdin:``,expected:`hello world
-`},{label:`[bad] infinite loop`,source:`while(true) {}`}],verilog:[{label:`hello world`,source:`module hello;
+`},{label:`fibonacci`,source:`function fib(n) {
+  if (n <= 1) return n;
+  return fib(n-1) + fib(n-2);
+}
+for (let i = 0; i < 10; i++) {
+  console.log(fib(i));
+}`},{label:`[bad] infinite loop`,source:`while(true) {}`},{label:`[bad] memory bomb`,source:`const arr = [];
+while (true) {
+  arr.push("x".repeat(1024*1024));
+}`}],verilog:[{label:`hello world`,source:`module hello;
 initial begin
   $display("hello world");
   $finish;
 end
 endmodule`,stdin:``,expected:`hello world
-`}],rust:[{label:`hello world`,source:`fn main() {
+`},{label:`counter`,source:`module counter;
+reg [3:0] count;
+initial begin
+  for (count = 0; count < 10; count = count + 1)
+    $display("count = %d", count);
+  $finish;
+end
+endmodule`}],rust:[{label:`hello world`,source:`fn main() {
   println!("hello world");
 }`,stdin:``,expected:`hello world
-`},{label:`[bad] panic`,source:`fn main() {
+`},{label:`fibonacci`,source:`fn fib(n: u64) -> u64 {
+  match n {
+    0 | 1 => n,
+    _ => fib(n-1) + fib(n-2),
+  }
+}
+fn main() {
+  for i in 0..10 {
+    println!("{}", fib(i));
+  }
+}`},{label:`fizzbuzz`,source:`fn main() {
+  for i in 1..=15 {
+    if i % 15 == 0 { println!("FizzBuzz"); }
+    else if i % 3 == 0 { println!("Fizz"); }
+    else if i % 5 == 0 { println!("Buzz"); }
+    else { println!("{}", i); }
+  }
+}`},{label:`[bad] panic`,source:`fn main() {
   panic!("crash");
-}`}],go:[{label:`hello world`,source:`package main
+}`},{label:`[bad] infinite loop`,source:`fn main() {
+  loop {}`},{label:`[bad] stack overflow`,source:`fn f() { f() }
+fn main() { f() }`}],go:[{label:`hello world`,source:`package main
 import "fmt"
 func main() {
   fmt.Println("hello world")
@@ -205,15 +243,86 @@ func main() {
   for i := 0; i < 10; i++ {
     fmt.Println(fib(i))
   }
+}`},{label:`fizzbuzz`,source:`package main
+import "fmt"
+func main() {
+  for i := 1; i <= 15; i++ {
+    if i%15 == 0 { fmt.Println("FizzBuzz") }
+    else if i%3 == 0 { fmt.Println("Fizz") }
+    else if i%5 == 0 { fmt.Println("Buzz") }
+    else { fmt.Println(i) }
+  }
 }`},{label:`[bad] nil deref`,source:`package main
 func main() {
   var p *int
   *p = 42
-}`}]},_t=window.location.origin;function vt(e,t){let n=[];for(let r of e[t]||[]){let e=r.label,t=1;for(;n.some(t=>t.name===e);)e=r.label+` (`+ ++t+`)`;n.push({name:e,preset:r})}return n}function yt(){let[e,t]=(0,_.useState)(`py3`),[n,r]=(0,_.useState)(ht.py3.defaultCode),[i,a]=(0,_.useState)(``),[o,s]=(0,_.useState)(``),[c,l]=(0,_.useState)(!1),[u,d]=(0,_.useState)(`play`),f=ht[e];function p(e){t(e),r(ht[e].defaultCode),a(``),s(``)}function m(e){r(e.source),e.stdin!==void 0&&a(e.stdin),s(``)}async function h(){l(!0),s(``);let t={language:e,source:n,tests:[{stdin:i||``,expected_stdout:``}]};try{let e=await(await fetch(_t+`/run`,{method:`POST`,headers:{"Content-Type":`application/json`},body:JSON.stringify(t)})).json();if(e.error)s(`error: `+e.error.message);else{let t=`status: `+e.status+`
-`;if(e.build&&(t+=`build: `+e.build.status+` (`+e.build.duration_ms+`ms)
-`),e.tests&&e.tests.length>0){let n=e.tests[0];t+=`test status: `+n.status+`
+}`},{label:`[bad] infinite loop`,source:`package main
+func main() {
+  for {}`}],haskell:[{label:`hello world`,source:`main = putStrLn "hello world"`,stdin:``,expected:`Hello from Haskell!
+`},{label:`fibonacci`,source:`fib 0 = 0
+fib 1 = 1
+fib n = fib (n-1) + fib (n-2)
+main = mapM_ (print . fib) [0..9]`},{label:`[bad] infinite loop`,source:`main = forever $ putStrLn "looping"`}],ocaml:[{label:`hello world`,source:`print_string "hello world\\n"`,stdin:``,expected:`hello world
+`},{label:`fibonacci`,source:`let rec fib n =
+  if n <= 1 then n
+  else fib (n-1) + fib (n-2)
+let () =
+  for i = 0 to 9 do
+    print_int (fib i);
+    print_newline ()
+  done`},{label:`[bad] division by zero`,source:`let () =
+  let x = 1 / 0 in
+  print_int x`}],r:[{label:`hello world`,source:`cat("hello world\\n")`,stdin:``,expected:`hello world
+`},{label:`fibonacci`,source:`fib <- function(n) {
+  if (n <= 1) return(n)
+  fib(n-1) + fib(n-2)
+}
+for (i in 0:9) {
+  cat(fib(i), "\\n")
+}`},{label:`mean`,source:`numbers <- c(1, 2, 3, 4, 5)
+cat("mean:", mean(numbers), "\\n")
+cat("sum:", sum(numbers), "\\n")`},{label:`[bad] crash`,source:`this will crash`}],d:[{label:`hello world`,source:`import std.stdio;
+void main() {
+  writeln("hello world");
+}`,stdin:``,expected:`hello world
+`},{label:`fibonacci`,source:`import std.stdio;
+int fib(int n) {
+  if (n <= 1) return n;
+  return fib(n-1) + fib(n-2);
+}
+void main() {
+  foreach (i; 0..10)
+    writeln(fib(i));
+}`},{label:`[bad] null deref`,source:`import std.stdio;
+void main() {
+  int* p = null;
+  *p = 42;
+}`}],lua:[{label:`hello world`,source:`print("hello world")`,stdin:``,expected:`hello world
+`},{label:`fibonacci`,source:`function fib(n)
+  if n <= 1 then return n end
+  return fib(n-1) + fib(n-2)
+end
+for i = 0, 9 do
+  print(fib(i))
+end`},{label:`[bad] infinite loop`,source:`while true do end`},{label:`[bad] crash`,source:`this will crash`}],perl:[{label:`hello world`,source:`print "hello world\\n"`,stdin:``,expected:`hello world
+`},{label:`fibonacci`,source:`sub fib {
+  my $n = shift;
+  return $n if $n <= 1;
+  fib($n-1) + fib($n-2);
+}
+foreach my $i (0..9) {
+  print fib($i) . "\\n";
+}`},{label:`[bad] crash`,source:`this will crash`}]},_t=window.location.origin;function vt(e,t){let n=[];for(let r of e[t]||[]){let e=r.label,t=1;for(;n.some(t=>t.name===e);)e=r.label+` (`+ ++t+`)`;n.push({name:e,preset:r})}return n}function yt(){let[e,t]=(0,_.useState)(`py3`),[n,r]=(0,_.useState)(ht.py3.defaultCode),[i,a]=(0,_.useState)(``),[o,s]=(0,_.useState)(``),[c,l]=(0,_.useState)(null),[u,d]=(0,_.useState)(!1),[f,p]=(0,_.useState)(!1),[m,h]=(0,_.useState)(`play`),g=ht[e];function v(e){t(e),r(ht[e].defaultCode),a(``),s(``)}function y(e){r(e.source),e.stdin!==void 0&&a(e.stdin),s(``)}async function b(){p(!0),s(``),l(null),d(!1);let t={language:e,source:n,tests:[{stdin:i||``,expected_stdout:``}]};try{let n=await(await fetch(_t+`/run`,{method:`POST`,headers:{"Content-Type":`application/json`},body:JSON.stringify(t)})).json();if(l(n),n.error)s(`error: `+n.error.message);else{let t=`status: `+n.status+`
+`;if(n.build&&(t+=`build: `+n.build.status+` (`+n.build.duration_ms+`ms)
+`),n.tests&&n.tests.length>0){let e=n.tests[0];t+=`test status: `+e.status+`
 `,t+=`---stdout---
-`+n.stdout,n.stderr&&(t+=`
----stderr---
-`+n.stderr),n.memory_peak_kb>0&&(t+=`
-memory: `+n.memory_peak_kb+` KB`)}s(t)}}catch(e){s(`request failed: `+e.message)}l(!1)}let g=vt(gt,e);return u===`bench`?_.createElement(`div`,{style:{fontFamily:`monospace`,padding:`10px`,maxWidth:`1000px`,margin:`0 auto`}},_.createElement(`h1`,null,`benchmarks`),_.createElement(`button`,{onClick:()=>d(`play`),style:{marginBottom:`10px`,cursor:`pointer`}},`back to playground`),_.createElement(`iframe`,{src:_t+`/playground/`,style:{width:`100%`,height:`600px`,border:`1px solid #ccc`}})):_.createElement(`div`,{style:{fontFamily:`monospace`,padding:`10px`,maxWidth:`1400px`,margin:`0 auto`}},_.createElement(`div`,{style:{display:`flex`,gap:`20px`,alignItems:`center`,marginBottom:`10px`}},_.createElement(`h1`,{style:{margin:0}},`goboxd`),_.createElement(`a`,{href:`#`,onClick:e=>{e.preventDefault(),d(`bench`)},style:{fontSize:`14px`}},`benchmarks`),_.createElement(`a`,{href:_t+`/info`,target:`_blank`,style:{fontSize:`14px`}},`/info`),_.createElement(`a`,{href:_t+`/readyz`,target:`_blank`,style:{fontSize:`14px`}},`/readyz`)),_.createElement(`div`,{style:{marginBottom:`10px`,display:`flex`,gap:`10px`,alignItems:`center`,flexWrap:`wrap`}},_.createElement(`label`,null,`language: `),_.createElement(`select`,{value:e,onChange:e=>p(e.target.value),style:{fontSize:`14px`,padding:`4px`}},Object.entries(ht).map(([e,t])=>_.createElement(`option`,{key:e,value:e},t.label))),_.createElement(`label`,null,`preset: `),_.createElement(`select`,{onChange:e=>{let t=g.find(t=>t.name===e.target.value);t&&m(t.preset)},defaultValue:``,style:{fontSize:`14px`,padding:`4px`,minWidth:`250px`}},_.createElement(`option`,{value:``,disabled:!0},`select preset...`),g.map(({name:e})=>_.createElement(`option`,{key:e,value:e},e)))),_.createElement(`div`,{style:{display:`flex`,gap:`10px`,height:`550px`}},_.createElement(`div`,{style:{flex:2,display:`flex`,flexDirection:`column`}},_.createElement(mt,{height:`100%`,language:f.monaco,value:n,onChange:e=>r(e||``),theme:`vs-dark`,options:{minimap:{enabled:!1},fontSize:14,lineNumbers:`on`,scrollBeyondLastLine:!1}})),_.createElement(`div`,{style:{flex:1,display:`flex`,flexDirection:`column`,gap:`10px`}},f.hasStdin&&_.createElement(`div`,{style:{display:`flex`,flexDirection:`column`,gap:`5px`}},_.createElement(`label`,null,`stdin:`),_.createElement(`textarea`,{value:i,onChange:e=>a(e.target.value),rows:3,style:{fontFamily:`monospace`,fontSize:`13px`}})),_.createElement(`button`,{onClick:h,disabled:c,style:{padding:`10px`,fontSize:`16px`,cursor:c?`wait`:`pointer`,background:c?`#ccc`:`#4CAF50`,color:`white`,border:`none`,borderRadius:`4px`}},c?`running...`:`run`),_.createElement(`div`,{style:{flex:1,background:`#1e1e1e`,color:`#d4d4d4`,padding:`10px`,fontFamily:`monospace`,fontSize:`13px`,whiteSpace:`pre-wrap`,overflow:`auto`,borderRadius:`4px`,minHeight:`200px`}},o||`output will appear here`))))}var bt=o((e=>{var t=Symbol.for(`react.transitional.element`);function n(e,n,r){var i=null;if(r!==void 0&&(i=``+r),n.key!==void 0&&(i=``+n.key),`key`in n)for(var a in r={},n)a!==`key`&&(r[a]=n[a]);else r=n;return n=r.ref,{$$typeof:t,type:e,key:i,ref:n===void 0?null:n,props:r}}e.jsx=n})),xt=o(((e,t)=>{t.exports=bt()}))();v.createRoot(document.getElementById(`root`)).render((0,xt.jsx)(_.StrictMode,{children:(0,xt.jsx)(yt,{})}));
+`+(e.stdout||`(empty)`)+`
+`,t+=`---stderr---
+`+(e.stderr||`(empty)`)+`
+`,e.memory_peak_kb>0&&(t+=`memory: `+e.memory_peak_kb+` KB
+`),t+=`duration: `+e.duration_ms+`ms
+`,e.status===`runtime_error`&&!e.stderr&&(t+=`note: crash signal may not appear in stderr (kernel kills silently)
+`,t+=`try running locally or check exit code
+`)}n.build&&n.build.status===`ok`&&(e===`c`||e===`cpp`||e===`rust`||e===`go`)&&(t+=`
+(hint: compiled artifacts exist in the container but download is not yet implemented)
+`),s(t)}}catch(e){s(`request failed: `+e.message)}p(!1)}let x=vt(gt,e);return m===`bench`?_.createElement(`div`,{style:{fontFamily:`monospace`,padding:`10px`,maxWidth:`1000px`,margin:`0 auto`}},_.createElement(`h1`,null,`benchmarks`),_.createElement(`button`,{onClick:()=>h(`play`),style:{marginBottom:`10px`,cursor:`pointer`}},`back to playground`),_.createElement(`iframe`,{src:_t+`/playground/`,style:{width:`100%`,height:`600px`,border:`1px solid #ccc`}})):_.createElement(`div`,{style:{fontFamily:`monospace`,padding:`10px`,maxWidth:`1400px`,margin:`0 auto`}},_.createElement(`div`,{style:{display:`flex`,gap:`20px`,alignItems:`center`,marginBottom:`10px`}},_.createElement(`h1`,{style:{margin:0}},`goboxd`),_.createElement(`a`,{href:`#`,onClick:e=>{e.preventDefault(),h(`bench`)},style:{fontSize:`14px`}},`benchmarks`),_.createElement(`a`,{href:_t+`/info`,target:`_blank`,style:{fontSize:`14px`}},`/info`),_.createElement(`a`,{href:_t+`/readyz`,target:`_blank`,style:{fontSize:`14px`}},`/readyz`)),_.createElement(`div`,{style:{marginBottom:`10px`,display:`flex`,gap:`10px`,alignItems:`center`,flexWrap:`wrap`}},_.createElement(`label`,null,`language: `),_.createElement(`select`,{value:e,onChange:e=>v(e.target.value),style:{fontSize:`14px`,padding:`4px`}},Object.entries(ht).map(([e,t])=>_.createElement(`option`,{key:e,value:e},t.label))),_.createElement(`label`,null,`preset: `),_.createElement(`select`,{onChange:e=>{let t=x.find(t=>t.name===e.target.value);t&&y(t.preset)},defaultValue:``,style:{fontSize:`14px`,padding:`4px`,minWidth:`250px`}},_.createElement(`option`,{value:``,disabled:!0},`select preset...`),x.map(({name:e})=>_.createElement(`option`,{key:e,value:e},e)))),_.createElement(`div`,{style:{display:`flex`,gap:`10px`,height:`550px`}},_.createElement(`div`,{style:{flex:2,display:`flex`,flexDirection:`column`}},_.createElement(mt,{height:`100%`,language:g.monaco,value:n,onChange:e=>r(e||``),theme:`vs-dark`,options:{minimap:{enabled:!1},fontSize:14,lineNumbers:`on`,scrollBeyondLastLine:!1}})),_.createElement(`div`,{style:{flex:1,display:`flex`,flexDirection:`column`,gap:`10px`}},g.hasStdin&&_.createElement(`div`,{style:{display:`flex`,flexDirection:`column`,gap:`5px`}},_.createElement(`label`,null,`stdin:`),_.createElement(`textarea`,{value:i,onChange:e=>a(e.target.value),rows:3,style:{fontFamily:`monospace`,fontSize:`13px`}})),_.createElement(`button`,{onClick:b,disabled:f,style:{padding:`10px`,fontSize:`16px`,cursor:f?`wait`:`pointer`,background:f?`#ccc`:`#4CAF50`,color:`white`,border:`none`,borderRadius:`4px`}},f?`running...`:`run`),o&&c&&_.createElement(`button`,{onClick:()=>d(!u),style:{fontSize:`12px`,cursor:`pointer`,padding:`2px 8px`,background:`#333`,color:`#ccc`,border:`1px solid #555`,borderRadius:`3px`}},u?`hide raw`:`view raw`),_.createElement(`div`,{style:{flex:1,background:`#1e1e1e`,color:`#d4d4d4`,padding:`10px`,fontFamily:`monospace`,fontSize:`13px`,whiteSpace:`pre-wrap`,overflow:`auto`,borderRadius:`4px`,minHeight:`200px`}},u&&c?JSON.stringify(c,null,2):o||`output will appear here`))))}var bt=o((e=>{var t=Symbol.for(`react.transitional.element`);function n(e,n,r){var i=null;if(r!==void 0&&(i=``+r),n.key!==void 0&&(i=``+n.key),`key`in n)for(var a in r={},n)a!==`key`&&(r[a]=n[a]);else r=n;return n=r.ref,{$$typeof:t,type:e,key:i,ref:n===void 0?null:n,props:r}}e.jsx=n})),xt=o(((e,t)=>{t.exports=bt()}))();v.createRoot(document.getElementById(`root`)).render((0,xt.jsx)(_.StrictMode,{children:(0,xt.jsx)(yt,{})}));

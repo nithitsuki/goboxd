@@ -11,6 +11,12 @@ const LANGUAGES: Record<string, { label: string; defaultCode: string; hasStdin?:
   verilog: { label: 'Verilog', defaultCode: 'module hello;\ninitial begin\n  $display("hello from verilog");\n  $finish;\nend\nendmodule', monaco: 'verilog' },
   rust: { label: 'Rust', defaultCode: 'fn main() {\n  println!("hello from rust");\n}', monaco: 'rust' },
   go: { label: 'Go', defaultCode: 'package main\nimport "fmt"\nfunc main() {\n  fmt.Println("hello from go")\n}', monaco: 'go' },
+  haskell: { label: 'Haskell', defaultCode: 'main = putStrLn "hello from haskell"', monaco: 'haskell' },
+  ocaml: { label: 'OCaml', defaultCode: 'print_string "hello from ocaml\\n"', monaco: 'ocaml' },
+  r: { label: 'R', defaultCode: 'cat("hello from r\\n")', hasStdin: true, monaco: 'r' },
+  d: { label: 'D (GDC)', defaultCode: 'import std.stdio;\nvoid main() {\n  writeln("hello from d");\n}', monaco: 'cpp' },
+  lua: { label: 'Lua (LuaJIT)', defaultCode: 'print("hello from lua")', monaco: 'lua' },
+  perl: { label: 'Perl', defaultCode: 'print "hello from perl\\n"', monaco: 'perl' },
 };
 
 interface Preset { source: string; stdin?: string; expected?: string; label: string }
@@ -58,19 +64,60 @@ const PRESETS: PresetMap = {
   ],
   js: [
     { label: 'hello world', source: 'console.log("hello world");', stdin: '', expected: 'hello world\n' },
+    { label: 'fibonacci', source: 'function fib(n) {\n  if (n <= 1) return n;\n  return fib(n-1) + fib(n-2);\n}\nfor (let i = 0; i < 10; i++) {\n  console.log(fib(i));\n}' },
     { label: '[bad] infinite loop', source: 'while(true) {}' },
+    { label: '[bad] memory bomb', source: 'const arr = [];\nwhile (true) {\n  arr.push("x".repeat(1024*1024));\n}' },
   ],
   verilog: [
     { label: 'hello world', source: 'module hello;\ninitial begin\n  $display("hello world");\n  $finish;\nend\nendmodule', stdin: '', expected: 'hello world\n' },
+    { label: 'counter', source: 'module counter;\nreg [3:0] count;\ninitial begin\n  for (count = 0; count < 10; count = count + 1)\n    $display("count = %d", count);\n  $finish;\nend\nendmodule' },
   ],
   rust: [
     { label: 'hello world', source: 'fn main() {\n  println!("hello world");\n}', stdin: '', expected: 'hello world\n' },
+    { label: 'fibonacci', source: 'fn fib(n: u64) -> u64 {\n  match n {\n    0 | 1 => n,\n    _ => fib(n-1) + fib(n-2),\n  }\n}\nfn main() {\n  for i in 0..10 {\n    println!("{}", fib(i));\n  }\n}' },
+    { label: 'fizzbuzz', source: 'fn main() {\n  for i in 1..=15 {\n    if i % 15 == 0 { println!("FizzBuzz"); }\n    else if i % 3 == 0 { println!("Fizz"); }\n    else if i % 5 == 0 { println!("Buzz"); }\n    else { println!("{}", i); }\n  }\n}' },
     { label: '[bad] panic', source: 'fn main() {\n  panic!("crash");\n}' },
+    { label: '[bad] infinite loop', source: 'fn main() {\n  loop {}' },
+    { label: '[bad] stack overflow', source: 'fn f() { f() }\nfn main() { f() }' },
   ],
   go: [
     { label: 'hello world', source: 'package main\nimport "fmt"\nfunc main() {\n  fmt.Println("hello world")\n}', stdin: '', expected: 'hello world\n' },
     { label: 'fibonacci', source: 'package main\nimport "fmt"\nfunc fib(n int) int {\n  if n <= 1 { return n }\n  return fib(n-1) + fib(n-2)\n}\nfunc main() {\n  for i := 0; i < 10; i++ {\n    fmt.Println(fib(i))\n  }\n}' },
+    { label: 'fizzbuzz', source: 'package main\nimport "fmt"\nfunc main() {\n  for i := 1; i <= 15; i++ {\n    if i%15 == 0 { fmt.Println("FizzBuzz") }\n    else if i%3 == 0 { fmt.Println("Fizz") }\n    else if i%5 == 0 { fmt.Println("Buzz") }\n    else { fmt.Println(i) }\n  }\n}' },
     { label: '[bad] nil deref', source: 'package main\nfunc main() {\n  var p *int\n  *p = 42\n}' },
+    { label: '[bad] infinite loop', source: 'package main\nfunc main() {\n  for {}' },
+  ],
+  haskell: [
+    { label: 'hello world', source: 'main = putStrLn "hello world"', stdin: '', expected: 'Hello from Haskell!\n' },
+    { label: 'fibonacci', source: 'fib 0 = 0\nfib 1 = 1\nfib n = fib (n-1) + fib (n-2)\nmain = mapM_ (print . fib) [0..9]' },
+    { label: '[bad] infinite loop', source: 'main = forever $ putStrLn "looping"' },
+  ],
+  ocaml: [
+    { label: 'hello world', source: 'print_string "hello world\\n"', stdin: '', expected: 'hello world\n' },
+    { label: 'fibonacci', source: 'let rec fib n =\n  if n <= 1 then n\n  else fib (n-1) + fib (n-2)\nlet () =\n  for i = 0 to 9 do\n    print_int (fib i);\n    print_newline ()\n  done' },
+    { label: '[bad] division by zero', source: 'let () =\n  let x = 1 / 0 in\n  print_int x' },
+  ],
+  r: [
+    { label: 'hello world', source: 'cat("hello world\\n")', stdin: '', expected: 'hello world\n' },
+    { label: 'fibonacci', source: 'fib <- function(n) {\n  if (n <= 1) return(n)\n  fib(n-1) + fib(n-2)\n}\nfor (i in 0:9) {\n  cat(fib(i), "\\n")\n}' },
+    { label: 'mean', source: 'numbers <- c(1, 2, 3, 4, 5)\ncat("mean:", mean(numbers), "\\n")\ncat("sum:", sum(numbers), "\\n")' },
+    { label: '[bad] crash', source: 'this will crash' },
+  ],
+  d: [
+    { label: 'hello world', source: 'import std.stdio;\nvoid main() {\n  writeln("hello world");\n}', stdin: '', expected: 'hello world\n' },
+    { label: 'fibonacci', source: 'import std.stdio;\nint fib(int n) {\n  if (n <= 1) return n;\n  return fib(n-1) + fib(n-2);\n}\nvoid main() {\n  foreach (i; 0..10)\n    writeln(fib(i));\n}' },
+    { label: '[bad] null deref', source: 'import std.stdio;\nvoid main() {\n  int* p = null;\n  *p = 42;\n}' },
+  ],
+  lua: [
+    { label: 'hello world', source: 'print("hello world")', stdin: '', expected: 'hello world\n' },
+    { label: 'fibonacci', source: 'function fib(n)\n  if n <= 1 then return n end\n  return fib(n-1) + fib(n-2)\nend\nfor i = 0, 9 do\n  print(fib(i))\nend' },
+    { label: '[bad] infinite loop', source: 'while true do end' },
+    { label: '[bad] crash', source: 'this will crash' },
+  ],
+  perl: [
+    { label: 'hello world', source: 'print "hello world\\n"', stdin: '', expected: 'hello world\n' },
+    { label: 'fibonacci', source: 'sub fib {\n  my $n = shift;\n  return $n if $n <= 1;\n  fib($n-1) + fib($n-2);\n}\nforeach my $i (0..9) {\n  print fib($i) . "\\n";\n}' },
+    { label: '[bad] crash', source: 'this will crash' },
   ],
 };
 
