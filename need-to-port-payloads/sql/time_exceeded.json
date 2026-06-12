@@ -1,0 +1,15 @@
+{
+  "language": "sql",
+  "source": "WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM c)\nSELECT x FROM c;",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": "42\n"
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 1
+    }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "language": "erlang",
+  "source": "main(_) ->\n    Line = io:get_line(\"\"),\n    N = list_to_integer(string:trim(Line)),\n    io:format(\"~p~n\", [N * 2]).",
+  "tests": [
+    {
+      "stdin": "21\n",
+      "expected_stdout": "42\n"
+    }
+  ]
+}

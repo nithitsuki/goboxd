@@ -1,0 +1,12 @@
+{
+  "language": "ada",
+  "source": "procedure Main is\nbegin\n  null\nend Main;",
+  "source_filename": "main.adb",
+  "artifact_filename": "main",
+  "tests": [
+    {
+      "stdin": "21\n",
+      "expected_stdout": "42\n"
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "language": "swift",
+  "source": "let n = Int(readLine()!.trimmingCharacters(in: .whitespaces))!\nprint(n * 2)",
+  "tests": [
+    {
+      "stdin": "21\n",
+      "expected_stdout": "43\n"
+    }
+  ]
+}

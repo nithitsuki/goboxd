@@ -1,0 +1,10 @@
+{
+  "language": "matlab",
+  "source": "n = str2num(fgetl(stdin));\nprintf(\"%d\\n\", n * 2);",
+  "tests": [
+    {
+      "stdin": "21\n",
+      "expected_stdout": "42\n"
+    }
+  ]
+}

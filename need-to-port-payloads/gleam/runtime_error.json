@@ -1,0 +1,10 @@
+{
+  "language": "gleam",
+  "source": "import gleam/io\npub fn main() {\n  panic as \"boom\"\n}",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": "42\n"
+    }
+  ]
+}

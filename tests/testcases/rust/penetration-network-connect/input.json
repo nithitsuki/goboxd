@@ -1,0 +1,20 @@
+{
+  "language": "rust",
+  "source": "use std::net::TcpStream;\nuse std::time::Duration;\nfn main() {\n  match TcpStream::connect_timeout(&\"93.184.216.34:80\".parse().unwrap(), Duration::from_secs(3)) {\n    Ok(_) => println!(\"connected!\"),\n    Err(e) => println!(\"error: {}\", e),\n  }\n}",
+  "build": {
+    "limits": {
+      "wall_time_s": 15
+    }
+  },
+  "run": {
+    "limits": {
+      "wall_time_s": 5
+    }
+  },
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "language": "prolog",
+  "source": ":- initialization(main).\nmain :-\n    read_line_to_string(user_input, S),\n    number_string(N, S),\n    M is N * 2,\n    format(\"~w~n\", [M]),\n    halt.",
+  "tests": [
+    {
+      "stdin": "21\n",
+      "expected_stdout": "43\n"
+    }
+  ]
+}

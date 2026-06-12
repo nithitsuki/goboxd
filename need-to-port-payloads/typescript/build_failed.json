@@ -1,0 +1,10 @@
+{
+  "language": "typescript",
+  "source": "const n number = 5;",
+  "tests": [
+    {
+      "stdin": "21\n",
+      "expected_stdout": "42\n"
+    }
+  ]
+}

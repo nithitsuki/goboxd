@@ -5,6 +5,6 @@ export default defineConfig({
   plugins: [react()],
   base: '/playground/',
   build: {
-    outDir: 'dist',
+    outDir: '../internal/api/playground-dist',
   },
 });

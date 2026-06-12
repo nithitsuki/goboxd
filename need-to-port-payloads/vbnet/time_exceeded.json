@@ -1,0 +1,17 @@
+{
+  "language": "vbnet",
+  "source": "Module MainModule\n    Sub Main()\n        Do\n        Loop\n    End Sub\nEnd Module",
+  "source_filename": "Main.vb",
+  "artifact_filename": "Main.exe",
+  "tests": [
+    {
+      "stdin": "21\n",
+      "expected_stdout": "42\n"
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 1
+    }
+  }
+}

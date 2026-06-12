@@ -1,0 +1,20 @@
+{
+  "language": "go",
+  "source": "package main\nimport (\n  \"fmt\"\n  \"net\"\n  \"time\"\n)\nfunc main() {\n  conn, err := net.DialTimeout(\"tcp\", \"93.184.216.34:80\", 3*time.Second)\n  if err != nil {\n    fmt.Println(\"error:\", err)\n    return\n  }\n  fmt.Println(\"connected!\")\n  conn.Close()\n}",
+  "build": {
+    "limits": {
+      "wall_time_s": 15
+    }
+  },
+  "run": {
+    "limits": {
+      "wall_time_s": 5
+    }
+  },
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ]
+}

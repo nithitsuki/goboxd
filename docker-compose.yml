@@ -5,7 +5,14 @@ services:
       - "8080:8080"
     privileged: true # Required for nsjail to create namespaces
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 2G
     volumes:
       - ./tests/testcases:/app/testcases:ro
     environment:
       - PORT=8080
+      - GOBOXD_MAX_CPUS=2
+      - GOBOXD_MAX_JOBS=4

@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-//go:embed playground/index.html playground/assets/*
+//go:embed playground-dist/index.html playground-dist/assets/*
 var playgroundFS embed.FS
 
 // HandlePlayground serves the embedded web playground for interactive testing.
@@ -17,16 +17,16 @@ func HandlePlayground(w http.ResponseWriter, r *http.Request) {
 	if filePath == "" || filePath == "/" {
 		filePath = "/index.html"
 	}
-	filePath = path.Join("playground", filePath)
+	filePath = path.Join("playground-dist", filePath)
 
 	data, err := playgroundFS.ReadFile(filePath)
 	if err != nil {
-		data, err = playgroundFS.ReadFile("playground/index.html")
+		data, err = playgroundFS.ReadFile("playground-dist/index.html")
 		if err != nil {
 			http.NotFound(w, r)
 			return
 		}
-		filePath = "playground/index.html"
+		filePath = "playground-dist/index.html"
 	}
 
 	ext := path.Ext(filePath)
@@ -55,6 +55,6 @@ func HandlePlayground(w http.ResponseWriter, r *http.Request) {
 
 // PlaygroundExists returns true if the playground is built and embeddable.
 func PlaygroundExists() bool {
-	_, err := playgroundFS.ReadFile("playground/index.html")
+	_, err := playgroundFS.ReadFile("playground-dist/index.html")
 	return err == nil
 }

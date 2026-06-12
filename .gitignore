@@ -38,3 +38,4 @@ profile.cov
 pyjail-reference
 silverex
 sudo
+internal/api/playground-dist/

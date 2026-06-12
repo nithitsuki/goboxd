@@ -1,0 +1,152 @@
+SKIP_PENETRATION=1 API_URL=http://localhost:8080 go test -v -count=1 ./tests/integration/...
+=== RUN   TestE2E_Python3
+=== RUN   TestE2E_Python3/positive-basic
+=== RUN   TestE2E_Python3/positive-advanced
+=== RUN   TestE2E_Python3/positive-io
+=== RUN   TestE2E_Python3/memorylimit-high
+--- PASS: TestE2E_Python3 (0.12s)
+    --- PASS: TestE2E_Python3/positive-basic (0.06s)
+    --- PASS: TestE2E_Python3/positive-advanced (0.01s)
+    --- PASS: TestE2E_Python3/positive-io (0.02s)
+    --- PASS: TestE2E_Python3/memorylimit-high (0.02s)
+=== RUN   TestFixtures
+=== RUN   TestFixtures/positive-basic
+=== RUN   TestFixtures/positive-io
+=== RUN   TestFixtures/runtime-error
+=== RUN   TestFixtures/build-failure
+=== RUN   TestFixtures/extraargs
+=== RUN   TestFixtures/memorylimit-high
+=== RUN   TestFixtures/positive-basic#01
+=== RUN   TestFixtures/positive-io#01
+=== RUN   TestFixtures/runtime-error#01
+=== RUN   TestFixtures/time-exceeded
+=== RUN   TestFixtures/build-failure#01
+=== RUN   TestFixtures/extraargs#01
+=== RUN   TestFixtures/leetcode-number-to-words
+=== RUN   TestFixtures/memorylimit-high#01
+=== RUN   TestFixtures/positive-advanced
+=== RUN   TestFixtures/positive-basic#02
+=== RUN   TestFixtures/positive-io#02
+=== RUN   TestFixtures/runtime-error#02
+=== RUN   TestFixtures/time-exceeded#01
+=== RUN   TestFixtures/timelimit-high
+=== RUN   TestFixtures/build-failure#02
+=== RUN   TestFixtures/positive-basic#03
+=== RUN   TestFixtures/build-failure#03
+=== RUN   TestFixtures/positive-basic#04
+    fixture_test.go:67: top-level status: want "accepted", got "runtime_error"
+    fixture_test.go:98: tests[0].status: want "accepted", got "runtime_error"
+    fixture_test.go:101: tests[0].stdout: want "Hello from Erlang!\n", got ""
+=== RUN   TestFixtures/runtime-error#03
+=== RUN   TestFixtures/build-failure#04
+=== RUN   TestFixtures/leetcode-number-to-words#01
+=== RUN   TestFixtures/positive-basic#05
+=== RUN   TestFixtures/runtime-error#04
+=== RUN   TestFixtures/time-exceeded#02
+=== RUN   TestFixtures/build-failure#05
+=== RUN   TestFixtures/positive-basic#06
+=== RUN   TestFixtures/build-failure#06
+=== RUN   TestFixtures/leetcode-number-to-words#02
+=== RUN   TestFixtures/positive-basic#07
+=== RUN   TestFixtures/positive-io#03
+=== RUN   TestFixtures/runtime-error#05
+=== RUN   TestFixtures/time-exceeded#03
+=== RUN   TestFixtures/positive-basic#08
+=== RUN   TestFixtures/positive-io#04
+=== RUN   TestFixtures/runtime-error#06
+=== RUN   TestFixtures/positive-basic#09
+=== RUN   TestFixtures/runtime-error#07
+=== RUN   TestFixtures/positive-basic#10
+=== RUN   TestFixtures/runtime-error#08
+=== RUN   TestFixtures/build-failure#07
+=== RUN   TestFixtures/positive-basic#11
+=== RUN   TestFixtures/positive-basic#12
+=== RUN   TestFixtures/runtime-error#09
+=== RUN   TestFixtures/leetcode-number-to-words#03
+=== RUN   TestFixtures/memory-exceeded
+=== RUN   TestFixtures/memorylimit-high#02
+=== RUN   TestFixtures/positive-advanced#01
+=== RUN   TestFixtures/positive-basic#13
+=== RUN   TestFixtures/positive-io#05
+=== RUN   TestFixtures/runtime-error#10
+=== RUN   TestFixtures/time-exceeded#04
+=== RUN   TestFixtures/positive-basic#14
+=== RUN   TestFixtures/runtime-error#11
+=== RUN   TestFixtures/build-failure#08
+=== RUN   TestFixtures/leetcode-number-to-words#04
+=== RUN   TestFixtures/positive-basic#15
+=== RUN   TestFixtures/runtime-error#12
+=== RUN   TestFixtures/time-exceeded#05
+=== RUN   TestFixtures/build-failure#09
+=== RUN   TestFixtures/positive-basic#16
+--- FAIL: TestFixtures (25.04s)
+    --- PASS: TestFixtures/positive-basic (0.01s)
+    --- PASS: TestFixtures/positive-io (0.01s)
+    --- PASS: TestFixtures/runtime-error (0.01s)
+    --- PASS: TestFixtures/build-failure (0.07s)
+    --- PASS: TestFixtures/extraargs (0.06s)
+    --- PASS: TestFixtures/memorylimit-high (0.04s)
+    --- PASS: TestFixtures/positive-basic#01 (0.03s)
+    --- PASS: TestFixtures/positive-io#01 (0.05s)
+    --- PASS: TestFixtures/runtime-error#01 (0.06s)
+    --- PASS: TestFixtures/time-exceeded (2.06s)
+    --- PASS: TestFixtures/build-failure#01 (0.06s)
+    --- PASS: TestFixtures/extraargs#01 (0.22s)
+    --- PASS: TestFixtures/leetcode-number-to-words (0.21s)
+    --- PASS: TestFixtures/memorylimit-high#01 (0.16s)
+    --- PASS: TestFixtures/positive-advanced (0.19s)
+    --- PASS: TestFixtures/positive-basic#02 (0.17s)
+    --- PASS: TestFixtures/positive-io#02 (0.16s)
+    --- PASS: TestFixtures/runtime-error#02 (0.17s)
+    --- PASS: TestFixtures/time-exceeded#01 (2.04s)
+    --- PASS: TestFixtures/timelimit-high (0.20s)
+    --- PASS: TestFixtures/build-failure#02 (0.05s)
+    --- PASS: TestFixtures/positive-basic#03 (0.18s)
+    --- PASS: TestFixtures/build-failure#03 (0.18s)
+    --- FAIL: TestFixtures/positive-basic#04 (0.16s)
+    --- PASS: TestFixtures/runtime-error#03 (0.15s)
+    --- PASS: TestFixtures/build-failure#04 (0.01s)
+    --- PASS: TestFixtures/leetcode-number-to-words#01 (0.27s)
+    --- PASS: TestFixtures/positive-basic#05 (0.10s)
+    --- PASS: TestFixtures/runtime-error#04 (0.08s)
+    --- PASS: TestFixtures/time-exceeded#02 (2.07s)
+    --- PASS: TestFixtures/build-failure#05 (0.30s)
+    --- PASS: TestFixtures/positive-basic#06 (0.42s)
+    --- PASS: TestFixtures/build-failure#06 (0.23s)
+    --- PASS: TestFixtures/leetcode-number-to-words#02 (0.48s)
+    --- PASS: TestFixtures/positive-basic#07 (0.28s)
+    --- PASS: TestFixtures/positive-io#03 (0.32s)
+    --- PASS: TestFixtures/runtime-error#05 (0.26s)
+    --- PASS: TestFixtures/time-exceeded#03 (2.27s)
+    --- PASS: TestFixtures/positive-basic#08 (0.13s)
+    --- PASS: TestFixtures/positive-io#04 (0.08s)
+    --- PASS: TestFixtures/runtime-error#06 (0.07s)
+    --- PASS: TestFixtures/positive-basic#09 (0.07s)
+    --- PASS: TestFixtures/runtime-error#07 (0.02s)
+    --- PASS: TestFixtures/positive-basic#10 (0.01s)
+    --- PASS: TestFixtures/runtime-error#08 (0.01s)
+    --- PASS: TestFixtures/build-failure#07 (0.02s)
+    --- PASS: TestFixtures/positive-basic#11 (0.07s)
+    --- PASS: TestFixtures/positive-basic#12 (0.01s)
+    --- PASS: TestFixtures/runtime-error#09 (0.00s)
+    --- PASS: TestFixtures/leetcode-number-to-words#03 (0.03s)
+    --- PASS: TestFixtures/memory-exceeded (4.71s)
+    --- PASS: TestFixtures/memorylimit-high#02 (0.39s)
+    --- PASS: TestFixtures/positive-advanced#01 (0.02s)
+    --- PASS: TestFixtures/positive-basic#13 (0.01s)
+    --- PASS: TestFixtures/positive-io#05 (0.01s)
+    --- PASS: TestFixtures/runtime-error#10 (0.01s)
+    --- PASS: TestFixtures/time-exceeded#04 (2.01s)
+    --- PASS: TestFixtures/positive-basic#14 (0.17s)
+    --- PASS: TestFixtures/runtime-error#11 (0.09s)
+    --- PASS: TestFixtures/build-failure#08 (0.16s)
+    --- PASS: TestFixtures/leetcode-number-to-words#04 (0.58s)
+    --- PASS: TestFixtures/positive-basic#15 (0.17s)
+    --- PASS: TestFixtures/runtime-error#12 (0.19s)
+    --- PASS: TestFixtures/time-exceeded#05 (2.15s)
+    --- PASS: TestFixtures/build-failure#09 (0.01s)
+    --- PASS: TestFixtures/positive-basic#16 (0.02s)
+FAIL
+FAIL	github.com/thesouldev/goboxd/tests/integration	25.881s
+FAIL
+make: *** [integration-safe] Error 1

@@ -1,0 +1,10 @@
+{
+  "language": "cpp",
+  "source": "#include <iostream>\nint main() { long n; std::cin >> n; int* p = nullptr; return *p; }",
+  "tests": [
+    {
+      "stdin": "21\n",
+      "expected_stdout": "42\n"
+    }
+  ]
+}

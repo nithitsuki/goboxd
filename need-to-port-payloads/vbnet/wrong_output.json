@@ -1,0 +1,12 @@
+{
+  "language": "vbnet",
+  "source": "Imports System\nModule MainModule\n    Sub Main()\n        Dim n As Integer = Integer.Parse(Console.In.ReadToEnd().Trim())\n        Console.WriteLine(n * 2)\n    End Sub\nEnd Module",
+  "source_filename": "Main.vb",
+  "artifact_filename": "Main.exe",
+  "tests": [
+    {
+      "stdin": "21\n",
+      "expected_stdout": "43\n"
+    }
+  ]
+}

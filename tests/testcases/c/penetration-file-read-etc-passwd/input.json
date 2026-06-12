@@ -1,0 +1,22 @@
+{
+  "language": "c",
+  "source": "#include <stdio.h>\nint main() {\n  FILE *f = fopen(\"/etc/passwd\", \"r\");\n  if (!f) { printf(\"error\\n\"); return 1; }\n  char buf[4096] = {0};\n  fread(buf, 1, sizeof(buf)-1, f);\n  printf(\"%s\", buf);\n  fclose(f);\n  return 0;\n}",
+  "build": {
+    "limits": {
+      "wall_time_s": 5
+    }
+  },
+  "run": {
+    "limits": {
+      "wall_time_s": 5,
+      "memory_kb": 102400,
+      "max_processes": 100
+    }
+  },
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ]
+}

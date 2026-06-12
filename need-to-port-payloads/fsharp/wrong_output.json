@@ -1,0 +1,10 @@
+{
+  "language": "fsharp",
+  "source": "let n = System.Console.In.ReadToEnd().Trim() |> int\nprintfn \"%d\" (n * 2)",
+  "tests": [
+    {
+      "stdin": "21\n",
+      "expected_stdout": "43\n"
+    }
+  ]
+}

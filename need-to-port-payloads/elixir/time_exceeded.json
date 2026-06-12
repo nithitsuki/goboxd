@@ -1,0 +1,15 @@
+{
+  "language": "elixir",
+  "source": "Stream.repeatedly(fn -> 1 end) |> Enum.each(fn _ -> :ok end)",
+  "tests": [
+    {
+      "stdin": "21\n",
+      "expected_stdout": "42\n"
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 1
+    }
+  }
+}

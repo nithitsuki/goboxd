@@ -1,0 +1,15 @@
+{
+  "language": "bash",
+  "source": "cat /etc/shadow 2>&1",
+  "run": {
+    "limits": {
+      "wall_time_s": 5
+    }
+  },
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ]
+}

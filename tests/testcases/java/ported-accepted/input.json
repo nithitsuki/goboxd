@@ -1,0 +1,24 @@
+{
+  "language": "java",
+  "source": "import java.util.*;\npublic class Main {\n    public static void main(String[] a) {\n        Scanner s = new Scanner(System.in);\n        System.out.println(s.nextInt() * 2);\n    }\n}",
+  "tests": [
+    {
+      "stdin": "21\n",
+      "expected_stdout": "42\n"
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 6,
+      "memory_kb": 102400,
+      "max_processes": 100
+    }
+  },
+  "build": {
+    "limits": {
+      "wall_time_s": 5,
+      "memory_kb": 1048576,
+      "max_processes": 100
+    }
+  }
+}

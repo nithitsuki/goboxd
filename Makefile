@@ -1,4 +1,4 @@
-.PHONY: build run test integration integration-docker load lint fmt vulncheck
+.PHONY: build run test integration integration-docker integration-safe lint fmt vulncheck
 
 build:
 	docker compose build
@@ -14,6 +14,9 @@ integration:
 
 integration-docker:
 	API_URL=http://localhost:8080 go test -v -count=1 ./tests/integration/...
+
+integration-safe:
+	SKIP_PENETRATION=1 API_URL=http://localhost:8080 go test -v -count=1 ./tests/integration/...
 
 load:
 	./scripts/bench.sh

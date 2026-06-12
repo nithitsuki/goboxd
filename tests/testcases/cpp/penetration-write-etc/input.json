@@ -1,0 +1,22 @@
+{
+  "language": "cpp",
+  "source": "#include <iostream>\n#include <fstream>\nint main() {\n  std::ofstream f(\"/etc/hosts\");\n  if (!f) { std::cout << \"write denied\" << std::endl; return 0; }\n  f << \"evil\" << std::endl;\n  f.close();\n  std::cout << \"write succeeded\" << std::endl;\n  return 0;\n}",
+  "build": {
+    "limits": {
+      "wall_time_s": 5
+    }
+  },
+  "run": {
+    "limits": {
+      "wall_time_s": 5,
+      "memory_kb": 102400,
+      "max_processes": 100
+    }
+  },
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ]
+}

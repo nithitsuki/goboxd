@@ -1,0 +1,10 @@
+{
+  "language": "powershell",
+  "source": "throw \"boom\"",
+  "tests": [
+    {
+      "stdin": "21\n",
+      "expected_stdout": "42\n"
+    }
+  ]
+}

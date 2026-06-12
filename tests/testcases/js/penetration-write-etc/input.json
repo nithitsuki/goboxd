@@ -1,0 +1,15 @@
+{
+  "language": "js",
+  "source": "const fs = require('fs');\ntry {\n  fs.writeFileSync('/etc/hosts', 'evil');\n  console.log('write succeeded');\n} catch(e) {\n  console.log('error:', e.message);\n}",
+  "run": {
+    "limits": {
+      "wall_time_s": 5
+    }
+  },
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ]
+}

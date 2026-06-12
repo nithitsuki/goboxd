@@ -1,0 +1,7 @@
+{
+  "language": "lisp",
+  "source": "(format t \"Hello from Lisp!~%\")",
+  "tests": [
+    { "stdin": "", "expected_stdout": "Hello from Lisp!\n" }
+  ]
+}

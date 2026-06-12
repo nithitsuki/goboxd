@@ -1,0 +1,10 @@
+{
+  "language": "lisp",
+  "source": "(format t \"~a~%\" (* 2 (parse-integer (read-line))))",
+  "tests": [
+    {
+      "stdin": "21\n",
+      "expected_stdout": "42\n"
+    }
+  ]
+}

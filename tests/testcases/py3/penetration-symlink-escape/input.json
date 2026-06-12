@@ -1,0 +1,15 @@
+{
+  "language": "py3",
+  "source": "import os\ntry:\n  os.symlink('/etc/passwd', '/app/link')\n  print(open('/app/link').read())\nexcept Exception as e:\n  print(f'error: {e}')",
+  "run": {
+    "limits": {
+      "wall_time_s": 5
+    }
+  },
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ]
+}

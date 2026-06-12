@@ -463,6 +463,8 @@ func HandleRun(w http.ResponseWriter, r *http.Request) {
 	}()
 	buildRes, testsRes, err := runner.ExecuteRun(req, lc)
 	if err != nil {
+		log.Printf("[handler] ExecuteRun error for lang=%s: %v | build.Status=%s build.Stderr=%s",
+			req.Language, err, buildRes.Status, buildRes.Stderr)
 		// If buildRes already has internal_error status, return 200 with it
 		// (per spec: internal_error is a status in the response body, not a 5xx)
 		if buildRes.Status == "internal_error" {

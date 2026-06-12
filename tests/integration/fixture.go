@@ -87,8 +87,12 @@ func discoverFixtures(root string) ([]Fixture, error) {
 		if err != nil {
 			return nil, fmt.Errorf("reading language dir %s: %w", langPath, err)
 		}
+		skipPenetration := os.Getenv("SKIP_PENETRATION") != ""
 		for _, tc := range tests {
 			if !tc.IsDir() {
+				continue
+			}
+			if skipPenetration && strings.HasPrefix(tc.Name(), "penetration-") {
 				continue
 			}
 			tcPath := filepath.Join(langPath, tc.Name())

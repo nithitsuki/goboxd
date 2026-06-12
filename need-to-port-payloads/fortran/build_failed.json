@@ -1,0 +1,10 @@
+{
+  "language": "fortran",
+  "source": "program main\n  print '(I0)', 1",
+  "tests": [
+    {
+      "stdin": "21\n",
+      "expected_stdout": "42\n"
+    }
+  ]
+}

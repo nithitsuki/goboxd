@@ -238,13 +238,14 @@ languages:
     source_filename: solution.erl
     build:
       cmd: /usr/bin/erlc
-      args: ["{{source}}"]
+      args: ["-o", "/app", "/app/{{source}}"]
       limits:
         wall_time_s: 15
         memory_kb: 1048576
         max_processes: 100
     run:
-      cmd: erl -noshell -s solution start -s init stop
+      cmd: /usr/bin/erl
+      args: ["-noshell", "-pa", "/app", "-s", "solution", "start", "-s", "init", "stop"]
       limits:
         wall_time_s: 5
         memory_kb: 524288

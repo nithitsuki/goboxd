@@ -1,0 +1,15 @@
+{
+  "language": "gleam",
+  "source": "pub fn main() {\n  loop()\n}\nfn loop() -> Nil {\n  loop()\n}",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": "42\n"
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 1
+    }
+  }
+}

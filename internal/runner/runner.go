@@ -21,6 +21,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -148,9 +149,7 @@ func runBuild(jailDir string, req models.RunRequest, lc config.LanguageConfig) (
 		Stderr: stderr,
 	}
 	if err != nil {
-		// Distinguish infrastructure errors from compiler errors.
-		// Pipe/start failures are infrastructure (return 500).
-		// Compiler exit codes and timeouts are user errors (return 200 with build_failed).
+		log.Printf("[runner] build error for %s: %v | stdout: %s | stderr: %s", req.Language, err, stdout, stderr)
 		if isInfraError(err) {
 			res.Status = "internal_error"
 			return res, err
@@ -161,31 +160,31 @@ func runBuild(jailDir string, req models.RunRequest, lc config.LanguageConfig) (
 }
 
 // isInfraError checks if the error is from infrastructure (pipe, start, nsjail) vs user code.
+// We only flag explicit pipe/start failures and nsjail crashing with a signal.
+// Exit codes (including 255) are NOT infrastructure — they come from the user's program
+// (nsjail propagates the inner exit code). Flagging them as infra would turn legitimate
+// runtime/build errors into internal_error.
 func isInfraError(err error) bool {
 	if err == nil {
 		return false
 	}
 	msg := err.Error()
+	log.Printf("[runner] isInfraError check: %s", msg)
 	if strings.Contains(msg, "pipe:") || strings.Contains(msg, "start:") {
-		return true
-	}
-	// nsjail exits with non-zero when it can't set up namespaces/mounts internally,
-	// but the command inside may also exit non-zero. Check for nsjail-specific patterns.
-	if strings.Contains(msg, "exit status 255") {
 		return true
 	}
 	return false
 }
 
 // nsjailArgs builds the common nsjail arguments for both build and run steps.
-// Note: cgroup flags (--cgroup_pids_max, --cgroup_mem_max) are NOT used here
-// because the Docker container's cgroup filesystem is read-only. Instead we rely
-// on --rlimit_nproc and --rlimit_as which provide partial process/memory limits,
-// combined with --time_limit to cap runaway executions.
-// Seccomp policy blocks dangerous syscalls (mount, ptrace, kernel modules, etc.).
+// cgroup flags are not used — Docker Desktop does not expose a writable cgroup
+// hierarchy (the pids controller can be enabled but adding the pid to the child
+// cgroup.procs fails with EOPNOTSUPP). Falls back to --rlimit_nproc.
+// --max_cpus caps CPU usage; tune via GOBOXD_MAX_CPUS env var.
 func nsjailArgs(appDir string, wallTime, memKB, procs int) []string {
 	memBytes := memKB * 1024
-	return []string{
+	maxCPUs := os.Getenv("GOBOXD_MAX_CPUS")
+	args := []string{
 		"-Q",
 		"--log", "/dev/null",
 		"-Mo",
@@ -199,7 +198,11 @@ func nsjailArgs(appDir string, wallTime, memKB, procs int) []string {
 		"--rlimit_nproc", strconv.Itoa(procs),
 		"--rlimit_fsize", "100",
 		"--rlimit_nofile", "65536",
-		"--seccomp_policy", "/app/scripts/seccomp.policy",
+	}
+	if maxCPUs != "" {
+		args = append(args, "--max_cpus", maxCPUs)
+	}
+	args = append(args,
 		"-B", "/etc",
 		"-E", "PATH=/usr/local/bin:/usr/bin:/bin",
 		"-E", "HOME=/tmp",
@@ -211,7 +214,8 @@ func nsjailArgs(appDir string, wallTime, memKB, procs int) []string {
 		"-B", "/dev",
 		"-B", "/var/lib",
 		"--",
-	}
+	)
+	return args
 }
 
 func execInJail(jailDir string, cmdArgs []string, wallTime, memKB, procs int) (string, string, error) {
@@ -245,11 +249,11 @@ func execInJail(jailDir string, cmdArgs []string, wallTime, memKB, procs int) (s
 	outChan := make(chan string, 1)
 	errChan := make(chan string, 1)
 	go func() {
-		defer func() { recover() }()
+		defer func() { _ = recover() }()
 		outChan <- readCapped(stdoutPipe)
 	}()
 	go func() {
-		defer func() { recover() }()
+		defer func() { _ = recover() }()
 		errChan <- readCapped(stderrPipe)
 	}()
 
@@ -259,9 +263,11 @@ func execInJail(jailDir string, cmdArgs []string, wallTime, memKB, procs int) (s
 	err = cmd.Wait()
 	if ctx.Err() == context.DeadlineExceeded {
 		stderr += "\n... [build timed out]"
+		log.Printf("[runner] build timed out (wall=%ds) stdout=%d stderr=%d", wallTime, len(stdout), len(stderr))
 		return stdout, stderr, fmt.Errorf("build timed out")
 	}
 	if err != nil {
+		log.Printf("[runner] nsjail build error: %v | stderr: %s", err, stderr)
 		return stdout, stderr, err
 	}
 	return stdout, stderr, nil
@@ -313,6 +319,7 @@ func runSingleTest(tc models.TestCase, lc config.LanguageConfig, jailDir string,
 	}
 
 	if err := cmd.Start(); err != nil {
+		log.Printf("[runner] nsjail start failed: %v", err)
 		return failResult("internal_error", err.Error(), start)
 	}
 
@@ -320,11 +327,11 @@ func runSingleTest(tc models.TestCase, lc config.LanguageConfig, jailDir string,
 	errChan := make(chan string)
 
 	go func() {
-		defer func() { recover() }()
+		defer func() { _ = recover() }()
 		outChan <- readCapped(stdoutPipe)
 	}()
 	go func() {
-		defer func() { recover() }()
+		defer func() { _ = recover() }()
 		errChan <- readCapped(stderrPipe)
 	}()
 
@@ -334,9 +341,13 @@ func runSingleTest(tc models.TestCase, lc config.LanguageConfig, jailDir string,
 	err = cmd.Wait()
 	duration := int(time.Since(start).Milliseconds())
 
+	log.Printf("[runner] nsjail exited: err=%v | stdout_len=%d stderr_len=%d | lang=%s",
+		err, len(stdoutRaw), len(stderrRaw), lc.ID)
+
 	// Check for nsjail infrastructure failures first (nsjail itself crashed,
 	// not the user code). Treat these as internal errors.
 	if err != nil && isInfraError(err) {
+		log.Printf("[runner] nsjail infra error: %v | stderr: %s", err, stderrRaw)
 		return models.TestResult{
 			Status:       "internal_error",
 			Stdout:       stdoutRaw,
