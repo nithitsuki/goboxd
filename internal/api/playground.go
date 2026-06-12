@@ -3,32 +3,65 @@ package api
 import (
 	"embed"
 	"net/http"
+	"os"
 	"path"
+	"path/filepath"
 	"strings"
 )
 
-//go:embed playground-dist/index.html playground-dist/assets/*
+//go:embed playground-dist
 var playgroundFS embed.FS
 
-// HandlePlayground serves the embedded web playground for interactive testing.
-// It rewrites requests to serve files from the embedded playground/ directory.
+// playgroundDistPath is set at startup to the runtime path of the dist directory.
+// When empty, the embedded fallback is used (minimal placeholder).
+var playgroundDistPath string
+
+func init() {
+	// Check if playground-dist is available at a known runtime path
+	for _, candidate := range []string{
+		"internal/api/playground-dist",
+		"/app/internal/api/playground-dist",
+		filepath.Join(filepath.Dir(os.Args[0]), "playground-dist"),
+	} {
+		if info, err := os.Stat(candidate); err == nil && info.IsDir() {
+			playgroundDistPath = candidate
+			break
+		}
+	}
+}
+
+// HandlePlayground serves the web playground.
+// It prefers the filesystem dist directory (built by Vite) over the embedded fallback.
 func HandlePlayground(w http.ResponseWriter, r *http.Request) {
 	filePath := strings.TrimPrefix(r.URL.Path, "/playground")
 	if filePath == "" || filePath == "/" {
 		filePath = "/index.html"
 	}
-	filePath = path.Join("playground-dist", filePath)
 
-	data, err := playgroundFS.ReadFile(filePath)
+	// Try filesystem first (runtime-built playground)
+	if playgroundDistPath != "" {
+		fsPath := path.Join(playgroundDistPath, filePath)
+		if data, err := os.ReadFile(fsPath); err == nil {
+			writePlaygroundFile(w, filePath, data)
+			return
+		}
+	}
+
+	// Fall back to embedded (minimal placeholder)
+	embedPath := path.Join("playground-dist", filePath)
+	data, err := playgroundFS.ReadFile(embedPath)
 	if err != nil {
+		// Serve the placeholder index.html for any missing path
 		data, err = playgroundFS.ReadFile("playground-dist/index.html")
 		if err != nil {
 			http.NotFound(w, r)
 			return
 		}
-		filePath = "playground-dist/index.html"
 	}
+	writePlaygroundFile(w, filePath, data)
+}
 
+func writePlaygroundFile(w http.ResponseWriter, filePath string, data []byte) {
 	ext := path.Ext(filePath)
 	switch ext {
 	case ".html":
@@ -46,15 +79,20 @@ func HandlePlayground(w http.ResponseWriter, r *http.Request) {
 	case ".woff2":
 		w.Header().Set("Content-Type", "font/woff2")
 	}
-
 	w.WriteHeader(http.StatusOK)
-	if _, err := w.Write(data); err != nil {
-		return
-	}
+	_, _ = w.Write(data)
 }
 
-// PlaygroundExists returns true if the playground is built and embeddable.
+// PlaygroundExists returns true if a real playground build is available.
 func PlaygroundExists() bool {
-	_, err := playgroundFS.ReadFile("playground-dist/index.html")
-	return err == nil
+	if playgroundDistPath != "" {
+		return true
+	}
+	// Check if the embedded build has actual content (not just placeholder stub)
+	data, err := playgroundFS.ReadFile("playground-dist/index.html")
+	if err != nil {
+		return false
+	}
+	// The stub is tiny (< 200 bytes). A real build is 300+ bytes.
+	return len(data) > 200
 }
