@@ -8,6 +8,8 @@
 | `GET` | `/readyz` | Readiness probe |
 | `GET` | `/info` | Service metadata |
 | `POST` | `/run` | Execute untrusted code |
+| `GET` | `/testcases` | List all test fixtures |
+| `GET` | `/testcases/{lang}/{name}` | Get a specific test fixture |
 | `GET` | `/playground` | Web UI (if embedded) |
 
 ---

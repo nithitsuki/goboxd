@@ -24,6 +24,8 @@ image, an install script in `scripts/lang_install/`.
 | d | D (GDC) | compiled | `/usr/bin/gdc` | `./{{artifact}}` |
 | lua | Lua (LuaJIT) | interpreted | — | `/usr/bin/luajit` |
 | perl | Perl | interpreted | — | `/usr/bin/perl` |
+| erl | Erlang | compiled | `/usr/bin/erlc` | `erl -noshell -pa /app -s solution start -s init stop` |
+| lisp | Lisp (SBCL) | interpreted | — | `/usr/bin/sbcl --script {{source}}` |
 
 ## Adding a new language
 
