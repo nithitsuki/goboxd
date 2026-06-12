@@ -1,0 +1,8 @@
+#!/bin/sh
+# Pre-commit hook to run lint checks before allowing commits
+make lint
+if [ $? -ne 0 ]; then
+    echo "❌ Lint checks failed. Commit rejected."
+    exit 1
+fi
+echo "✅ Lint checks passed"
