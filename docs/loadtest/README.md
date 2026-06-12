@@ -78,3 +78,22 @@ docker compose up -d
 # Generate graphs
 uv run --script docs/loadtest/plot.py
 ```
+
+## Further optimization potential
+
+These results are the best achievable with the default Debian base image and
+stock OpenJDK. The 3 RPS breaking point reflects real-world constraints that
+can be improved with targeted changes:
+
+| Approach | Expected gain | Trade-off |
+|---|---|---|
+| **Alpine Linux base** | Smaller image, lower memory overhead per sandbox | No glibc; some languages (Erlang, Haskell) may need extra packages |
+| **Custom JVM flags** (`-Xmx`, `-Xms`, `-XX:+UseSerialGC`) | Reduce per-request heap from ~200 MB to ~160 MB, less GC pause | May affect JIT compilation speed |
+| **Swap space** (add 1-2 GB swap to container) | Absorb memory spikes; fewer OOM kills at 4+ RPS | Latency spikes when swapping |
+| **Class data sharing** (CDS / AppCDS) | Faster JVM startup for repeated runs | Requires pre-built archive; complexity |
+| **GraalVM native image** | Sub-ms startup, minimal memory | Not a drop-in replacement; language compatibility issues |
+| **Pre-warmed JVM pool** | Skip JVM startup + compilation per request | Resource overhead of idle JVMs |
+| **Larger container** (4 GB RAM) | ~6 RPS throughput (double) | Goes beyond the challenge spec |
+
+Without changing the challenge parameters (Debian, stock JVM, 2 GB RAM),
+the 3 RPS breaking point is the ceiling.

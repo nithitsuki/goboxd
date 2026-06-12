@@ -24,8 +24,10 @@ breaking points.
 - **Penetration test suite** — 52 test cases across all languages probing file
   reads, shell injection, network isolation, write protection, symlink escapes,
   eval injection, and more
-- **Ported payload suite** — 62 test cases ported from the standard challenge
-  payloads (accepted, build_failed, runtime_error, time_exceeded, wrong_output)
+- **Ported payload suite** — 62 test cases ported from the Stage 2 challenge
+  specification (accepted, build_failed, runtime_error, time_exceeded, wrong_output)
+  covering read-N-print-N*2 scenarios. All ported payloads pass across all
+  14 compatible languages.
 - **Fixture-driven tests** — test cases are JSON files, no recompile needed to
   add scenarios
 - **Embedded playground** — web UI for interactive testing served via Go's
@@ -84,6 +86,18 @@ Client: [vegeta](https://github.com/tsenart/vegeta), 30 s steady-state steps.
 3 RPS, then clean timeouts at higher rates. No server crashes under any load.
 The primary bottleneck is memory pressure: each MemoryHog uses ~354 MB peak,
 and at 4 concurrent requests the 2 GB container limit is reached.
+
+These are the best results achievable with the default **Debian base image**
+and **stock OpenJDK**. The 3 RPS ceiling is set by memory pressure (354 MB per
+request × 4 concurrent = 1.4 GB in a 2 GB container).
+
+**Further optimization potential** (not pursued due to challenge constraints):
+- **Alpine Linux** base would reduce per-sandbox memory overhead
+- **Custom JVM flags** (`-Xmx`, `-Xms`, `-XX:+UseSerialGC`) could shave ~40 MB
+  per request
+- **Swap space** could absorb spikes at 4+ RPS at the cost of latency
+- **GraalVM native-image** would eliminate JVM startup overhead entirely
+- **Pre-warmed JVM pool** would skip compilation per request
 
 See `docs/loadtest/` for the full CSV, graphs, and analysis.
 
