@@ -1,5 +1,5 @@
 # Stage 1: Build nsjail and goboxd
-FROM golang:1.23-bookworm AS builder
+FROM golang:1.25-bookworm AS builder
 
 # Install nsjail build dependencies
 RUN apt-get update && apt-get install -y \

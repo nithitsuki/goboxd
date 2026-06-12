@@ -92,7 +92,7 @@ func TestHandleRunValidation(t *testing.T) {
 		},
 		{
 			name:         "unknown language",
-			body:         `{"language":"haskell","source":"main = putStrLn \"hi\"","tests":[{"stdin":"","expected_stdout":""}]}`,
+			body:         `{"language":"nonexistent","source":"main = putStrLn \"hi\"","tests":[{"stdin":"","expected_stdout":""}]}`,
 			expectedCode: http.StatusBadRequest,
 			errorCode:    "unknown_language",
 		},
