@@ -39,3 +39,4 @@ pyjail-reference
 silverex
 sudo
 internal/api/playground-dist/
+.DS_Store
