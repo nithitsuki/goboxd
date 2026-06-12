@@ -54,3 +54,45 @@ Added signalKillReason that checks syscall.WaitStatus: SIGKILL = timeout, SIGSEG
 
 **Why it changed:**
 The spec has memory_exceeded as a valid status but we never returned it. nsjail kills with different signals for different violations, so we can differentiate them.
+
+## 2026-06-12 · From all penetration tests to a curated suite
+
+**What I thought we'd do:**
+Test every possible attack vector including fork bombs, thread storms, and reverse shells.
+
+**What I actually did:**
+Removed fork bombs, thread storms, and reverse shell tests. Kept file reads, shell injection, network
+isolation, write protection, eval injection, symlink escapes, and DNS probes.
+
+**Why it changed:**
+Fork bombs require cgroup v2 enforcement which isn't available on macOS Docker Desktop. Without strict
+process limits, they exhaust container PIDs/memory and crash the server. The remaining 52 tests probe
+the boundaries that the sandbox can actually enforce.
+
+## 2026-06-12 · From unlimited concurrency to bounded semaphore
+
+**What I thought we'd do:**
+Let the HTTP server handle as many concurrent requests as the OS allows.
+
+**What I actually did:**
+Added a channel-based semaphore initialized to runtime.NumCPU() = 8, later tuned to GOBOXD_MAX_JOBS=4.
+
+**Why it changed:**
+Without a concurrency cap, a burst of MemoryHog requests would consume all 2 GB RAM and OOM-kill the
+server. The semaphore acts as a admission controller - requests queue up and wait for a slot instead of
+overwhelming the system. The maxJobs value was tuned experimentally: 4 slots gave the best throughput
+at the 3 RPS breaking point while staying within memory limits.
+
+## 2026-06-12 · From playground embed to hybrid filesystem+embed
+
+**What I thought we'd do:**
+Fully embed the Vite-built playground in the Go binary via //go:embed.
+
+**What I actually did:**
+Committed a stub index.html, used //go:embed on the directory, and added a runtime filesystem check that
+prefers real built files when available.
+
+**Why it changed:**
+The //go:embed directive fails at compile time if the embedded files don't exist. CI runners don't build
+the playground, so every CI run would fail. The hybrid approach lets the CI build pass with the stub,
+while the Docker build (which runs vite first) embeds the real playground.

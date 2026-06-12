@@ -222,6 +222,13 @@ penetration tests during normal development.
 - [Languages](docs/languages.md) — registry, template variables, resource limits
 - [Load Tests](docs/loadtest/README.md) — breaking point, latency curves, failure mode analysis
 
+## Author
+
+**Nithilan R**  
+Roll No: 24f2100056  
+Email: 24f210056@es.study.iitm.ac.in / hi@nithitsuki.com  
+LinkedIn: [linkedin.com/in/nithilanr](https://www.linkedin.com/in/nithilanr/)
+
 ## Requirements
 
 - Docker Desktop (macOS) or Docker Engine (Linux)

@@ -24,6 +24,8 @@ resource allowances. The goal is to prevent the attacker from:
 | 7 | Stale jail directories | `defer os.RemoveAll` after every jail dir creation + startup orphan sweep (30 min) | `internal/runner/runner.go`, `cmd/goboxd/main.go` |
 | 8 | nsjail error misclassification | `isInfraError` catches nsjail exit code 255 and pipe/start failures, separating infrastructure errors from user-code errors in both build and test paths | `internal/runner/runner.go` |
 | 9 | Unbounded concurrency | Channel-based semaphore limits concurrent executions to `runtime.NumCPU()` (or `GOBOXD_MAX_JOBS`), preventing resource exhaustion under burst load | `internal/api/handlers.go` |
+| 10 | Server crash on handler panic | `RecoveryMiddleware` catches panics in all handlers, logs stack trace, returns 500. One bad request can't crash the server. | `internal/api/logging.go` |
+| 11 | Sandbox escape via dangerous syscalls | Seccomp-bpf policy (kafel) blocks mount, ptrace, kernel module ops, bpf, ioperm/iopl. Loaded via `--seccomp_policy` in nsjail. | `scripts/seccomp.policy` |
 
 ## What each fix does
 

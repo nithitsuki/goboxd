@@ -176,3 +176,43 @@ Suggested using getrusage(RUSAGE_CHILDREN) which gives the peak RSS of all child
 
 **What we used / didn't use:**
 used getrusage. removed the entire cgroup scanning code including readCgroupFile and readProcRSS since they were reading wrong values. memory-exceeded fixture now passes correctly with the real peak memory.
+
+## [2026-06-12] [Context: Penetration testing strategy - what to probe and what to skip]
+
+**Decision:**
+I mapped out 10 attack vectors across all 17 languages: file reads, shell injection, network isolation, write
+protection, symlink escapes, eval injection, reverse shells, fork bombs, thread storms, DNS exfiltration. For
+each one I decided whether the sandbox should block it (file writes, network, fork bombs) or allow-and-document
+it (file reads, shell commands - they work inside the sandbox, and that's correct behavior). I had the AI write
+the actual test payloads in each language syntax once I specified the attack pattern.
+
+**What I used / didn't use:**
+I designed the test matrix myself - which vectors matter, which don't. The AI handled grunt work: writing the C
+socket boilerplate, the Erlang gen_tcp pattern, the Lisp handler-case wrappers. I rejected the AI's suggestion
+to use seccomp policies to block fork bombs because seccomp policies don't compose well with language runtimes
+that need fork+exec for subprocesses.
+
+## [2026-06-12] [Context: Load testing - finding the breaking point]
+
+**Decision:**
+I ran vegeta in a rate ladder from 1 to 10 RPS with the MemoryHog workload. Each step held for 30 seconds. I
+quickly saw that 150 MB Java heap + 1-second sleep + 2 GB container = 3 RPS ceiling. I experimented with
+GOBOXD_MAX_JOBS values (4, 5, 8) and found 4 was optimal - more slots caused memory thrashing, fewer left
+throughput on the table. I had the AI write the vegeta-to-CSV pipeline and the matplotlib plotting script once
+I specified the schema.
+
+**What I used / didn't use:**
+I picked the rate ladder, did the tuning experiments myself. The AI automated the report generation. I rejected
+its suggestion to use k6 over vegeta because vegeta's JSON output is simpler to parse.
+
+## [2026-06-12] [Context: CI/CD pipeline setup]
+
+**Decision:**
+I set up three GitHub Actions jobs: lint (golangci-lint + govulncheck), test (unit tests), and build (go build
++ vet). Also added a playground build check and dependabot config. I added a pre-commit hook locally. I had the
+AI write the YAML syntax once I specified the job layout.
+
+**What I used / didn't use:**
+I designed the pipeline stages myself - lint before test, test before build. I noticed the golangci-lint action
+was pinned to a version built with Go 1.24 while our go.mod said go 1.25, so I downgraded go.mod to 1.24 to
+keep lint passing while keeping the Docker build on 1.25 for the vuln fixes. The AI just formatted the YAML.
