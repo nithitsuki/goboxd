@@ -1,55 +1,101 @@
 #!/bin/bash
 set -e
 
-echo "Installing system dependencies..."
-apt-get update || (sleep 10 && apt-get update) || (sleep 30 && apt-get update)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LANG_DIR="$SCRIPT_DIR/lang_install"
 
-apt-get install -y --no-install-recommends \
-    ca-certificates curl wget unzip build-essential \
-    gcc g++ \
-    libprotobuf32 libprotobuf-c1 libnl-3-200 libnl-route-3-200
+echo "==========================================="
+echo "  goboxd - Full Language Installation"
+echo "==========================================="
 
-echo "Installing language toolchains..."
-# Python 3 (interpreted)
-apt-get install -y --no-install-recommends python3 python3-pip python3-dev
+# Stage 1: System dependencies
+echo ""
+echo "==> Stage 1: Installing system dependencies..."
+"$LANG_DIR/system.sh"
 
-# Java (in-scope)
-apt-get install -y --no-install-recommends default-jdk
+# Stage 2: Language toolchains
+echo ""
+echo "==> Stage 2: Installing language toolchains..."
 
-# JavaScript / Node.js (in-scope)
-apt-get install -y --no-install-recommends nodejs
+# C
+echo "  -> C"
+"$LANG_DIR/c.sh"
 
-# Haskell (functional)
-apt-get install -y --no-install-recommends ghc
+# C++
+echo "  -> C++"
+"$LANG_DIR/cpp.sh"
 
-# OCaml (functional)
-apt-get install -y --no-install-recommends ocaml
+# Python 3
+echo "  -> Python 3"
+"$LANG_DIR/python3.sh"
 
-# R (statistical)
-apt-get install -y --no-install-recommends r-base
+# Java
+echo "  -> Java"
+"$LANG_DIR/java.sh"
 
-# D / GDC (systems)
-apt-get install -y --no-install-recommends gdc
+# Node.js / JavaScript
+echo "  -> Node.js"
+"$LANG_DIR/nodejs.sh"
 
-# LuaJIT (scripting)
-apt-get install -y --no-install-recommends luajit
+# Haskell
+echo "  -> Haskell"
+"$LANG_DIR/haskell.sh"
 
-# Verilog (in-scope)
-apt-get install -y --no-install-recommends iverilog
+# OCaml
+echo "  -> OCaml"
+"$LANG_DIR/ocaml.sh"
 
-# Rust (bonus language)
-apt-get install -y --no-install-recommends rustc cargo
+# R
+echo "  -> R"
+"$LANG_DIR/r.sh"
 
-# Go (bonus language)
-apt-get install -y --no-install-recommends golang-go
+# D / GDC
+echo "  -> D / GDC"
+"$LANG_DIR/gdc.sh"
 
-# Verify
+# LuaJIT
+echo "  -> LuaJIT"
+"$LANG_DIR/luajit.sh"
+
+# Verilog
+echo "  -> Verilog"
+"$LANG_DIR/iverilog.sh"
+
+# Rust
+echo "  -> Rust"
+"$LANG_DIR/rust.sh"
+
+# Go
+echo "  -> Go"
+"$LANG_DIR/go.sh"
+
+# Erlang
+echo "  -> Erlang"
+"$LANG_DIR/erlang.sh"
+
+# Lisp
+echo "  -> Lisp"
+"$LANG_DIR/lisp.sh"
+
+# Stage 3: Final verification
+echo ""
+echo "==> Stage 3: Final verification..."
+echo ""
+
 python3 --version && gcc --version && g++ --version
 java -version 2>&1 | head -1
 node --version
 which iverilog 2>/dev/null && iverilog -V 2>&1 | head -1 || echo "iverilog not installed"
 which rustc 2>/dev/null && rustc --version || echo "rustc not installed"
 which go 2>/dev/null && go version || echo "go not installed"
+which erl 2>/dev/null && erl -noshell -eval 'io:format("Erlang ~s~n", [erlang:system_info(otp_release)]), halt().' || echo "erlang not installed"
+which sbcl 2>/dev/null && sbcl --version || echo "sbcl not installed"
 
-apt-get clean
+echo ""
+echo "==========================================="
+echo "  Installation complete!"
+echo "==========================================="
+
+# Clean up
+apt clean
 rm -rf /var/lib/apt/lists/*

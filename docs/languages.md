@@ -3,7 +3,7 @@
 Languages are configured via `config/languages.yml`, loaded at startup by
 `internal/config/config.go`. Adding a language requires no Go code change —
 just a YAML entry and, if the runtime/compiler isn't already in the Docker
-image, an `apt-get install` line in `scripts/install.sh`.
+image, an install script in `scripts/lang_install/`.
 
 ## Currently registered
 
@@ -28,10 +28,13 @@ image, an `apt-get install` line in `scripts/install.sh`.
 ## Adding a new language
 
 1. Add a block to `config/languages.yml`.
-2. Install the compiler/runtime in `scripts/install.sh` (if not already present).
+2. Create an install script at `scripts/lang_install/<id>.sh` that installs and verifies the
+   compiler/runtime (see existing scripts for examples).
 3. Create test cases under `tests/testcases/{id}/` — at minimum a
    `positive-basic/` case with `input.json` and `want.json`.
-4. Rebuild the Docker image.
+4. Rebuild the Docker image (`make build`). Thanks to the staged Dockerfile,
+   only the new language layer and subsequent layers will be rebuilt —
+   previous language installations are cached.
 
 ### YAML reference
 

@@ -177,14 +177,15 @@ func isInfraError(err error) bool {
 	return false
 }
 
-func execInJail(jailDir string, cmdArgs []string, wallTime, memKB, procs int) (string, string, error) {
+// nsjailArgs builds the common nsjail arguments for both build and run steps.
+// Note: cgroup flags (--cgroup_pids_max, --cgroup_mem_max) are NOT used here
+// because the Docker container's cgroup filesystem is read-only. Instead we rely
+// on --rlimit_nproc and --rlimit_as which provide partial process/memory limits,
+// combined with --time_limit to cap runaway executions.
+// Seccomp policy blocks dangerous syscalls (mount, ptrace, kernel modules, etc.).
+func nsjailArgs(appDir string, wallTime, memKB, procs int) []string {
 	memBytes := memKB * 1024
-	appDir := filepath.Join(jailDir, "app")
-	if err := os.MkdirAll(appDir, 0755); err != nil {
-		return "", "", fmt.Errorf("app dir: %w", err)
-	}
-
-	args := []string{
+	return []string{
 		"-Q",
 		"--log", "/dev/null",
 		"-Mo",
@@ -198,6 +199,7 @@ func execInJail(jailDir string, cmdArgs []string, wallTime, memKB, procs int) (s
 		"--rlimit_nproc", strconv.Itoa(procs),
 		"--rlimit_fsize", "100",
 		"--rlimit_nofile", "65536",
+		"--seccomp_policy", "/app/scripts/seccomp.policy",
 		"-B", "/etc",
 		"-E", "PATH=/usr/local/bin:/usr/bin:/bin",
 		"-E", "HOME=/tmp",
@@ -210,6 +212,15 @@ func execInJail(jailDir string, cmdArgs []string, wallTime, memKB, procs int) (s
 		"-B", "/var/lib",
 		"--",
 	}
+}
+
+func execInJail(jailDir string, cmdArgs []string, wallTime, memKB, procs int) (string, string, error) {
+	appDir := filepath.Join(jailDir, "app")
+	if err := os.MkdirAll(appDir, 0755); err != nil {
+		return "", "", fmt.Errorf("app dir: %w", err)
+	}
+
+	args := nsjailArgs(appDir, wallTime, memKB, procs)
 	args = append(args, cmdArgs...)
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(wallTime)*time.Second)
@@ -230,8 +241,20 @@ func execInJail(jailDir string, cmdArgs []string, wallTime, memKB, procs int) (s
 		return "", "", fmt.Errorf("start: %w", err)
 	}
 
-	stdout := readCapped(stdoutPipe)
-	stderr := readCapped(stderrPipe)
+	// Read stdout/stderr concurrently to avoid pipe buffer deadlocks
+	outChan := make(chan string, 1)
+	errChan := make(chan string, 1)
+	go func() {
+		defer func() { recover() }()
+		outChan <- readCapped(stdoutPipe)
+	}()
+	go func() {
+		defer func() { recover() }()
+		errChan <- readCapped(stderrPipe)
+	}()
+
+	stdout := <-outChan
+	stderr := <-errChan
 
 	err = cmd.Wait()
 	if ctx.Err() == context.DeadlineExceeded {
@@ -257,40 +280,13 @@ func runSingleTest(tc models.TestCase, lc config.LanguageConfig, jailDir string,
 	if runOpts != nil && runOpts.Limits != nil && runOpts.Limits.MemoryKB != nil {
 		memKB = *runOpts.Limits.MemoryKB
 	}
-	memBytes := memKB * 1024
-
 	procs := lc.RunLimits.MaxProcesses
 	if runOpts != nil && runOpts.Limits != nil && runOpts.Limits.MaxProcesses != nil {
 		procs = *runOpts.Limits.MaxProcesses
 	}
 
 	appDir := filepath.Join(jailDir, "app")
-	args := []string{
-		"-Q",
-		"--log", "/dev/null",
-		"-Mo",
-		"-T", "/tmp",
-		"--bindmount", appDir + ":/app:rw",
-		"--cwd", "/app",
-		"--chroot", "/",
-		"--proc_path", "/proc",
-		"--time_limit", strconv.Itoa(wallTime),
-		"--rlimit_as", strconv.Itoa(memBytes),
-		"--rlimit_nproc", strconv.Itoa(procs),
-		"--rlimit_fsize", "100",
-		"--rlimit_nofile", "65536",
-		"-B", "/etc",
-		"-E", "PATH=/usr/local/bin:/usr/bin:/bin",
-		"-E", "HOME=/tmp",
-		"-E", "GOCACHE=/tmp/go-cache",
-		"-B", "/usr",
-		"-B", "/lib",
-		"-B", "/lib64",
-		"-B", "/bin",
-		"-B", "/dev",
-		"-B", "/var/lib",
-		"--",
-	}
+	args := nsjailArgs(appDir, wallTime, memKB, procs)
 	runFlags := []string{}
 	if runOpts != nil && len(runOpts.Flags) > 0 {
 		runFlags = runOpts.Flags
@@ -324,9 +320,11 @@ func runSingleTest(tc models.TestCase, lc config.LanguageConfig, jailDir string,
 	errChan := make(chan string)
 
 	go func() {
+		defer func() { recover() }()
 		outChan <- readCapped(stdoutPipe)
 	}()
 	go func() {
+		defer func() { recover() }()
 		errChan <- readCapped(stderrPipe)
 	}()
 

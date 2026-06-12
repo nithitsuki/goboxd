@@ -2,21 +2,23 @@ import React, { useState } from 'react';
 import Editor from '@monaco-editor/react';
 
 const LANGUAGES: Record<string, { label: string; defaultCode: string; hasStdin?: boolean; monaco: string }> = {
-  py3: { label: 'Python 3', defaultCode: 'print("hello from python 3")', hasStdin: true, monaco: 'python' },
+  bash: { label: 'Bash', defaultCode: 'echo "hello from bash"', monaco: 'shell' },
   c: { label: 'C', defaultCode: '#include <stdio.h>\nint main() {\n  printf("hello from c\\n");\n  return 0;\n}', monaco: 'c' },
   cpp: { label: 'C++', defaultCode: '#include <iostream>\nint main() {\n  std::cout << "hello from c++" << std::endl;\n  return 0;\n}', monaco: 'cpp' },
-  java: { label: 'Java', defaultCode: 'public class Main {\n  public static void main(String[] args) {\n    System.out.println("hello from java");\n  }\n}', monaco: 'java' },
-  bash: { label: 'Bash', defaultCode: 'echo "hello from bash"', monaco: 'shell' },
-  js: { label: 'JavaScript (Node)', defaultCode: 'console.log("hello from node");', hasStdin: true, monaco: 'javascript' },
-  verilog: { label: 'Verilog', defaultCode: 'module hello;\ninitial begin\n  $display("hello from verilog");\n  $finish;\nend\nendmodule', monaco: 'verilog' },
-  rust: { label: 'Rust', defaultCode: 'fn main() {\n  println!("hello from rust");\n}', monaco: 'rust' },
+  d: { label: 'D (GDC)', defaultCode: 'import std.stdio;\nvoid main() {\n  writeln("hello from d");\n}', monaco: 'cpp' },
+  erl: { label: 'Erlang', defaultCode: '-module(solution).\n-export([start/0]).\nstart() ->\n  io:format("hello from erlang~n").', monaco: 'erlang' },
   go: { label: 'Go', defaultCode: 'package main\nimport "fmt"\nfunc main() {\n  fmt.Println("hello from go")\n}', monaco: 'go' },
   haskell: { label: 'Haskell', defaultCode: 'main = putStrLn "hello from haskell"', monaco: 'haskell' },
-  ocaml: { label: 'OCaml', defaultCode: 'print_string "hello from ocaml\\n"', monaco: 'ocaml' },
-  r: { label: 'R', defaultCode: 'cat("hello from r\\n")', hasStdin: true, monaco: 'r' },
-  d: { label: 'D (GDC)', defaultCode: 'import std.stdio;\nvoid main() {\n  writeln("hello from d");\n}', monaco: 'cpp' },
+  java: { label: 'Java', defaultCode: 'public class Main {\n  public static void main(String[] args) {\n    System.out.println("hello from java");\n  }\n}', monaco: 'java' },
+  js: { label: 'JavaScript (Node)', defaultCode: 'console.log("hello from node");', hasStdin: true, monaco: 'javascript' },
+  lisp: { label: 'Lisp (SBCL)', defaultCode: '(format t "hello from lisp~%")', monaco: 'lisp' },
   lua: { label: 'Lua (LuaJIT)', defaultCode: 'print("hello from lua")', monaco: 'lua' },
+  ocaml: { label: 'OCaml', defaultCode: 'print_string "hello from ocaml\\n"', monaco: 'ocaml' },
   perl: { label: 'Perl', defaultCode: 'print "hello from perl\\n"', monaco: 'perl' },
+  py3: { label: 'Python 3', defaultCode: 'print("hello from python 3")', hasStdin: true, monaco: 'python' },
+  r: { label: 'R', defaultCode: 'cat("hello from r\\n")', hasStdin: true, monaco: 'r' },
+  rust: { label: 'Rust', defaultCode: 'fn main() {\n  println!("hello from rust");\n}', monaco: 'rust' },
+  verilog: { label: 'Verilog', defaultCode: 'module hello;\ninitial begin\n  $display("hello from verilog");\n  $finish;\nend\nendmodule', monaco: 'verilog' },
 };
 
 interface Preset { source: string; stdin?: string; expected?: string; label: string }
@@ -119,6 +121,16 @@ const PRESETS: PresetMap = {
     { label: 'fibonacci', source: 'sub fib {\n  my $n = shift;\n  return $n if $n <= 1;\n  fib($n-1) + fib($n-2);\n}\nforeach my $i (0..9) {\n  print fib($i) . "\\n";\n}' },
     { label: '[bad] crash', source: 'this will crash' },
   ],
+  erl: [
+    { label: 'hello world', source: '-module(solution).\n-export([start/0]).\nstart() ->\n  io:format("hello world~n").', stdin: '', expected: 'hello world\n' },
+    { label: 'fibonacci', source: '-module(solution).\n-export([start/0]).\n\nfib(0) -> 0;\nfib(1) -> 1;\nfib(N) -> fib(N-1) + fib(N-2).\n\nstart() ->\n  lists:foreach(\n    fun(I) -> io:format("~p~n", [fib(I)]) end,\n    lists:seq(0, 9)\n  ).' },
+    { label: '[bad] crash', source: '-module(solution).\n-export([start/0]).\nstart() ->\n  1 / 0.' },
+  ],
+  lisp: [
+    { label: 'hello world', source: '(format t "hello world~%")', stdin: '', expected: 'hello world\n' },
+    { label: 'fibonacci', source: '(defun fib (n)\n  (if (<= n 1)\n      n\n      (+ (fib (- n 1)) (fib (- n 2)))))\n\n(dotimes (i 10)\n  (format t "~a~%" (fib i)))' },
+    { label: '[bad] crash', source: '(error "this is a crash")' },
+  ],
 };
 
 const API = window.location.origin;
@@ -135,14 +147,14 @@ function flattenPresets(ps: PresetMap, lang: string): { name: string; preset: Pr
 }
 
 function App() {
-  const [lang, setLang] = useState('py3');
-  const [code, setCode] = useState(LANGUAGES['py3'].defaultCode);
+  const [lang, setLang] = useState('bash');
+  const [code, setCode] = useState(LANGUAGES['bash'].defaultCode);
   const [stdin, setStdin] = useState('');
   const [output, setOutput] = useState('');
   const [rawJson, setRawJson] = useState<any>(null);
   const [showRaw, setShowRaw] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [page, setPage] = useState<'play' | 'bench'>('play');
+  const [page, setPage] = useState<'play' | 'bench' | 'tests'>('play');
   const LI = LANGUAGES[lang];
 
   function switchLang(newLang: string) {
@@ -195,6 +207,138 @@ function App() {
 
   const flatPresets = flattenPresets(PRESETS, lang);
 
+  // --- Test runner state ---
+  const [testcases, setTestcases] = useState<any[]>([]);
+  const [selectedTc, setSelectedTc] = useState<any>(null);
+  const [testResult, setTestResult] = useState<any>(null);
+  const [testOutput, setTestOutput] = useState('');
+  const [testLoading, setTestLoading] = useState(false);
+  const [tcFilter, setTcFilter] = useState('');
+
+  if (page === 'tests') {
+    if (testcases.length === 0) {
+      fetch(API + '/testcases').then(r => r.json()).then(d => setTestcases(d)).catch(() => {});
+    }
+
+    async function runTestcase(tc: any) {
+      setTestLoading(true);
+      setTestOutput('');
+      setTestResult(null);
+      try {
+        const res = await fetch(API + '/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(tc.input) });
+        const data = await res.json();
+        const want = tc.want;
+        setTestResult({ got: data, want });
+        let out = '';
+        out += '=== RESULT ===\n';
+        const statusMatch = data.status === want.status;
+        out += (statusMatch ? 'PASS' : 'FAIL') + ' status: got="' + data.status + '" want="' + want.status + '"\n';
+        if (data.tests && want.tests) {
+          data.tests.forEach((t: any, i: number) => {
+            const w = want.tests[i] || {};
+            const sMatch = t.status === w.status;
+            out += (sMatch ? '  PASS' : '  FAIL') + ' test[' + i + '].status: got="' + t.status + '" want="' + w.status + '"\n';
+            if (w.stdout && t.stdout !== w.stdout) {
+              out += '  INFO test[' + i + '].stdout diff (expected length ' + w.stdout.length + ')\n';
+            }
+            if (w.stderr && t.stderr && !t.stderr.includes(w.stderr)) {
+              out += '  INFO test[' + i + '].stderr diff\n';
+            }
+          });
+        }
+        if (data.build) {
+          out += 'build: ' + data.build.status + ' (' + data.build.duration_ms + 'ms)\n';
+        }
+        if (data.tests && data.tests[0]) {
+          const t = data.tests[0];
+          out += 'duration: ' + t.duration_ms + 'ms\n';
+          if (t.memory_peak_kb > 0) out += 'memory: ' + t.memory_peak_kb + ' KB\n';
+          out += '---stdout---\n' + (t.stdout || '(empty)') + '\n';
+          out += '---stderr---\n' + (t.stderr || '(empty)') + '\n';
+        }
+        setTestOutput(out);
+      } catch (e: any) { setTestOutput('request failed: ' + e.message); }
+      setTestLoading(false);
+    }
+
+    const filtered = testcases.filter((tc: any) =>
+      tc.lang.toLowerCase().includes(tcFilter.toLowerCase()) ||
+      tc.name.toLowerCase().includes(tcFilter.toLowerCase())
+    );
+    const grouped: Record<string, any[]> = {};
+    filtered.forEach((tc: any) => {
+      if (!grouped[tc.lang]) grouped[tc.lang] = [];
+      grouped[tc.lang].push(tc);
+    });
+    const sortedLangs = Object.keys(grouped).sort();
+
+    return React.createElement('div', { style: { fontFamily: 'monospace', padding: '10px', maxWidth: '1600px', margin: '0 auto' } },
+      React.createElement('div', { style: { display: 'flex', gap: '20px', alignItems: 'center', marginBottom: '10px' } },
+        React.createElement('h1', { style: { margin: 0 } }, 'test runner'),
+        React.createElement('button', { onClick: () => setPage('play'), style: { cursor: 'pointer', fontSize: '14px' } }, 'back to playground'),
+        React.createElement('span', { style: { fontSize: '12px', color: '#888' } }, testcases.length + ' testcases loaded'),
+      ),
+      React.createElement('input', {
+        type: 'text',
+        placeholder: 'filter tests...',
+        value: tcFilter,
+        onChange: (e: any) => setTcFilter(e.target.value),
+        style: { width: '100%', padding: '6px', fontSize: '14px', marginBottom: '10px', boxSizing: 'border-box' },
+      }),
+      React.createElement('div', { style: { display: 'flex', gap: '10px', height: 'calc(100vh - 120px)' } },
+        // Left panel: testcase list
+        React.createElement('div', { style: { flex: '0 0 350px', overflow: 'auto', border: '1px solid #ccc', borderRadius: '4px', padding: '8px' } },
+          sortedLangs.map(lang =>
+            React.createElement('div', { key: lang, style: { marginBottom: '8px' } },
+              React.createElement('div', { style: { fontWeight: 'bold', fontSize: '13px', marginBottom: '4px', color: '#555' } }, lang + ' (' + grouped[lang].length + ')'),
+              grouped[lang].map((tc: any) =>
+                React.createElement('div', {
+                  key: tc.lang + '/' + tc.name,
+                  onClick: () => { setSelectedTc(tc); setTestResult(null); setTestOutput(''); },
+                  style: {
+                    padding: '3px 8px', cursor: 'pointer', fontSize: '12px', borderRadius: '3px',
+                    background: selectedTc && selectedTc.lang === tc.lang && selectedTc.name === tc.name ? '#e3f2fd' : 'transparent',
+                  }
+                },
+                  (tc.name.startsWith('penetration-') ? '🛡️ ' : '🧪 ') + tc.name
+                )
+              )
+            )
+          ),
+          testcases.length === 0 && React.createElement('div', { style: { color: '#888', fontSize: '13px' } }, 'loading testcases...'),
+        ),
+        // Right panel: testcase detail + run
+        React.createElement('div', { style: { flex: 1, display: 'flex', flexDirection: 'column', gap: '10px', overflow: 'auto' } },
+          !selectedTc && React.createElement('div', { style: { color: '#888', fontSize: '14px', padding: '20px' } }, 'select a testcase from the left panel'),
+          selectedTc && React.createElement(React.Fragment, null,
+            React.createElement('div', { style: { display: 'flex', gap: '10px', alignItems: 'center' } },
+              React.createElement('h2', { style: { margin: 0, fontSize: '16px' } }, selectedTc.lang + ' / ' + selectedTc.name),
+              React.createElement('button', {
+                onClick: () => runTestcase(selectedTc),
+                disabled: testLoading,
+                style: { padding: '6px 16px', fontSize: '14px', cursor: testLoading ? 'wait' : 'pointer', background: testLoading ? '#ccc' : '#2196F3', color: 'white', border: 'none', borderRadius: '4px' }
+              }, testLoading ? 'running...' : 'run test'),
+            ),
+            React.createElement('div', { style: { display: 'flex', gap: '10px', flex: 1 } },
+              React.createElement('div', { style: { flex: 1, background: '#1e1e1e', color: '#d4d4d4', padding: '10px', fontFamily: 'monospace', fontSize: '12px', whiteSpace: 'pre-wrap', overflow: 'auto', borderRadius: '4px' } },
+                React.createElement('div', { style: { color: '#888', marginBottom: '4px', fontSize: '11px' } }, 'INPUT'),
+                JSON.stringify(selectedTc.input, null, 2),
+              ),
+              React.createElement('div', { style: { flex: 1, background: '#1e1e1e', color: '#d4d4d4', padding: '10px', fontFamily: 'monospace', fontSize: '12px', whiteSpace: 'pre-wrap', overflow: 'auto', borderRadius: '4px' } },
+                React.createElement('div', { style: { color: '#888', marginBottom: '4px', fontSize: '11px' } }, 'EXPECTED'),
+                JSON.stringify(selectedTc.want, null, 2),
+              ),
+              React.createElement('div', { style: { flex: 1, background: '#1e1e1e', color: '#d4d4d4', padding: '10px', fontFamily: 'monospace', fontSize: '12px', whiteSpace: 'pre-wrap', overflow: 'auto', borderRadius: '4px' } },
+                React.createElement('div', { style: { color: '#888', marginBottom: '4px', fontSize: '11px' } }, 'RESULT'),
+                testOutput || (testLoading ? 'running...' : 'click "run test" to execute'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   if (page === 'bench') {
     return React.createElement('div', { style: { fontFamily: 'monospace', padding: '10px', maxWidth: '1000px', margin: '0 auto' } },
       React.createElement('h1', null, 'benchmarks'),
@@ -207,6 +351,7 @@ function App() {
     React.createElement('div', { style: { display: 'flex', gap: '20px', alignItems: 'center', marginBottom: '10px' } },
       React.createElement('h1', { style: { margin: 0 } }, 'goboxd'),
       React.createElement('a', { href: '#', onClick: (e: any) => { e.preventDefault(); setPage('bench'); }, style: { fontSize: '14px' } }, 'benchmarks'),
+      React.createElement('a', { href: '#', onClick: (e: any) => { e.preventDefault(); setPage('tests'); }, style: { fontSize: '14px' } }, 'tests'),
       React.createElement('a', { href: API + '/info', target: '_blank', style: { fontSize: '14px' } }, '/info'),
       React.createElement('a', { href: API + '/readyz', target: '_blank', style: { fontSize: '14px' } }, '/readyz'),
     ),

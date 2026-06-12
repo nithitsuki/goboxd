@@ -4,5 +4,8 @@ services:
     ports:
       - "8080:8080"
     privileged: true # Required for nsjail to create namespaces
+    restart: unless-stopped
+    volumes:
+      - ./tests/testcases:/app/testcases:ro
     environment:
       - PORT=8080

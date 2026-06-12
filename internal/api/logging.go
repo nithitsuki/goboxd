@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"runtime/debug"
 	"sync/atomic"
 	"time"
 )
@@ -29,6 +30,25 @@ func (b *bodyRecorder) WriteHeader(code int) {
 func (b *bodyRecorder) Write(data []byte) (int, error) {
 	b.body.Write(data)
 	return b.ResponseWriter.Write(data)
+}
+
+// RecoveryMiddleware catches panics in handlers so a single bad request
+// doesn't crash the entire server (which would reset all in-flight connections).
+func RecoveryMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if rec := recover(); rec != nil {
+				log.Printf("PANIC recovered: %v\n%s", rec, debug.Stack())
+				// The ResponseWriter may have already been partially written to.
+				// Try to write an internal error. If that fails, the connection
+				// reset is unavoidable but at least the server stays up.
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusInternalServerError)
+				_, _ = w.Write([]byte(`{"error":{"code":"internal_error","message":"internal server error"}}`))
+			}
+		}()
+		next.ServeHTTP(w, r)
+	})
 }
 
 // LoggingMiddleware wraps an http.Handler to emit structured JSON request logs.

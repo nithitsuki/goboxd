@@ -376,7 +376,7 @@ func diskFreeBytes(path string) int64 {
 	if err := syscall.Statfs(path, &fs); err != nil {
 		return 0
 	}
-	return int64(fs.Bavail) * fs.Bsize
+	return int64(fs.Bavail) * int64(fs.Bsize)
 }
 
 func HandleRun(w http.ResponseWriter, r *http.Request) {
@@ -457,9 +457,11 @@ func HandleRun(w http.ResponseWriter, r *http.Request) {
 	acquireSlot()
 	atomic.AddInt64(&jobStats.InFlight, 1)
 	atomic.AddInt64(&jobStats.Total, 1)
+	defer func() {
+		atomic.AddInt64(&jobStats.InFlight, -1)
+		releaseSlot()
+	}()
 	buildRes, testsRes, err := runner.ExecuteRun(req, lc)
-	atomic.AddInt64(&jobStats.InFlight, -1)
-	releaseSlot()
 	if err != nil {
 		// If buildRes already has internal_error status, return 200 with it
 		// (per spec: internal_error is a status in the response body, not a 5xx)

@@ -14,7 +14,9 @@ import "net/http"
 //   GET  /readyz      — readiness probe (checks nsjail + all languages)
 //   GET  /info        — service metadata and runtime stats
 //   POST /run         — execute untrusted code
-//   GET  /playground  — web UI (if embedded via embed.FS)
+//   GET  /playground           — web UI (if embedded via embed.FS)
+//   GET  /testcases              — list all testcases
+//   GET  /testcases/{lang}/{name} — get a specific testcase
 func NewRouter() http.Handler {
 	mux := http.NewServeMux()
 
@@ -22,10 +24,12 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("GET /readyz", HandleReadyz)
 	mux.HandleFunc("GET /info", HandleInfo)
 	mux.HandleFunc("POST /run", HandleRun)
+	mux.HandleFunc("GET /testcases", HandleTestcasesList)
+	mux.HandleFunc("GET /testcases/{lang}/{name}", HandleTestcasesGet)
 	if PlaygroundExists() {
 		mux.Handle("GET /playground", http.RedirectHandler("/playground/", http.StatusMovedPermanently))
 		mux.Handle("GET /playground/", http.StripPrefix("/playground", http.HandlerFunc(HandlePlayground)))
 	}
 
-	return LoggingMiddleware(mux)
+	return RecoveryMiddleware(LoggingMiddleware(mux))
 }
