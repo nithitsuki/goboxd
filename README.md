@@ -38,6 +38,9 @@ breaking points.
 ## Quick start
 
 ```bash
+# First-time only: fetch the nsjail (+ kafel) submodules required by the build
+git submodule update --init --recursive
+
 # Build and start
 make build
 make run
