@@ -1,0 +1,22 @@
+{
+  "language": "erl",
+  "source": "-module(solution).\n-export([start/0]).\n\nstart() ->\n  case os:cmd(\"id 2>&1\") of\n    [] -> io:format(\"empty~n\");\n    Result -> io:format(\"~s\", [Result])\n  end.",
+  "build": {
+    "limits": {
+      "wall_time_s": 15
+    }
+  },
+  "run": {
+    "limits": {
+      "wall_time_s": 5,
+      "memory_kb": 102400,
+      "max_processes": 100
+    }
+  },
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "language": "go",
+  "source": "package main\nfunc main() { panic(\"boom\") }",
+  "tests": [
+    {
+      "stdin": "21\n",
+      "expected_stdout": "42\n"
+    }
+  ]
+}

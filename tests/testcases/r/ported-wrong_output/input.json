@@ -1,0 +1,17 @@
+{
+  "language": "r",
+  "source": "n <- as.integer(readLines(\"stdin\", n = 1))\ncat(n * 2, \"\\n\", sep = \"\")",
+  "tests": [
+    {
+      "stdin": "21\n",
+      "expected_stdout": "43\n"
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 9,
+      "memory_kb": 102400,
+      "max_processes": 100
+    }
+  }
+}

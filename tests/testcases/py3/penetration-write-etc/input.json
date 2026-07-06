@@ -1,0 +1,15 @@
+{
+  "language": "py3",
+  "source": "try:\n  with open('/etc/hosts', 'w') as f:\n    f.write('evil')\n  print('write succeeded')\nexcept Exception as e:\n  print(f'error: {e}')",
+  "run": {
+    "limits": {
+      "wall_time_s": 5
+    }
+  },
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ]
+}

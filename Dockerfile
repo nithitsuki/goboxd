@@ -1,39 +1,94 @@
-# syntax=docker/dockerfile:1.7
+# Stage 1: Build nsjail and goboxd
+FROM golang:1.25-bookworm AS builder
 
-ARG GO_VERSION=1.23
-ARG DEBIAN_VERSION=bookworm
-ARG NSJAIL_VERSION=3.4
+# Install nsjail build dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    pkg-config \
+    bison \
+    flex \
+    libprotobuf-dev \
+    protobuf-compiler \
+    libnl-route-3-dev
 
-# ---- Build nsjail from source ----
-FROM debian:${DEBIAN_VERSION}-slim AS nsjail-builder
-ARG NSJAIL_VERSION
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        autoconf bison ca-certificates flex g++ gcc git libnl-route-3-dev \
-        libprotobuf-dev libtool make pkg-config protobuf-compiler \
-    && rm -rf /var/lib/apt/lists/*
-RUN git clone --depth 1 --branch ${NSJAIL_VERSION} https://github.com/google/nsjail.git /src/nsjail \
-    && make -C /src/nsjail \
-    && install -m 0755 /src/nsjail/nsjail /usr/local/bin/nsjail
+# Build nsjail
+COPY external/nsjail /nsjail-src
+WORKDIR /nsjail-src
+RUN make -j$(nproc)
 
-# ---- Builder / dev image (Go + linters + nsjail) ----
-FROM golang:${GO_VERSION}-${DEBIAN_VERSION} AS builder
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        libnl-route-3-200 libprotobuf32 \
-    && rm -rf /var/lib/apt/lists/*
-COPY --from=nsjail-builder /usr/local/bin/nsjail /usr/local/bin/nsjail
-RUN go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
-WORKDIR /src
+# Build goboxd
+WORKDIR /app
 COPY go.mod ./
-RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/goboxd ./cmd/goboxd
+RUN CGO_ENABLED=0 GOOS=linux go build -o goboxd ./cmd/goboxd
 
-# ---- Runtime image ----
-FROM debian:${DEBIAN_VERSION}-slim AS runtime
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        ca-certificates libnl-route-3-200 libprotobuf32 \
-    && rm -rf /var/lib/apt/lists/*
-COPY --from=nsjail-builder /usr/local/bin/nsjail /usr/local/bin/nsjail
-COPY --from=builder        /out/goboxd          /usr/local/bin/goboxd
+# Stage 2: Runtime environment with languages
+FROM debian:bookworm-slim
+
+# Copy scripts
+COPY scripts/ /app/scripts/
+WORKDIR /app
+
+# Make all scripts executable
+RUN chmod +x /app/scripts/lang_install/*.sh
+
+# --- Layer 1: System dependencies ---
+RUN /app/scripts/lang_install/system.sh
+
+# --- Layer 2: C ---
+RUN /app/scripts/lang_install/c.sh
+
+# --- Layer 3: C++ ---
+RUN /app/scripts/lang_install/cpp.sh
+
+# --- Layer 4: Python 3 ---
+RUN /app/scripts/lang_install/python3.sh
+
+# --- Layer 5: Java ---
+RUN /app/scripts/lang_install/java.sh
+
+# --- Layer 6: Node.js ---
+RUN /app/scripts/lang_install/nodejs.sh
+
+# --- Layer 7: Haskell ---
+RUN /app/scripts/lang_install/haskell.sh
+
+# --- Layer 8: OCaml ---
+RUN /app/scripts/lang_install/ocaml.sh
+
+# --- Layer 9: R ---
+RUN /app/scripts/lang_install/r.sh
+
+# --- Layer 10: D / GDC ---
+RUN /app/scripts/lang_install/gdc.sh
+
+# --- Layer 11: LuaJIT ---
+RUN /app/scripts/lang_install/luajit.sh
+
+# --- Layer 12: Verilog ---
+RUN /app/scripts/lang_install/iverilog.sh
+
+# --- Layer 13: Rust ---
+RUN /app/scripts/lang_install/rust.sh
+
+# --- Layer 14: Go ---
+RUN /app/scripts/lang_install/go.sh
+
+# --- Layer 15: Erlang ---
+RUN /app/scripts/lang_install/erlang.sh
+
+# --- Layer 16: Lisp ---
+RUN /app/scripts/lang_install/lisp.sh
+
+# --- Layer 17: Final cleanup ---
+RUN apt clean && rm -rf /var/lib/apt/lists/*
+
+# Copy config
+COPY config/ /app/config/
+
+# Copy binaries from builder
+COPY --from=builder /nsjail-src/nsjail /usr/bin/nsjail
+COPY --from=builder /app/goboxd /usr/local/bin/goboxd
+
 EXPOSE 8080
-ENTRYPOINT ["/usr/local/bin/goboxd"]
+CMD ["goboxd"]

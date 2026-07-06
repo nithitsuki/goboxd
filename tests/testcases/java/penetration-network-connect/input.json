@@ -1,0 +1,20 @@
+{
+  "language": "java",
+  "source": "import java.net.*;\npublic class Main {\n  public static void main(String[] args) throws Exception {\n    try {\n      Socket s = new Socket();\n      s.connect(new InetSocketAddress(\"93.184.216.34\", 80), 3000);\n      System.out.println(\"connected!\");\n      s.close();\n    } catch(Exception e) {\n      System.out.println(\"error: \" + e.getMessage());\n    }\n  }\n}",
+  "build": {
+    "limits": {
+      "wall_time_s": 10
+    }
+  },
+  "run": {
+    "limits": {
+      "wall_time_s": 5
+    }
+  },
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ]
+}

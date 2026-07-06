@@ -1,0 +1,10 @@
+{
+  "status": "accepted",
+  "build": { "status": "ok" },
+  "tests": [
+    {
+      "status": "accepted",
+      "stdout": "Memory test completed\n"
+    }
+  ]
+}

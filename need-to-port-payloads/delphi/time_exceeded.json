@@ -1,0 +1,15 @@
+{
+  "language": "delphi",
+  "source": "program Main;\nbegin\n  while True do\n  begin\n  end;\nend.",
+  "tests": [
+    {
+      "stdin": "21\n",
+      "expected_stdout": "42\n"
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 1
+    }
+  }
+}

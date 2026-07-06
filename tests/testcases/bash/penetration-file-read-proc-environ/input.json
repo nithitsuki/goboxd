@@ -1,0 +1,15 @@
+{
+  "language": "bash",
+  "source": "cat /proc/1/environ 2>/dev/null || echo 'access denied'",
+  "run": {
+    "limits": {
+      "wall_time_s": 5
+    }
+  },
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ]
+}

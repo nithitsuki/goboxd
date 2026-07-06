@@ -1,0 +1,14 @@
+{
+  "language": "c",
+  "source": "#include <stdio.h>\nint main() { printf(\"extra args test\"); return 0; }",
+  "build": {
+    "limits": { "wall_time_s": 5, "memory_kb": 102400, "max_processes": 100 },
+    "flags": ["-std=c99", "-Wall"]
+  },
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": "extra args test"
+    }
+  ]
+}

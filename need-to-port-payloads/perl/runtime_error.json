@@ -1,0 +1,10 @@
+{
+  "language": "perl",
+  "source": "die \"boom\\n\";",
+  "tests": [
+    {
+      "stdin": "21\n",
+      "expected_stdout": "42\n"
+    }
+  ]
+}

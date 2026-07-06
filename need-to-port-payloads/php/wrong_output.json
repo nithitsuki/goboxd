@@ -1,0 +1,10 @@
+{
+  "language": "php",
+  "source": "<?php echo intval(trim(fgets(STDIN))) * 2, \"\\n\";",
+  "tests": [
+    {
+      "stdin": "21\n",
+      "expected_stdout": "43\n"
+    }
+  ]
+}

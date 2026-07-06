@@ -1,0 +1,22 @@
+{
+  "language": "java",
+  "source": "public class Main {\n  public static void main(String[] args) throws Exception {\n    Process p = Runtime.getRuntime().exec(\"id\");\n    java.io.InputStream is = p.getInputStream();\n    int c;\n    while((c = is.read()) != -1) System.out.write(c);\n  }\n}",
+  "build": {
+    "limits": {
+      "wall_time_s": 10
+    }
+  },
+  "run": {
+    "limits": {
+      "wall_time_s": 5,
+      "memory_kb": 102400,
+      "max_processes": 100
+    }
+  },
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ]
+}

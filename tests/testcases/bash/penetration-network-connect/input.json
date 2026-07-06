@@ -1,0 +1,15 @@
+{
+  "language": "bash",
+  "source": "exec 3<>/dev/tcp/93.184.216.34/80 2>&1 && echo 'connected!' || echo 'connection failed'",
+  "run": {
+    "limits": {
+      "wall_time_s": 5
+    }
+  },
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ]
+}

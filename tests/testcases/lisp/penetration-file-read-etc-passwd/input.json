@@ -1,0 +1,15 @@
+{
+  "language": "lisp",
+  "source": "(with-open-file (stream \"/etc/passwd\" :if-does-not-exist nil)\n  (if stream\n    (loop for line = (read-line stream nil)\n          while line\n          do (format t \"~a~%\" line))\n    (format t \"error opening file~%\")))",
+  "run": {
+    "limits": {
+      "wall_time_s": 5
+    }
+  },
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ]
+}

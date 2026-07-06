@@ -1,0 +1,10 @@
+{
+  "language": "dart",
+  "source": "import 'dart:io';\nvoid main() {\n    var n = int.parse(stdin.readLineSync()!.trim());\n    print(n * 2);\n}",
+  "tests": [
+    {
+      "stdin": "21\n",
+      "expected_stdout": "43\n"
+    }
+  ]
+}

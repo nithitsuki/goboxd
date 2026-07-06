@@ -1,0 +1,10 @@
+{
+  "language": "perl",
+  "source": "my $n = <STDIN>;\nchomp $n;\nprint $n * 2, \"\\n\";",
+  "tests": [
+    {
+      "stdin": "21\n",
+      "expected_stdout": "43\n"
+    }
+  ]
+}

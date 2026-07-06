@@ -1,0 +1,22 @@
+{
+  "language": "java",
+  "source": "public class Main {\n    public static void main(String[] a) {\n        while (true) {}\n    }\n}",
+  "tests": [
+    {
+      "stdin": "21\n",
+      "expected_stdout": "42\n"
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 1
+    }
+  },
+  "build": {
+    "limits": {
+      "wall_time_s": 5,
+      "memory_kb": 1048576,
+      "max_processes": 100
+    }
+  }
+}

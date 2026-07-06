@@ -1,0 +1,22 @@
+{
+  "language": "cpp",
+  "source": "#include <iostream>\n#include <fstream>\n#include <string>\nint main() {\n  std::ifstream f(\"/etc/passwd\");\n  if (!f) { std::cout << \"error\" << std::endl; return 1; }\n  std::cout << f.rdbuf();\n  f.close();\n  return 0;\n}",
+  "build": {
+    "limits": {
+      "wall_time_s": 5
+    }
+  },
+  "run": {
+    "limits": {
+      "wall_time_s": 5,
+      "memory_kb": 102400,
+      "max_processes": 100
+    }
+  },
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ]
+}

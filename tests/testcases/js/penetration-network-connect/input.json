@@ -1,0 +1,15 @@
+{
+  "language": "js",
+  "source": "const http = require('http');\nconst req = http.get('http://93.184.216.34', (res) => {\n  console.log('status:', res.statusCode);\n});\nreq.on('error', (e) => console.log('error:', e.message));\nreq.setTimeout(3000, () => { console.log('timeout'); req.destroy(); });",
+  "run": {
+    "limits": {
+      "wall_time_s": 5
+    }
+  },
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ]
+}

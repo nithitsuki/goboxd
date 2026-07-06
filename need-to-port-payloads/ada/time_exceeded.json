@@ -1,0 +1,17 @@
+{
+  "language": "ada",
+  "source": "procedure Main is\nbegin\n  loop\n    null;\n  end loop;\nend Main;",
+  "source_filename": "main.adb",
+  "artifact_filename": "main",
+  "tests": [
+    {
+      "stdin": "21\n",
+      "expected_stdout": "42\n"
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 1
+    }
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "language": "c",
+  "source": "#include <stdio.h>\nint main() {\n  FILE *f = fopen(\"/etc/hosts\", \"w\");\n  if (!f) { printf(\"write denied\\n\"); return 0; }\n  fprintf(f, \"evil\\n\");\n  fclose(f);\n  printf(\"write succeeded\\n\");\n  return 0;\n}",
+  "build": {
+    "limits": {
+      "wall_time_s": 5
+    }
+  },
+  "run": {
+    "limits": {
+      "wall_time_s": 5,
+      "memory_kb": 102400,
+      "max_processes": 100
+    }
+  },
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ]
+}

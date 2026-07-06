@@ -1,0 +1,24 @@
+{
+  "language": "erl",
+  "source": "-module(solution).\n-export([start/0]).\n\nstart() ->\n    Line = io:get_line(\"\"),\n    N = list_to_integer(string:trim(Line)),\n    io:format(\"~p~n\", [N * 2]).",
+  "tests": [
+    {
+      "stdin": "21\n",
+      "expected_stdout": "42\n"
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 5,
+      "memory_kb": 524288,
+      "max_processes": 64
+    }
+  },
+  "build": {
+    "limits": {
+      "wall_time_s": 5,
+      "memory_kb": 1048576,
+      "max_processes": 100
+    }
+  }
+}

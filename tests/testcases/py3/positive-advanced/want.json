@@ -1,0 +1,10 @@
+{
+  "status": "accepted",
+  "build": { "status": "ok" },
+  "tests": [
+    {
+      "status": "accepted",
+      "stdout": "Python 3 advanced test\nProcessed 100 items\n"
+    }
+  ]
+}

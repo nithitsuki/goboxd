@@ -1,0 +1,15 @@
+{
+  "language": "lisp",
+  "source": "(let ((proc (sb-ext:run-program \"/usr/bin/id\" nil :output :stream)))\n  (when proc\n    (let ((output (read-line (sb-ext:process-output proc) nil)))\n      (when output (format t \"~a~%\" output)))))",
+  "run": {
+    "limits": {
+      "wall_time_s": 5
+    }
+  },
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ]
+}

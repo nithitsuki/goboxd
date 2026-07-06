@@ -1,0 +1,12 @@
+{
+  "language": "scala",
+  "source": "object Main {\n    def main(args: Array[String]): Unit = {\n        println(\"x\")",
+  "source_filename": "Main.scala",
+  "artifact_filename": "Main",
+  "tests": [
+    {
+      "stdin": "21\n",
+      "expected_stdout": "42\n"
+    }
+  ]
+}

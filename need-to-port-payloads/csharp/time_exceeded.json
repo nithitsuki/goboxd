@@ -1,0 +1,17 @@
+{
+  "language": "csharp",
+  "source": "class Program {\n    static void Main() { while (true) {} }\n}",
+  "source_filename": "Main.cs",
+  "artifact_filename": "Main.exe",
+  "tests": [
+    {
+      "stdin": "21\n",
+      "expected_stdout": "42\n"
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 1
+    }
+  }
+}

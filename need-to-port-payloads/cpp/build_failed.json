@@ -1,0 +1,10 @@
+{
+  "language": "cpp",
+  "source": "int main() { std::cout << \"x\" }",
+  "tests": [
+    {
+      "stdin": "21\n",
+      "expected_stdout": "42\n"
+    }
+  ]
+}

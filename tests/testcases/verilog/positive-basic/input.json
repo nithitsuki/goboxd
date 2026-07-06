@@ -1,0 +1,1 @@
+{"language":"verilog","source":"module hello;\ninitial begin\n  $display(\"Hello from Verilog!\");\n  $finish;\nend\nendmodule","build":{"limits":{"wall_time_s":6,"memory_kb":102400,"max_processes":100}},"tests":[{"stdin":"","expected_stdout":"Hello from Verilog!\n"}]}

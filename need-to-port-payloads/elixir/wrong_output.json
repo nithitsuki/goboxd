@@ -1,0 +1,10 @@
+{
+  "language": "elixir",
+  "source": "n = IO.gets(\"\") |> String.trim() |> String.to_integer()\nIO.puts(n * 2)",
+  "tests": [
+    {
+      "stdin": "21\n",
+      "expected_stdout": "43\n"
+    }
+  ]
+}

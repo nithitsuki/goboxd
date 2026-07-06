@@ -1,0 +1,10 @@
+{
+  "language": "ocaml",
+  "source": "let () =\n  let n = int_of_string (String.trim (input_line stdin)) in\n  Printf.printf \"%d\\n\" (n * 2)",
+  "tests": [
+    {
+      "stdin": "21\n",
+      "expected_stdout": "42\n"
+    }
+  ]
+}

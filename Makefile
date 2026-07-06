@@ -1,19 +1,35 @@
-.PHONY: build run test integration lint
-
-COMPOSE ?= docker compose
-TOOLS   := $(COMPOSE) --profile tools run --rm tools
+.PHONY: build run test integration integration-docker integration-safe lint fmt vulncheck
 
 build:
-	$(COMPOSE) build goboxd
+	docker compose build
 
 run:
-	$(COMPOSE) up goboxd
+	docker compose up
 
 test:
-	$(TOOLS) go test ./...
+	go test -v ./boxd/...
 
 integration:
-	$(TOOLS) go test -tags=integration ./tests/...
+	go test -v -count=1 ./tests/integration/...
+
+integration-docker:
+	API_URL=http://localhost:8080 go test -v -count=1 ./tests/integration/...
+
+integration-safe:
+	SKIP_PENETRATION=1 API_URL=http://localhost:8080 go test -v -count=1 ./tests/integration/...
+
+load:
+	./scripts/bench.sh
+
+load-save:
+	BENCH_SAVE=1 ./scripts/bench.sh
 
 lint:
-	$(TOOLS) golangci-lint run ./...
+	golangci-lint run ./... && $(MAKE) vulncheck
+
+vulncheck:
+	@which govulncheck > /dev/null 2>&1 || go install golang.org/x/vuln/cmd/govulncheck@latest
+	govulncheck ./...
+
+fmt:
+	go fmt ./...

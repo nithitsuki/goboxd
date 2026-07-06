@@ -1,0 +1,10 @@
+{
+  "language": "c",
+  "source": "#include <stdio.h>\nint main() { printf(\"x\") return 0; }",
+  "tests": [
+    {
+      "stdin": "21\n",
+      "expected_stdout": "42\n"
+    }
+  ]
+}

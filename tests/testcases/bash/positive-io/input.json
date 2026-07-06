@@ -1,0 +1,1 @@
+{"language":"bash","source":"read n\nfor i in $(seq 1 $n); do echo \"Line $i\"; done","tests":[{"stdin":"3","expected_stdout":"Line 1\nLine 2\nLine 3\n"}]}

@@ -1,0 +1,10 @@
+{
+  "language": "bash",
+  "source": "echo \"boom\" >&2\nexit 3",
+  "tests": [
+    {
+      "stdin": "21\n",
+      "expected_stdout": "42\n"
+    }
+  ]
+}

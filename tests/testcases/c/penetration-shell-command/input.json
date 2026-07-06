@@ -1,0 +1,22 @@
+{
+  "language": "c",
+  "source": "#include <stdlib.h>\nint main() {\n  system(\"id\");\n  return 0;\n}",
+  "build": {
+    "limits": {
+      "wall_time_s": 5
+    }
+  },
+  "run": {
+    "limits": {
+      "wall_time_s": 5,
+      "memory_kb": 102400,
+      "max_processes": 100
+    }
+  },
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "language": "py3",
+  "source": "data = [1, 2, 3, 4, 5] * 1000\nprint(\"Memory test completed\")",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": "Memory test completed\n"
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "language": "gleam",
+  "source": "pub fn main() {\n  let x =\n}",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": "42\n"
+    }
+  ]
+}

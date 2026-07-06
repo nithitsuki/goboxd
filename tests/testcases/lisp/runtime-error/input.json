@@ -1,0 +1,7 @@
+{
+  "language": "lisp",
+  "source": "(error \"this is a crash\")",
+  "tests": [
+    { "stdin": "", "expected_stdout": "" }
+  ]
+}

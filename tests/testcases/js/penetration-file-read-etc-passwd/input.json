@@ -1,0 +1,15 @@
+{
+  "language": "js",
+  "source": "const fs = require('fs');\ntry {\n  console.log(fs.readFileSync('/etc/passwd', 'utf8'));\n} catch(e) {\n  console.log('error:', e.message);\n}",
+  "run": {
+    "limits": {
+      "wall_time_s": 5
+    }
+  },
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "language": "fortran",
+  "source": "program main\n  error stop 3\nend program main",
+  "tests": [
+    {
+      "stdin": "21\n",
+      "expected_stdout": "42\n"
+    }
+  ]
+}

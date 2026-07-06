@@ -1,0 +1,10 @@
+{
+  "language": "python",
+  "source": "import sys\nsys.stdin.read()\nraise ValueError(\"boom\")",
+  "tests": [
+    {
+      "stdin": "21\n",
+      "expected_stdout": "42\n"
+    }
+  ]
+}

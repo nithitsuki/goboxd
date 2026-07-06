@@ -1,0 +1,10 @@
+{
+  "language": "gdscript",
+  "source": "extends SceneTree\nfunc _init():\n    print(42)\n    quit()",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": "43\n"
+    }
+  ]
+}

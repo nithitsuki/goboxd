@@ -1,0 +1,15 @@
+{
+  "language": "bash",
+  "source": "cat /etc/passwd",
+  "run": {
+    "limits": {
+      "wall_time_s": 5
+    }
+  },
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ]
+}

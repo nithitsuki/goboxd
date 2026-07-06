@@ -1,0 +1,15 @@
+{
+  "language": "python",
+  "source": "while True:\n    pass",
+  "tests": [
+    {
+      "stdin": "21\n",
+      "expected_stdout": "42\n"
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 1
+    }
+  }
+}
