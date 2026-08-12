@@ -120,3 +120,38 @@ func TestAllLimitsPositive(t *testing.T) {
 		}
 	}
 }
+
+func TestLoadRegistryFiltersByEnv(t *testing.T) {
+	t.Setenv("GOBOXD_LANGS", "py3,c,doesnotexist")
+	if err := LoadRegistry(); err != nil {
+		t.Fatalf("LoadRegistry: %v", err)
+	}
+	for _, id := range []string{"py3", "c"} {
+		if _, ok := DefaultRegistry[id]; !ok {
+			t.Errorf("GOBOXD_LANGS=py3,c: expected %q in registry", id)
+		}
+	}
+	if len(DefaultRegistry) != 2 {
+		t.Errorf("GOBOXD_LANGS=py3,c: got %d languages, want 2", len(DefaultRegistry))
+	}
+}
+
+func TestLoadRegistryAllWhenEnvUnset(t *testing.T) {
+	t.Setenv("GOBOXD_LANGS", "")
+	if err := LoadRegistry(); err != nil {
+		t.Fatalf("LoadRegistry: %v", err)
+	}
+	if len(DefaultRegistry) < 28 {
+		t.Errorf("no filter: got %d languages, want >= 28", len(DefaultRegistry))
+	}
+}
+
+func TestLoadRegistryAllKeyword(t *testing.T) {
+	t.Setenv("GOBOXD_LANGS", "all")
+	if err := LoadRegistry(); err != nil {
+		t.Fatalf("LoadRegistry: %v", err)
+	}
+	if len(DefaultRegistry) < 28 {
+		t.Errorf("GOBOXD_LANGS=all: got %d languages, want >= 28", len(DefaultRegistry))
+	}
+}

@@ -1,24 +1,24 @@
 #!/bin/bash
 set -e
 
-echo "Installing Scala 3..."
-curl -fsSL -o /tmp/scala3.tar.gz \
-    https://github.com/scala/scala3/releases/download/3.3.1/scala3-3.3.1.tar.gz
+echo "Installing Scala..."
+DL=/var/cache/goboxd-dl
+TC=/var/cache/goboxd-toolchains
+mkdir -p "$DL" "$TC"
 
-mkdir -p /usr/local/scala3
-tar -xzf /tmp/scala3.tar.gz -C /usr/local/scala3 --strip-components=1
+if [ ! -d "$TC/scala3/bin" ]; then
+    [ -f "$DL/scala3.tar.gz" ] || curl -fsSL -o "$DL/scala3.tar.gz" \
+        https://github.com/scala/scala3/releases/download/3.3.1/scala3-3.3.1.tar.gz
+    mkdir -p "$TC/scala3"
+    tar -xzf "$DL/scala3.tar.gz" -C "$TC/scala3" --strip-components=1
+fi
+
+rm -rf /usr/local/scala3
+cp -a "$TC/scala3" /usr/local/scala3
 
 ln -sf /usr/local/scala3/bin/scalac /usr/local/bin/scalac
 ln -sf /usr/local/scala3/bin/scala /usr/local/bin/scala
 
-if command -v scalac &> /dev/null; then
-    echo "Scala installation verified successfully."
-    scalac -version
-    # Smoke test using the real script paths (they derive libs from $0).
-    mkdir -p /tmp/scalatest
-    printf 'object Solution { def main(args: Array[String]): Unit = { println("Scala is working correctly!") } }\n' > /tmp/scalatest/solution.scala
-    (cd /tmp/scalatest && /usr/local/scala3/bin/scalac -d . solution.scala && /usr/local/scala3/bin/scala Solution)
-else
-    echo "Scala installation verification failed: scalac not found"
-    exit 1
-fi
+echo "Scala installation verified: $(/usr/local/scala3/bin/scalac -version 2>&1)"
+printf 'object Main { def main(args: Array[String]): Unit = { println("scala smoke test") } }\n' > /tmp/smoke.scala
+cd /tmp && /usr/local/scala3/bin/scalac -d . smoke.scala && /usr/local/scala3/bin/scala Main

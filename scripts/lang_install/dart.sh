@@ -2,11 +2,19 @@
 set -e
 
 echo "Installing Dart SDK..."
-curl -fsSL -o /tmp/dart.zip \
-    https://storage.googleapis.com/dart-archive/channels/stable/release/3.2.6/sdk/dartsdk-linux-x64-release.zip
+DL=/var/cache/goboxd-dl
+TC=/var/cache/goboxd-toolchains
+mkdir -p "$DL" "$TC"
 
-unzip -q /tmp/dart.zip -d /usr/local/
-mv /usr/local/dart-sdk /usr/local/dart
+if [ ! -d "$TC/dart/bin" ]; then
+    [ -f "$DL/dart.zip" ] || curl -fsSL -o "$DL/dart.zip" \
+        https://storage.googleapis.com/dart-archive/channels/stable/release/3.2.6/sdk/dartsdk-linux-x64-release.zip
+    unzip -q "$DL/dart.zip" -d "$TC"
+    mv "$TC/dart-sdk" "$TC/dart"
+fi
+
+rm -rf /usr/local/dart
+cp -a "$TC/dart" /usr/local/dart
 
 ln -sf /usr/local/dart/bin/dart /usr/local/bin/dart
 
@@ -23,7 +31,6 @@ chmod +x /usr/local/bin/dart-compile
 if command -v dart &> /dev/null; then
     echo "Dart installation verified successfully."
     dart --version
-    # Smoke test: AOT compile + run.
     mkdir -p /tmp/darttest
     printf "void main() { print('Dart is working correctly!'); }\n" > /tmp/darttest/solution.dart
     (cd /tmp/darttest && /usr/local/dart/bin/dart compile exe solution.dart -o solution > /dev/null && ./solution)

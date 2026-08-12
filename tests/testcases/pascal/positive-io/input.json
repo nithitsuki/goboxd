@@ -1,0 +1,24 @@
+{
+  "language": "pascal",
+  "source": "program P;\nvar n, i: Integer;\nbegin\n  readln(n);\n  for i := 1 to n do\n    writeln('Line ', i);\nend.",
+  "build": {
+    "limits": {
+      "wall_time_s": 10,
+      "memory_kb": 1048576,
+      "max_processes": 100
+    }
+  },
+  "run": {
+    "limits": {
+      "wall_time_s": 9,
+      "memory_kb": 524288,
+      "max_processes": 64
+    }
+  },
+  "tests": [
+    {
+      "stdin": "3",
+      "expected_stdout": "Line 1\nLine 2\nLine 3\n"
+    }
+  ]
+}

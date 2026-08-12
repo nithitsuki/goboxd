@@ -2,6 +2,9 @@
 
 set -e 
 
+# Ensure apt package lists are present. The /var/lib/apt/lists cache mount
+# can be cold after a Dockerfile change; a warm mount skips the network update.
+[ -n "$(ls -A /var/lib/apt/lists 2>/dev/null)" ] || apt-get update
 if ! command -v /usr/bin/g++ &> /dev/null; then
     echo "g++ is not installed. Installing g++ using apt-get..."
     apt-get install -y g++

@@ -1,10 +1,10 @@
 .PHONY: build run test integration integration-docker integration-safe lint fmt vulncheck
 
 build:
-	docker compose build
+	./scripts/build.sh $(LANGS)
 
 run:
-	docker compose up
+	LANGS="$(LANGS)" docker compose up
 
 test:
 	go test -v ./boxd/...

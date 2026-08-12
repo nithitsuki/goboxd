@@ -1,0 +1,24 @@
+{
+  "language": "pascal",
+  "source": "program P;\nvar f: Text;\nbegin\n  assign(f, '/etc/hosts');\n  {$I-} append(f); {$I+}\n  if IOResult = 0 then begin\n    writeln(f, 'x');\n    close(f);\n  end;\nend.",
+  "build": {
+    "limits": {
+      "wall_time_s": 10,
+      "memory_kb": 1048576,
+      "max_processes": 100
+    }
+  },
+  "run": {
+    "limits": {
+      "wall_time_s": 5,
+      "memory_kb": 524288,
+      "max_processes": 64
+    }
+  },
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ]
+}

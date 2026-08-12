@@ -1,17 +1,23 @@
 #!/bin/bash
 set -e
 
-echo "Installing .NET SDK (for C#)..."
+echo "Installing .NET SDK..."
 apt-get install -y --no-install-recommends curl libicu72 libssl3 zlib1g
 
-curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh
-bash /tmp/dotnet-install.sh --channel 10.0 --install-dir /usr/local/dotnet --no-path
+DL=/var/cache/goboxd-dl
+TC=/var/cache/goboxd-toolchains
+mkdir -p "$DL" "$TC"
+
+if [ ! -d "$TC/dotnet/sdk" ]; then
+    [ -f "$DL/dotnet-install.sh" ] || curl -fsSL https://dot.net/v1/dotnet-install.sh -o "$DL/dotnet-install.sh"
+    bash "$DL/dotnet-install.sh" --channel 10.0 --install-dir "$TC/dotnet" --no-path
+fi
+
+rm -rf /usr/local/dotnet
+cp -a "$TC/dotnet" /usr/local/dotnet
 
 ln -sf /usr/local/dotnet/dotnet /usr/local/bin/dotnet
 
-# Wrapper that compiles a single .cs file offline with the SDK's Roslyn
-# compiler, referencing the bundled reference assemblies, then writes the
-# runtimeconfig.json required by `dotnet solution.dll`.
 cat > /usr/local/bin/csharp-build <<'WRAPPER'
 #!/bin/bash
 set -e
@@ -36,7 +42,6 @@ chmod +x /usr/local/bin/csharp-build
 if command -v dotnet &> /dev/null; then
     echo ".NET installation verified successfully."
     dotnet --version
-    # Smoke test the wrapper.
     mkdir -p /tmp/cstest
     printf 'using System; class P { static void Main() { Console.WriteLine("C# is working correctly!"); } }\n' > /tmp/cstest/solution.cs
     (cd /tmp/cstest && /usr/local/bin/csharp-build solution.cs && dotnet solution.dll)

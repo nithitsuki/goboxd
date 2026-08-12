@@ -1,0 +1,24 @@
+{
+  "language": "pascal",
+  "source": "program P;\nvar n: Int64;\nbegin\n  readln(n);\n  writeln(n * 2);\nend.",
+  "build": {
+    "limits": {
+      "wall_time_s": 10,
+      "memory_kb": 1048576,
+      "max_processes": 100
+    }
+  },
+  "run": {
+    "limits": {
+      "wall_time_s": 9,
+      "memory_kb": 524288,
+      "max_processes": 64
+    }
+  },
+  "tests": [
+    {
+      "stdin": "21\n",
+      "expected_stdout": "42\n"
+    }
+  ]
+}

@@ -28,6 +28,27 @@ func TestFixtures(t *testing.T) {
 	}
 }
 
+// TestFixtureNamesUnique guards the subtest naming scheme. Every fixture name
+// must be "<lang>/<name>" and unique, so a failing subtest maps directly to a
+// language without relying on Go's opaque #N collision suffixes.
+func TestFixtureNamesUnique(t *testing.T) {
+	fixtures, err := discoverFixtures(filepath.Join("..", "testcases"))
+	if err != nil {
+		t.Fatalf("discovering fixtures: %v", err)
+	}
+
+	seen := make(map[string]bool, len(fixtures))
+	for _, f := range fixtures {
+		if !strings.Contains(f.Name, "/") {
+			t.Errorf("fixture name %q has no language prefix", f.Name)
+		}
+		if seen[f.Name] {
+			t.Errorf("duplicate fixture name %q", f.Name)
+		}
+		seen[f.Name] = true
+	}
+}
+
 func runFixture(t *testing.T, baseURL string, f Fixture) {
 	// Build the request body as raw JSON so we preserve exactly what's in the fixture
 	body, err := json.Marshal(f.Input)

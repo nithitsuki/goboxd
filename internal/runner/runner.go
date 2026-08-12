@@ -192,6 +192,10 @@ func nsjailArgs(appDir string, wallTime, memKB, procs int) []string {
 		// is too small for compilers that spill temp files (swiftc needs
 		// ~16MB for a Foundation build; go builds also cache into /tmp).
 		"-m", "none:/tmp:tmpfs:size=268435456",
+		// The jail runs in its own network namespace. Do not bring up
+		// loopback: the jailed process must have zero network interfaces,
+		// not even localhost (complete network isolation).
+		"--iface_no_lo",
 		"--bindmount", appDir + ":/app:rw",
 		"--cwd", "/app",
 		"--chroot", "/",

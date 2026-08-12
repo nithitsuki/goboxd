@@ -428,3 +428,21 @@ languages:
         wall_time_s: 9
         memory_kb: 524288
         max_processes: 64
+
+  - id: pascal
+    name: Pascal (Free Pascal)
+    source_filename: solution.pas
+    artifact: solution
+    build:
+      cmd: /usr/bin/fpc
+      args: ["-o{{artifact}}", "{{source}}"]
+      limits:
+        wall_time_s: 10
+        memory_kb: 1048576
+        max_processes: 100
+    run:
+      cmd: ./{{artifact}}
+      limits:
+        wall_time_s: 9
+        memory_kb: 524288
+        max_processes: 64

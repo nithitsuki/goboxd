@@ -42,10 +42,22 @@ measures throughput and breaking points.
 # First-time only: fetch the nsjail (+ kafel) submodules required by the build
 git submodule update --init --recursive
 
-# Build and start
+# Build and start (installs all 29 languages)
 make build
 make run
+
+# Or build a smaller image with only the languages you need (faster build,
+# smaller image; the server advertises only these languages)
+make build LANGS=py3,c,swift
+LANGS=py3,c,swift make run
 ```
+
+**Build caching:** downloads and extracted toolchains are cached by the build
+(`scripts/build.sh`), so rebuilding a language layer does not re-download the
+compilers — for example `make build LANGS=py3,c` takes under a minute after
+the first full build. `docker builder prune` clears the cache. Build-time
+internet access is only needed for the first download of each toolchain;
+the running container has no outbound network (see Security architecture).
 
 Submit a Python 3 job:
 
@@ -63,7 +75,7 @@ curl -s http://localhost:8080/run \
 
 | Command | Description |
 |---|---|
-| `make build` | Build Docker image |
+| `make build` | Build Docker image. Set `LANGS=py3,c` for a subset (comma-separated ids) |
 | `make run` | Start server with `docker compose up` |
 | `make test` | Run unit tests (config, models) |
 | `make integration` | Run integration tests against a fresh local server |
@@ -221,6 +233,16 @@ tests during normal development.
 
 - **Namespace isolation** — nsjail uses CLONE_NEWPID, CLONE_NEWNS,
   CLONE_NEWNET, CLONE_NEWUSER, CLONE_NEWIPC, CLONE_NEWUTS, CLONE_NEWCGROUP
+- **Zero-network jail** — each jail runs in its own network namespace with
+  no interfaces at all (loopback is not brought up, `--iface_no_lo`).
+  Jailed code cannot reach the internet, the container, or even itself via
+  localhost
+- **Container egress firewall** — the entrypoint (`scripts/entrypoint.sh`)
+  drops every new outbound connection from the container (iptables OUTPUT
+  policy). The server answers inbound API requests, but nothing inside the
+  container can open a connection to the internet — no data exfiltration,
+  no RCE persistence channel. The container refuses to start if the
+  firewall cannot be applied
 - **Resource limits** — wall time, address space (RLIMIT_AS), process count,
   file size, open file descriptors
 - **Read-only mounts** — the sandbox mounts system directories (`/usr`,

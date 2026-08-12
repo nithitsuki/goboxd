@@ -10,20 +10,21 @@ import (
 
 // Fixture represents a single test case loaded from input.json and want.json.
 type Fixture struct {
+	Lang  string
 	Name  string
-	Input InputFixture  `json:"input"`
-	Want  WantFixture   `json:"want"`
+	Input InputFixture `json:"input"`
+	Want  WantFixture  `json:"want"`
 }
 
 // InputFixture is the POST /run request we send.
 type InputFixture struct {
-	Language         string           `json:"language"`
-	Source           string           `json:"source"`
-	SourceFilename   string           `json:"source_filename,omitempty"`
-	ArtifactFilename string           `json:"artifact_filename,omitempty"`
-	Build            json.RawMessage  `json:"build,omitempty"`
-	Run              json.RawMessage  `json:"run,omitempty"`
-	Tests            []InputTest      `json:"tests"`
+	Language         string          `json:"language"`
+	Source           string          `json:"source"`
+	SourceFilename   string          `json:"source_filename,omitempty"`
+	ArtifactFilename string          `json:"artifact_filename,omitempty"`
+	Build            json.RawMessage `json:"build,omitempty"`
+	Run              json.RawMessage `json:"run,omitempty"`
+	Tests            []InputTest     `json:"tests"`
 }
 
 // InputTest describes one test case input.
@@ -34,9 +35,9 @@ type InputTest struct {
 
 // WantFixture describes the fields we assert on in the response.
 type WantFixture struct {
-	Status string       `json:"status"`
-	Build  WantBuild    `json:"build"`
-	Tests  []WantTest   `json:"tests"`
+	Status string     `json:"status"`
+	Build  WantBuild  `json:"build"`
+	Tests  []WantTest `json:"tests"`
 }
 
 // WantBuild describes expected build result fields.
@@ -100,6 +101,11 @@ func discoverFixtures(root string) ([]Fixture, error) {
 			if err != nil {
 				return nil, fmt.Errorf("loading fixture %s: %w", tcPath, err)
 			}
+			// Qualify the name with the language so subtest names are unique.
+			// Go appends opaque #N suffixes to colliding subtest names, which
+			// makes failures hard to map back to a language.
+			f.Lang = langDir.Name()
+			f.Name = langDir.Name() + "/" + f.Name
 			fixtures = append(fixtures, f)
 		}
 	}

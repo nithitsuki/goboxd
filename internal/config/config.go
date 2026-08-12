@@ -26,20 +26,20 @@ type Limits struct {
 // {{source}} and {{artifact}} are expanded per-request.
 // {{flags}} is replaced with user-supplied flags at request time.
 type StageCmd struct {
-	Cmd            string   `yaml:"cmd"`
-	Args           []string `yaml:"args"`
-	Limits         Limits   `yaml:"limits"`
-	FlagAllowlist  []string `yaml:"flag_allowlist,omitempty"`
+	Cmd           string   `yaml:"cmd"`
+	Args          []string `yaml:"args"`
+	Limits        Limits   `yaml:"limits"`
+	FlagAllowlist []string `yaml:"flag_allowlist,omitempty"`
 }
 
 // LanguageYAML is the per-language YAML config structure.
 type LanguageYAML struct {
-	ID               string    `yaml:"id"`
-	Name             string    `yaml:"name"`
-	SourceFilename   string    `yaml:"source_filename"`
-	Artifact         string    `yaml:"artifact,omitempty"`
-	Build            *StageCmd `yaml:"build,omitempty"`
-	Run              StageCmd  `yaml:"run"`
+	ID             string    `yaml:"id"`
+	Name           string    `yaml:"name"`
+	SourceFilename string    `yaml:"source_filename"`
+	Artifact       string    `yaml:"artifact,omitempty"`
+	Build          *StageCmd `yaml:"build,omitempty"`
+	Run            StageCmd  `yaml:"run"`
 }
 
 // ConfigYAML is the top-level YAML structure.
@@ -119,6 +119,24 @@ func LoadRegistry() error {
 			return fmt.Errorf("duplicate language id %q in %s", lang.ID, RegistryPath)
 		}
 		DefaultRegistry[lang.ID] = lc
+	}
+
+	// GOBOXD_LANGS optionally restricts the registry to a comma-separated
+	// subset (e.g. "py3,c,swift"). This lets an image built with a subset of
+	// languages advertise only the languages that are actually installed.
+	// Empty or "all" keeps every language.
+	if filter := os.Getenv("GOBOXD_LANGS"); filter != "" && filter != "all" {
+		keep := make(map[string]bool)
+		for _, id := range strings.Split(filter, ",") {
+			if id = strings.TrimSpace(id); id != "" {
+				keep[id] = true
+			}
+		}
+		for id := range DefaultRegistry {
+			if !keep[id] {
+				delete(DefaultRegistry, id)
+			}
+		}
 	}
 
 	return nil

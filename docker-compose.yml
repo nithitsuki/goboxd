@@ -1,6 +1,11 @@
 services:
   goboxd:
-    build: .
+    build:
+      context: .
+      args:
+        # Comma-separated language subset, e.g. LANGS=py3,c,swift.
+        # "all" (default) installs every language.
+        LANGS: ${LANGS:-all}
     ports:
       - "8080:8080"
     privileged: true # Required for nsjail to create namespaces
@@ -16,3 +21,6 @@ services:
       - PORT=8080
       - GOBOXD_MAX_CPUS=2
       - GOBOXD_MAX_JOBS=4
+      # Advertise only the languages the image was built with.
+      # Follows the LANGS used at build time; empty = all.
+      - GOBOXD_LANGS=${LANGS:-}
