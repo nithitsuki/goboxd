@@ -16,9 +16,10 @@
 
 ## `POST /run`
 
-Executes untrusted code inside an nsjail sandbox. Returns 200 after the run
-completes regardless of user-code outcome. Returns 400 for validation errors,
-500 for infrastructure failures.
+POST /run executes untrusted code inside an nsjail sandbox. The server
+returns HTTP 200 after the run completes. The result of the user code does
+not change this. The server returns HTTP 400 for validation errors. It
+returns HTTP 500 for infrastructure failures.
 
 ### Request
 
@@ -59,7 +60,7 @@ completes regardless of user-code outcome. Returns 400 for validation errors,
 | Field | Description |
 |---|---|
 | `stdin` | Input to pipe to the program's stdin. Max 64 KiB. |
-| `expected_stdout` | Expected stdout output. Max 64 KiB. Empty string means any output is accepted. |
+| `expected_stdout` | The expected stdout output. Max 64 KiB. An empty string means that the service accepts any output. |
 
 ### Status vocabulary
 
@@ -67,13 +68,13 @@ completes regardless of user-code outcome. Returns 400 for validation errors,
 |---|---|
 | `accepted` | Build passed, all tests matched expected output |
 | `build_failed` | Compilation failed (all tests return `not_executed`) |
-| `internal_error` | Server-side infrastructure failure (nsjail, filesystem, etc.) |
+| `internal_error` | Server-side infrastructure failure (nsjail, filesystem, or similar) |
 | `runtime_error` | User code exited with non-zero status (crash, error) |
 | `time_exceeded` | Wall-clock time limit exceeded |
 | `memory_exceeded` | Memory limit exceeded (SIGSEGV/SIGABRT) |
 | `wrong_output` | Program output did not match `expected_stdout` |
 | `output_whitespace_mismatch` | Output matches `expected_stdout` after trimming whitespace |
-| `not_executed` | Test was skipped because build failed |
+| `not_executed` | The service skips the test because the build failed |
 
 ### Response
 
@@ -108,11 +109,13 @@ completes regardless of user-code outcome. Returns 400 for validation errors,
 
 ### Top-level status computation
 
-1. If build.status is `internal_error` → top-level `internal_error`
-2. If build.status is not `ok` → top-level `build_failed`
-3. If any test has `internal_error` → top-level `internal_error`
-4. First non-`accepted` test status → top-level that status
-5. Otherwise → `accepted`
+The server computes the top-level status with this procedure:
+
+1. If build.status is `internal_error`, the top-level status is `internal_error`.
+2. If build.status is not `ok`, the top-level status is `build_failed`.
+3. If any test has `internal_error`, the top-level status is `internal_error`.
+4. The first test that is not `accepted` sets the top-level status.
+5. If all tests are `accepted`, the top-level status is `accepted`.
 
 ### Error responses (400)
 
@@ -138,7 +141,7 @@ Internal errors (500) return the same shape with code `internal_error`.
 
 ## `GET /healthz`
 
-Simple liveness check. Always returns 200.
+GET /healthz is a simple liveness check. It always returns HTTP 200.
 
 ```json
 {"status":"ok"}
@@ -148,9 +151,9 @@ Simple liveness check. Always returns 200.
 
 ## `GET /readyz`
 
-Readiness probe. Returns 200 if nsjail and all language runtimes are
-operational. Returns 503 with per-language failure details if anything is
-degraded.
+GET /readyz is a readiness probe. It returns HTTP 200 when nsjail and all
+language runtimes are operational. It returns HTTP 503 with the failure
+details for each component when any component is degraded.
 
 ```json
 {
@@ -164,14 +167,15 @@ degraded.
 }
 ```
 
-Each language is probed by running `<compiler/runtime> --version`. If that
-fails, it falls back to `exec.LookPath` to confirm the binary exists.
+The server probes each language by running `<compiler/runtime> --version`.
+If that fails, it falls back to `exec.LookPath` to confirm the binary exists.
 
 ---
 
 ## `GET /info`
 
-Service metadata and runtime statistics. Always 200.
+GET /info returns service metadata and runtime statistics. It always returns
+HTTP 200.
 
 ```json
 {
@@ -215,6 +219,7 @@ Service metadata and runtime statistics. Always 200.
 
 ## `GET /playground`
 
-If the playground web UI is embedded (via Go `embed.FS` at
-`internal/api/playground/`), this serves a browser-based code editor for
-interactive testing. Redirects from `/playground` to `/playground/`.
+GET /playground serves a browser-based code editor for interactive testing.
+It works only when the server embeds the playground web UI. Go `embed.FS`
+embeds the UI from `internal/api/playground-dist/`. The server redirects
+from `/playground` to `/playground/`.

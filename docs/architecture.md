@@ -2,10 +2,11 @@
 
 ## Overview
 
-goboxd is a sandboxed code execution engine. It accepts source code via HTTP,
-optionally compiles it inside an nsjail container, then runs it against test
-cases and returns per-test results. Every execution is isolated in a dedicated
-nsjail namespace with resource limits enforced via rlimits and cgroups.
+goboxd is a sandboxed code execution engine. It accepts source code via HTTP.
+It optionally compiles the code inside an nsjail container. It then runs the
+code against test cases. It returns the results for each test. Every
+execution runs in a dedicated nsjail namespace. nsjail enforces the
+resource limits through rlimit flags.
 
 ## Request flow
 
@@ -41,7 +42,7 @@ internal/runner/runner.go
   ├─ Build step (if language has BuildCmd):
   │   └─ execInJail():
   │       ├─ Build nsjail args: -Mo, --chroot /, --proc_path /proc,
-  │       │   --bindmount, rlimits, -B mounts for /usr, /lib, /etc, etc.
+  │       │   --bindmount, rlimits, -B mounts for /usr, /lib, /etc, and more
   │       ├─ exec.CommandContext with Go deadline
   │       ├─ Concurrent stdout/stderr read with io.LimitReader (64 KiB cap)
   │       └─ cmd.Wait() → classify error as "ok" / "failed" / "internal_error"
@@ -59,7 +60,7 @@ internal/runner/runner.go
   ▼
 Back in handler
   ├─ releaseSlot()
-  ├─ computeTopLevelStatus()      (accepted / build_failed / internal_error / etc.)
+  ├─ computeTopLevelStatus()      (accepted / build_failed / internal_error / and more)
   ├─ If build_failed or internal_error → mark all tests "not_executed"
   ├─ Stats tracking (atomic counters for in_flight, total, failed_internal)
   └─ JSON response (always HTTP 200 unless infrastructure failure → 500)
@@ -103,15 +104,16 @@ tests/
 ## Key design decisions
 
 ### Standard library routing
-Go 1.22 added native method routing (`"GET /path"`, `"POST /run"`) to
-`net/http.ServeMux`. This handles the small API surface (4 endpoints) without
-any third-party framework, keeping the binary small and dependencies minimal.
+Go 1.22 added native method routing to `net/http.ServeMux`. Examples are
+`"GET /path"` and `"POST /run"`. This handles the small API surface without
+any third-party framework. It keeps the binary small and the dependencies
+minimal.
 
 ### Bounded concurrency semaphore
-A channel-based semaphore limits concurrent executions to `runtime.NumCPU()`
-(or `GOBOXD_MAX_JOBS` env var). Requests queue when the limit is reached rather
-than overwhelming the host. The semaphore is initialized lazily on the first
-request.
+A channel-based semaphore limits concurrent executions to
+`runtime.NumCPU()`. You can override this with the `GOBOXD_MAX_JOBS`
+environment variable. Requests queue when the semaphore is full. The host is
+not overwhelmed. The semaphore initializes lazily on the first request.
 
 ```
 acquireSlot() → <-jobSem     (reads a token, blocks if empty)
@@ -121,23 +123,27 @@ releaseSlot() → jobSem <- _  (returns the token)
 ### Fixture-driven test suite
 Test cases are JSON files in `tests/testcases/{lang}/{name}/`. Each directory
 contains `input.json` (the API request) and `want.json` (expected response).
-The fixture runner discovers and executes them dynamically — adding a test case
-means creating a directory and two JSON files, no recompile needed.
+The fixture runner discovers and executes them dynamically. To add a test
+case, create a directory and two JSON files. You do not need to
+recompile the code.
 
 ### Security-first architecture
-- All request validation happens at the HTTP layer before any execution begins.
-- The runner is stateless per-request: a temp directory is created, used, and
-  cleaned up via `defer os.RemoveAll` immediately after creation.
-- Cleanup runs on every code path (panic, error, or success).
-- Startup orphan sweep removes any jail dirs left from previous runs (older
-  than 30 minutes).
-- nsjail infrastructure errors (exit code 255, pipe/start failures) are
-  distinguished from user-code errors so they produce `internal_error` status
-  rather than misleading `runtime_error` or `build_failed`.
+- All request validation happens at the HTTP layer before any execution
+  begins.
+- The runner is stateless per-request. It creates a temp directory, uses it,
+  and cleans it up with `defer os.RemoveAll` immediately after creation.
+- Cleanup runs on every code path, which includes panic, error, and success.
+- The startup orphan sweep removes any jail dirs left from previous runs.
+  The sweep removes dirs older than 30 minutes.
+- The runner distinguishes nsjail infrastructure errors from user-code
+errors.
+  Pipe and start failures produce `internal_error` status. They do not
+  produce misleading `runtime_error` or `build_failed`.
 
 ### nsjail isolation parameters
 Each execution uses:
-- `-Mo`   — standalone-once mode (clone + execve)
+
+- `-Mo` — standalone-once mode (clone + execve)
 - `--chroot /` — use host filesystem as jail root
 - `--proc_path /proc` — mount procfs inside jail
 - `--bindmount src:dst:rw` — bind the app directory
@@ -153,10 +159,10 @@ The API uses a strict status vocabulary:
 |---|---|
 | `accepted` | All checks passed |
 | `build_failed` | Compilation failed (all tests → `not_executed`) |
-| `internal_error` | Server-side failure (nsjail, filesystem, etc.) |
+| `internal_error` | Server-side failure (nsjail, filesystem, or similar) |
 | `runtime_error` | User code crashed or exited non-zero |
 | `time_exceeded` | Wall-clock or CPU limit hit |
 | `memory_exceeded` | Memory limit hit (SIGSEGV/SIGABRT) |
-| `wrong_output` | Output didn't match expected |
+| `wrong_output` | Output did not match expected |
 | `output_whitespace_mismatch` | Output matches after trimming whitespace |
 | `not_executed` | Test skipped because build failed |

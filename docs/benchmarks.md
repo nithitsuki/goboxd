@@ -24,12 +24,14 @@
 
 | Offered RPS | Success | Throughput | p50 (ms) | p95 (ms) |
 |---|---|---|---|---|
-| 1 | 100% | 0.99 RPS | 1428 | 1633 |
-| 2 | 100% | 1.94 RPS | 1542 | 1770 |
-| **3** | **44%** | **1.01 RPS** | **10000** | **10001** |
+| 1 | 100% | 0.99 RPS | 1441 | 1624 |
+| 2 | 100% | 1.91 RPS | 1782 | 2181 |
+| **3** | **36%** | **0.81 RPS** | **10000** | **10001** |
 | 4 | 0% | 0 RPS | 10000 | 10001 |
 | 5+ | 0% | 0 RPS | - | - |
 
-**Breaking point: 3 RPS.** Bottleneck is memory pressure (354 MB per request x 4 concurrent = 1.4 GB in a 2 GB container). The service degrades gracefully with clean timeouts, no crashes.
+**Breaking point: 3 RPS.** The bottleneck is memory pressure. Each request
+uses 354 MB. Four concurrent requests use 1.4 GB in a 2 GB container. The
+service degrades gracefully. It returns clean timeouts. No crashes occur.
 
-See `docs/loadtest/` for full CSV, graphs, and analysis.
+See `docs/loadtest/` for the full CSV, graphs, and analysis.

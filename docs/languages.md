@@ -1,9 +1,9 @@
 # Language Registry
 
-Languages are configured via `config/languages.yml`, loaded at startup by
-`internal/config/config.go`. Adding a language requires no Go code change —
-just a YAML entry and, if the runtime/compiler isn't already in the Docker
-image, an install script in `scripts/lang_install/`.
+You configure languages through `config/languages.yml`. The service loads
+the file at startup with `internal/config/config.go`. You do not need to
+change Go code to add a language. You add a YAML entry. If the runtime or compiler is not in the Docker
+image, you also add an install script in `scripts/lang_install/`.
 
 ## Currently registered
 
@@ -30,13 +30,14 @@ image, an install script in `scripts/lang_install/`.
 ## Adding a new language
 
 1. Add a block to `config/languages.yml`.
-2. Create an install script at `scripts/lang_install/<id>.sh` that installs and verifies the
-   compiler/runtime (see existing scripts for examples).
-3. Create test cases under `tests/testcases/{id}/` — at minimum a
+2. Create an install script at `scripts/lang_install/<id>.sh`. The script
+   installs and verifies the compiler or runtime. See the existing scripts
+   for examples.
+3. Create test cases under `tests/testcases/{id}/`. Create at minimum a
    `positive-basic/` case with `input.json` and `want.json`.
-4. Rebuild the Docker image (`make build`). Thanks to the staged Dockerfile,
-   only the new language layer and subsequent layers will be rebuilt —
-   previous language installations are cached.
+4. Rebuild the Docker image with `make build`. The staged Dockerfile rebuilds
+   only the new language layer and the layers after it. The previous language
+   installations stay in the cache.
 
 ### YAML reference
 
@@ -66,7 +67,7 @@ image, an install script in `scripts/lang_install/`.
 
 ## Template variables
 
-These placeholders are expanded in `cmd` and `args` at request time:
+The server expands these placeholders in `cmd` and `args` at request time:
 
 | Variable | Description |
 |---|---|
@@ -76,10 +77,10 @@ These placeholders are expanded in `cmd` and `args` at request time:
 
 ## Flag allow-lists
 
-Compiled languages can optionally restrict which compiler flags the caller is
-allowed to pass. Flags are matched exactly (`-O2`) or by prefix (`-std=*`
-matches `-std=c99`, `-std=c17`, etc.). Requests with disallowed flags get a
-400 `invalid_flags` response.
+Compiled languages can restrict which compiler flags the caller can pass.
+The service matches flags exactly (`-O2`) or by prefix. For example, `-std=*`
+matches `-std=c99` and `-std=c17`. Requests with disallowed flags get a 400
+`invalid_flags` response.
 
 | Language | Allowed flags |
 |---|---|
@@ -90,9 +91,9 @@ matches `-std=c99`, `-std=c17`, etc.). Requests with disallowed flags get a
 
 ## Resource limits
 
-Each language defines default limits for build and run stages. These can be
-overridden per-request via the `build.limits` and `run.limits` fields. The
-limits are enforced by nsjail's rlimit and time_limit mechanisms:
+Each language defines default limits for the build and run stages. You can
+override these limits per-request through the `build.limits` and `run.limits`
+fields. nsjail enforces the limits with its rlimit and time_limit mechanisms:
 
 | Limit | Description |
 |---|---|
