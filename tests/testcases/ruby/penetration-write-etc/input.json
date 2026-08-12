@@ -1,0 +1,17 @@
+{
+  "language": "ruby",
+  "source": "begin; File.open('/etc/hosts', 'a') { |f| f.write('x') }; rescue; end",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 5,
+      "memory_kb": 102400,
+      "max_processes": 100
+    }
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "language": "csharp",
+  "source": "using System; class P { static void Main() { int n = int.Parse(Console.ReadLine()); for (int i = 1; i <= n; i++) Console.WriteLine(\"Line \" + i); } }",
+  "tests": [
+    {
+      "stdin": "3",
+      "expected_stdout": "Line 1\nLine 2\nLine 3\n"
+    }
+  ],
+  "build": {
+    "limits": {
+      "wall_time_s": 30,
+      "memory_kb": 1048576,
+      "max_processes": 100
+    }
+  },
+  "run": {
+    "limits": {
+      "wall_time_s": 9,
+      "memory_kb": 524288,
+      "max_processes": 64
+    }
+  }
+}

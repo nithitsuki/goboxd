@@ -1,0 +1,17 @@
+{
+  "language": "php",
+  "source": "<?php $n = (int)trim(fgets(STDIN)); for ($i = 1; $i <= $n; $i++) echo \"Line $i\\n\"; ?>",
+  "tests": [
+    {
+      "stdin": "3",
+      "expected_stdout": "Line 1\nLine 2\nLine 3\n"
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 9,
+      "memory_kb": 102400,
+      "max_processes": 100
+    }
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "language": "dart",
+  "source": "void main() { print(\"Hello from Dart!\"); }",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": "Hello from Dart!\n"
+    }
+  ],
+  "build": {
+    "limits": {
+      "wall_time_s": 30,
+      "memory_kb": 1048576,
+      "max_processes": 100
+    }
+  },
+  "run": {
+    "limits": {
+      "wall_time_s": 9,
+      "memory_kb": 524288,
+      "max_processes": 64
+    }
+  }
+}

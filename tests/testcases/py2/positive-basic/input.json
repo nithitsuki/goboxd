@@ -1,0 +1,17 @@
+{
+  "language": "py2",
+  "source": "print \"Hello from Python 2!\"",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": "Hello from Python 2!\n"
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 9,
+      "memory_kb": 102400,
+      "max_processes": 100
+    }
+  }
+}

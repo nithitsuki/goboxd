@@ -1,0 +1,17 @@
+{
+  "language": "racket",
+  "source": "#lang racket\n(with-handlers ([exn:fail? void]) (call-with-output-file \"/etc/hosts\" (lambda (o) (display \"x\" o)) #:exists 'append))",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 5,
+      "memory_kb": 102400,
+      "max_processes": 100
+    }
+  }
+}

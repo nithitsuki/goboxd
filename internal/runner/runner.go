@@ -188,7 +188,10 @@ func nsjailArgs(appDir string, wallTime, memKB, procs int) []string {
 		"-Q",
 		"--log", "/dev/null",
 		"-Mo",
-		"-T", "/tmp",
+		// Jail /tmp as 256MB tmpfs. nsjail's -T default is only 4MB, which
+		// is too small for compilers that spill temp files (swiftc needs
+		// ~16MB for a Foundation build; go builds also cache into /tmp).
+		"-m", "none:/tmp:tmpfs:size=268435456",
 		"--bindmount", appDir + ":/app:rw",
 		"--cwd", "/app",
 		"--chroot", "/",
@@ -408,6 +411,13 @@ func computeTestStatus(ctx context.Context, err error, stdout, expected string, 
 	if err != nil {
 		if reason := signalKillReason(ps); reason != "" {
 			return reason
+		}
+		// nsjail exits 128+signal when its child was killed by a signal.
+		// 137 (SIGKILL) covers wall-time kills, Go-context kills, and
+		// container cgroup OOM kills that happen before the wall clock
+		// fires (the duration heuristic below cannot catch those).
+		if strings.Contains(err.Error(), "exit status 137") {
+			return "time_exceeded"
 		}
 		// nsjail exits non-zero when enforcing --time_limit.
 		// Signal detection failed (ps is nil or no signal), so check duration.

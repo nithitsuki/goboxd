@@ -9,9 +9,10 @@ measures throughput and breaking points.
 
 ## Features
 
-- **17 supported languages** — Python, C, C++, Go, Rust, Java, JavaScript
-  (Node), Bash, Haskell, OCaml, Verilog, R, D, Lua (LuaJIT), Perl,
-  Erlang, Lisp (SBCL)
+- **28 supported languages** — Python 2, Python 3, C, C++, C#, Go, Rust, Java,
+  Kotlin, Scala, Swift, JavaScript (Node), TypeScript, Bash, Ruby, PHP, Elixir,
+  Haskell, OCaml, Verilog, R, D, Lua (LuaJIT), Perl, Erlang, Lisp (SBCL),
+  Racket, Dart
 - **nsjail isolation** — every execution runs in a dedicated Linux namespace
   with resource limits (wall time, memory, processes, file size, open files)
 - **Configurable per-language** — add a language with a YAML entry. You do
@@ -21,13 +22,13 @@ measures throughput and breaking points.
 - **Security-first** — path traversal prevention, flag allow-lists, request
   size limits (256 KiB), output capping (64 KiB), automatic jail directory
   cleanup, panic recovery middleware
-- **Penetration test suite** — 52 test cases across 10 languages. They probe
+- **Penetration test suite** — 138 test cases across 21 languages. They probe
   file reads, shell injection, network isolation, write protection, symlink
   escapes, eval injection, and more.
-- **Ported payload suite** — 62 test cases ported from the Stage 2 challenge
+- **Ported payload suite** — 73 test cases ported from the Stage 2 challenge
   specification. They cover accepted, build_failed, runtime_error,
   time_exceeded, and wrong_output. They cover read-N-print-N*2 scenarios. All
-  ported payloads pass across all 14 compatible languages.
+  ported payloads pass across all 25 compatible languages.
 - **Fixture-driven tests** — test cases are JSON files. You do not need to
   recompile the code to add scenarios.
 - **Embedded playground** — a web UI for interactive testing. Go's `embed.FS`
@@ -168,19 +169,30 @@ See [docs/api.md](docs/api.md) for the full API reference.
 | bash | Bash | interpreted | v1.0 |
 | c | C | compiled | v1.0 |
 | cpp | C++ | compiled | v1.0 |
+| **csharp** | **C# (.NET 10)** | **compiled** | **v1.2** |
 | d | D (GDC) | compiled | v1.0 |
+| **dart** | **Dart** | **compiled** | **v1.2** |
+| **elixir** | **Elixir** | **interpreted** | **v1.2** |
 | **erl** | **Erlang** | compiled | **v1.1** |
 | go | Go | compiled | v1.0 |
 | haskell | Haskell | compiled | v1.0 |
 | java | Java | compiled | v1.0 |
 | js | JavaScript (Node) | interpreted | v1.0 |
+| **kotlin** | **Kotlin** | **compiled** | **v1.2** |
 | **lisp** | **Lisp (SBCL)** | interpreted | **v1.1** |
 | lua | Lua (LuaJIT) | interpreted | v1.0 |
 | ocaml | OCaml | compiled | v1.0 |
 | perl | Perl | interpreted | v1.0 |
+| **php** | **PHP** | **interpreted** | **v1.2** |
+| **py2** | **Python 2** | **interpreted** | **v1.2** |
 | py3 | Python 3 | interpreted | v1.0 |
 | r | R | interpreted | v1.0 |
+| **racket** | **Racket** | **interpreted** | **v1.2** |
+| **ruby** | **Ruby** | **interpreted** | **v1.2** |
 | rust | Rust | compiled | v1.0 |
+| **scala** | **Scala 3** | **compiled** | **v1.2** |
+| **swift** | **Swift** | **compiled** | **v1.2** |
+| **ts** | **TypeScript** | **compiled** | **v1.2** |
 | verilog | Verilog | compiled | v1.0 |
 
 See [docs/languages.md](docs/languages.md) for configuration details and
@@ -188,18 +200,18 @@ instructions for adding new languages.
 
 ## Penetration testing
 
-goboxd includes 52 automated penetration test cases organized by attack
-vector. The test cases cover 10 languages. The table shows the attack
+goboxd includes 138 automated penetration test cases organized by attack
+vector. The test cases cover 21 languages. The table shows the attack
 vectors and the languages they cover:
 
 | Vector | Languages | What it probes |
 |---|---|---|
-| File reads | bash, c, cpp, erl, go, java, js, lisp, py3, rust | Access to `/etc/passwd`, `/etc/shadow`, `/proc/1/environ` |
-| Shell injection | bash, c, cpp, erl, go, java, js, lisp, py3, rust | `system()`, `exec()`, `popen()`, `subprocess` |
-| Network isolation | bash, c, cpp, erl, go, java, js, lisp, py3, rust | Outbound TCP connections (blocked by CLONE_NEWNET) |
-| Write protection | bash, c, cpp, erl, go, java, js, lisp, py3, rust | Attempts to write to `/etc/hosts` (read-only mounts) |
-| Eval injection | js, py3 | `eval()` and `exec()` of arbitrary code |
-| Symlink escapes | py3 | Symlink attacks across mount boundaries |
+| File reads | bash, c, cpp, csharp, dart, elixir, erl, go, java, js, kotlin, lisp, php, py2, py3, racket, ruby, rust, scala, swift, ts | Access to `/etc/passwd`, `/etc/shadow`, `/proc/1/environ` |
+| Shell injection | c, cpp, csharp, dart, elixir, erl, go, java, js, kotlin, lisp, php, py2, py3, racket, ruby, rust, scala, swift, ts | `system()`, `exec()`, `popen()`, `subprocess` |
+| Network isolation | bash, c, cpp, csharp, dart, elixir, erl, go, java, js, kotlin, lisp, php, py2, py3, racket, ruby, rust, scala, swift, ts | Outbound TCP connections (blocked by CLONE_NEWNET) |
+| Write protection | bash, c, cpp, csharp, dart, elixir, erl, go, java, js, kotlin, lisp, php, py2, py3, racket, ruby, rust, scala, swift, ts | Attempts to write to `/etc/hosts` (read-only mounts) |
+| Eval injection | elixir, js, php, py2, py3, racket, ruby, ts | `eval()` and `exec()` of arbitrary code |
+| Symlink escapes | php, py2, py3, ruby | Symlink attacks across mount boundaries |
 | Reverse shells | bash | `/dev/tcp` reverse shell attempts |
 
 Run with `SKIP_PENETRATION=1 make integration-docker` to exclude penetration
@@ -291,4 +303,4 @@ tests/testcases/
 └── ...
 ```
 
-Currently **180 test cases** across 17 languages.
+Currently **316 test cases** across 28 languages.

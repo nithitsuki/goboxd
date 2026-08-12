@@ -1,0 +1,17 @@
+{
+  "language": "racket",
+  "source": "#lang racket\n(require racket/string)\n(define n (string->number (string-trim (port->string (current-input-port)))))\n(displayln (* n 2))",
+  "tests": [
+    {
+      "stdin": "21\n",
+      "expected_stdout": "42\n"
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 9,
+      "memory_kb": 102400,
+      "max_processes": 100
+    }
+  }
+}

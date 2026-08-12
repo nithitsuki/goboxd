@@ -22,6 +22,9 @@ COPY go.mod ./
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -o goboxd ./cmd/goboxd
 
+# Stage 2a: Python 2 source (EOL runtime, not in Debian repos)
+FROM python:2.7-slim AS python2
+
 # Stage 2: Runtime environment with languages
 FROM debian:bookworm-slim
 
@@ -80,7 +83,43 @@ RUN /app/scripts/lang_install/erlang.sh
 # --- Layer 16: Lisp ---
 RUN /app/scripts/lang_install/lisp.sh
 
-# --- Layer 17: Final cleanup ---
+# --- Layer 17: Python 2 ---
+COPY --from=python2 /usr/local/bin/python2.7 /usr/local/bin/python2.7
+COPY --from=python2 /usr/local/lib/python2.7 /usr/local/lib/python2.7
+COPY --from=python2 /usr/local/lib/libpython2.7.so.1.0 /usr/local/lib/libpython2.7.so.1.0
+RUN ldconfig && python2.7 --version && python2.7 -c "print('Python 2 is working correctly!')"
+
+# --- Layer 18: PHP ---
+RUN /app/scripts/lang_install/php.sh
+
+# --- Layer 19: Ruby ---
+RUN /app/scripts/lang_install/ruby.sh
+
+# --- Layer 20: Elixir (requires the Erlang layer above) ---
+RUN /app/scripts/lang_install/elixir.sh
+
+# --- Layer 21: TypeScript ---
+RUN /app/scripts/lang_install/typescript.sh
+
+# --- Layer 22: Racket ---
+RUN /app/scripts/lang_install/racket.sh
+
+# --- Layer 23: .NET (C#) ---
+RUN /app/scripts/lang_install/csharp.sh
+
+# --- Layer 24: Swift ---
+RUN /app/scripts/lang_install/swift.sh
+
+# --- Layer 25: Scala ---
+RUN /app/scripts/lang_install/scala.sh
+
+# --- Layer 26: Kotlin ---
+RUN /app/scripts/lang_install/kotlin.sh
+
+# --- Layer 27: Dart ---
+RUN /app/scripts/lang_install/dart.sh
+
+# --- Layer 28: Final cleanup ---
 RUN apt clean && rm -rf /var/lib/apt/lists/*
 
 # Copy config

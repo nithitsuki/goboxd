@@ -10,11 +10,22 @@ image, you also add an install script in `scripts/lang_install/`.
 | id | name | type | compiler | runtime |
 |---|---|---|---|---|
 | py3 | Python 3 | interpreted | — | `/usr/bin/python3` |
+| py2 | Python 2 | interpreted | — | `/usr/local/bin/python2.7` |
 | c | C | compiled | `/usr/bin/gcc` | `./{{artifact}}` |
 | cpp | C++ | compiled | `/usr/bin/g++` | `./{{artifact}}` |
+| csharp | C# | compiled | `csharp-build` wrapper (Roslyn) | `/usr/local/dotnet/dotnet` |
+| dart | Dart | compiled | `/usr/local/dart/bin/dart compile exe` | `./{{artifact}}` |
+| elixir | Elixir | interpreted | — | `/usr/bin/elixir` |
 | java | Java | compiled | `/usr/bin/javac` | `/usr/bin/java` |
+| kotlin | Kotlin | compiled | `/usr/local/kotlinc/bin/kotlinc` | `/usr/bin/java -jar` |
 | bash | Bash | interpreted | — | `/usr/bin/bash` |
 | js | JavaScript (Node) | interpreted | — | `/usr/bin/node` |
+| php | PHP | interpreted | — | `/usr/bin/php` |
+| racket | Racket | interpreted | — | `/usr/local/bin/racket` |
+| ruby | Ruby | interpreted | — | `/usr/bin/ruby` |
+| scala | Scala 3 | compiled | `/usr/local/scala3/bin/scalac` | `/usr/local/scala3/bin/scala` |
+| swift | Swift | compiled | `/usr/local/swift/usr/bin/swiftc` | `./{{artifact}}` |
+| ts | TypeScript | compiled | `/usr/local/bin/tsc` | `/usr/bin/node` |
 | verilog | Verilog | compiled | `/usr/bin/iverilog` | `/usr/bin/vvp` |
 | rust | Rust | compiled | `/usr/bin/rustc` | `./{{artifact}}` |
 | go | Go | compiled | `/usr/bin/go` | `./{{artifact}}` |
@@ -26,6 +37,20 @@ image, you also add an install script in `scripts/lang_install/`.
 | perl | Perl | interpreted | — | `/usr/bin/perl` |
 | erl | Erlang | compiled | `/usr/bin/erlc` | `erl -noshell -pa /app -s solution start -s init stop` |
 | lisp | Lisp (SBCL) | interpreted | — | `/usr/bin/sbcl --script {{source}}` |
+
+## Version notes
+
+The Docker image runs Debian bookworm. Some versions differ from the LeetCode
+environments:
+
+- Ruby 3.1 (LeetCode: 3.2), Elixir 1.14 (LeetCode: 1.17), Node.js 18
+  (LeetCode: 22), Python 3.11 (LeetCode: 3.14), PHP 8.2 and C++ (GCC 14)
+  match, and Go uses the module version from `go.mod`.
+- The toolchains that are not in the Debian repos come from their official
+  releases: .NET SDK 10 (C# 14), Swift 6.0.3 (Debian 12 build), Scala 3.3.1,
+  Kotlin 2.1.10, Dart 3.2.6, TypeScript 5.7.3, and Racket 8.15 (Chez).
+  Python 2.7.18 is copied from the `python:2.7-slim` image because Debian
+  bookworm does not ship Python 2.
 
 ## Adding a new language
 

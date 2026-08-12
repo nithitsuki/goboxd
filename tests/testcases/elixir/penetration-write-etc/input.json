@@ -1,0 +1,17 @@
+{
+  "language": "elixir",
+  "source": "try do File.write!(\"/etc/hosts\", \"x\", [:append]) rescue _ -> :ok end",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 5,
+      "memory_kb": 102400,
+      "max_processes": 100
+    }
+  }
+}

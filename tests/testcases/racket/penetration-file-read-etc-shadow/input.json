@@ -1,0 +1,17 @@
+{
+  "language": "racket",
+  "source": "#lang racket\n(with-handlers ([exn:fail? void]) (display (call-with-input-file \"/etc/shadow\" port->string)))",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 5,
+      "memory_kb": 102400,
+      "max_processes": 100
+    }
+  }
+}

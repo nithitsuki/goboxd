@@ -1,0 +1,24 @@
+{
+  "language": "ts",
+  "source": "const fs = require(\"fs\");\nconst n = parseInt(fs.readFileSync(0, \"utf8\").trim());\nconsole.log(n * 2);",
+  "tests": [
+    {
+      "stdin": "21\n",
+      "expected_stdout": "42\n"
+    }
+  ],
+  "build": {
+    "limits": {
+      "wall_time_s": 30,
+      "memory_kb": 1048576,
+      "max_processes": 100
+    }
+  },
+  "run": {
+    "limits": {
+      "wall_time_s": 9,
+      "memory_kb": 524288,
+      "max_processes": 64
+    }
+  }
+}

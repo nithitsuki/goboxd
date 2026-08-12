@@ -1,0 +1,17 @@
+{
+  "language": "py2",
+  "source": "n = int(raw_input())\nfor i in range(n):\n    print \"Line %d\" % (i + 1)",
+  "tests": [
+    {
+      "stdin": "3",
+      "expected_stdout": "Line 1\nLine 2\nLine 3\n"
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 9,
+      "memory_kb": 102400,
+      "max_processes": 100
+    }
+  }
+}

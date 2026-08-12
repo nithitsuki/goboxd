@@ -261,3 +261,170 @@ languages:
         wall_time_s: 9
         memory_kb: 102400
         max_processes: 100
+
+  - id: py2
+    name: Python 2
+    source_filename: solution.py
+    run:
+      cmd: /usr/local/bin/python2.7
+      args: ["{{source}}"]
+      limits:
+        wall_time_s: 9
+        memory_kb: 102400
+        max_processes: 100
+
+  - id: ruby
+    name: Ruby
+    source_filename: solution.rb
+    run:
+      cmd: /usr/bin/ruby
+      args: ["{{source}}"]
+      limits:
+        wall_time_s: 9
+        memory_kb: 102400
+        max_processes: 100
+
+  - id: php
+    name: PHP
+    source_filename: solution.php
+    run:
+      cmd: /usr/bin/php
+      args: ["{{source}}"]
+      limits:
+        wall_time_s: 9
+        memory_kb: 102400
+        max_processes: 100
+
+  - id: racket
+    name: Racket
+    source_filename: solution.rkt
+    run:
+      cmd: /usr/local/bin/racket
+      args: ["{{source}}"]
+      limits:
+        wall_time_s: 9
+        memory_kb: 102400
+        max_processes: 100
+
+  - id: elixir
+    name: Elixir
+    source_filename: solution.exs
+    run:
+      cmd: /usr/bin/elixir
+      args: ["{{source}}"]
+      limits:
+        wall_time_s: 9
+        memory_kb: 102400
+        max_processes: 100
+
+  - id: ts
+    name: TypeScript
+    source_filename: solution.ts
+    artifact: solution.js
+    build:
+      cmd: /usr/local/bin/tsc
+      args: ["{{source}}", "--target", "ES2024", "--module", "commonjs", "--strict", "--skipLibCheck", "--typeRoots", "/usr/local/lib/node_modules/@types"]
+      limits:
+        wall_time_s: 15
+        memory_kb: 1048576
+        max_processes: 100
+    run:
+      cmd: /usr/bin/node
+      args: ["{{artifact}}"]
+      limits:
+        wall_time_s: 9
+        memory_kb: 102400
+        max_processes: 64
+
+  - id: csharp
+    name: C#
+    source_filename: solution.cs
+    artifact: solution.dll
+    build:
+      cmd: /usr/local/bin/csharp-build
+      args: ["{{source}}"]
+      limits:
+        wall_time_s: 20
+        memory_kb: 1048576
+        max_processes: 100
+    run:
+      cmd: /usr/local/dotnet/dotnet
+      args: ["{{artifact}}"]
+      limits:
+        wall_time_s: 9
+        memory_kb: 102400
+        max_processes: 64
+
+  - id: swift
+    name: Swift
+    source_filename: solution.swift
+    artifact: solution
+    build:
+      cmd: /usr/local/swift/usr/bin/swiftc
+      args: ["-o", "{{artifact}}", "{{source}}", "-Xlinker", "-rpath", "-Xlinker", "/usr/local/swift/usr/lib"]
+      limits:
+        wall_time_s: 30
+        memory_kb: 2097152
+        max_processes: 100
+    run:
+      cmd: ./{{artifact}}
+      limits:
+        wall_time_s: 9
+        memory_kb: 524288
+        max_processes: 64
+
+  - id: scala
+    name: Scala
+    source_filename: solution.scala
+    artifact: Solution
+    build:
+      cmd: /usr/local/scala3/bin/scalac
+      args: ["-d", ".", "{{source}}"]
+      limits:
+        wall_time_s: 20
+        memory_kb: 1048576
+        max_processes: 100
+    run:
+      cmd: /usr/local/scala3/bin/scala
+      args: ["{{artifact}}"]
+      limits:
+        wall_time_s: 9
+        memory_kb: 102400
+        max_processes: 64
+
+  - id: kotlin
+    name: Kotlin
+    source_filename: solution.kt
+    artifact: solution.jar
+    build:
+      cmd: /usr/local/kotlinc/bin/kotlinc
+      args: ["{{source}}", "-include-runtime", "-d", "{{artifact}}"]
+      limits:
+        wall_time_s: 20
+        memory_kb: 1048576
+        max_processes: 100
+    run:
+      cmd: /usr/bin/java
+      args: ["-jar", "{{artifact}}"]
+      limits:
+        wall_time_s: 9
+        memory_kb: 102400
+        max_processes: 64
+
+  - id: dart
+    name: Dart
+    source_filename: solution.dart
+    artifact: solution
+    build:
+      cmd: /usr/local/bin/dart-compile
+      args: ["compile", "exe", "{{source}}", "-o", "{{artifact}}"]
+      limits:
+        wall_time_s: 20
+        memory_kb: 1048576
+        max_processes: 100
+    run:
+      cmd: ./{{artifact}}
+      limits:
+        wall_time_s: 9
+        memory_kb: 524288
+        max_processes: 64

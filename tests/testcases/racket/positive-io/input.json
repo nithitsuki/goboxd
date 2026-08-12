@@ -1,0 +1,17 @@
+{
+  "language": "racket",
+  "source": "#lang racket\n(define n (string->number (read-line)))\n(for ([i (in-range 1 (add1 n))]) (displayln (format \"Line ~a\" i)))",
+  "tests": [
+    {
+      "stdin": "3",
+      "expected_stdout": "Line 1\nLine 2\nLine 3\n"
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 9,
+      "memory_kb": 102400,
+      "max_processes": 100
+    }
+  }
+}

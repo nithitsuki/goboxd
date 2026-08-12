@@ -1,0 +1,17 @@
+{
+  "language": "ruby",
+  "source": "this will crash",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 9,
+      "memory_kb": 102400,
+      "max_processes": 100
+    }
+  }
+}

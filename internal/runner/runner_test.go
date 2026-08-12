@@ -3,6 +3,7 @@ package runner
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os/exec"
 	"strings"
 	"testing"
@@ -156,30 +157,28 @@ func TestReadCapped(t *testing.T) {
 
 func TestComputeTestStatus(t *testing.T) {
 	tests := []struct {
-		name      string
-		err       error
-		stdout    string
-		expected  string
-		memPeak   int
-		memLimit  int
-		want      string
+		name     string
+		err      error
+		stdout   string
+		expected string
+		memPeak  int
+		memLimit int
+		wallTime int
+		duration int
+		want     string
 	}{
-		{"exact match", nil, "hello\n", "hello\n", 0, 0, "accepted"},
-		{"whitespace diff", nil, "hello\n", "hello", 0, 0, "output_whitespace_mismatch"},
-		{"wrong output", nil, "world", "hello", 0, 0, "wrong_output"},
-		{"empty expected", nil, "anything", "", 0, 0, "accepted"},
-		{"exact match with empty expected", nil, "", "", 0, 0, "accepted"},
+		{"exact match", nil, "hello\n", "hello\n", 0, 0, 10, 500, "accepted"},
+		{"whitespace diff", nil, "hello\n", "hello", 0, 0, 10, 500, "output_whitespace_mismatch"},
+		{"wrong output", nil, "world", "hello", 0, 0, 10, 500, "wrong_output"},
+		{"empty expected", nil, "anything", "", 0, 0, 10, 500, "accepted"},
+		{"exact match with empty expected", nil, "", "", 0, 0, 10, 500, "accepted"},
+		{"exit 137 early kill", fmt.Errorf("exit status 137"), "", "", 0, 0, 10, 1000, "time_exceeded"},
+		{"exit 137 at wall time", fmt.Errorf("exit status 137"), "", "", 0, 0, 10, 10000, "time_exceeded"},
+		{"exit 139 segv", fmt.Errorf("exit status 139"), "", "", 0, 0, 10, 1000, "runtime_error"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if tt.err != nil {
-				got := computeTestStatus(context.Background(), tt.err, tt.stdout, tt.expected, nil, tt.memPeak, tt.memLimit, 10, 10000)
-				if got != tt.want {
-					t.Errorf("with nil ProcessState: want %q, got %q", tt.want, got)
-				}
-				return
-			}
-			got := computeTestStatus(context.Background(), nil, tt.stdout, tt.expected, nil, 0, 0, 10, 500)
+			got := computeTestStatus(context.Background(), tt.err, tt.stdout, tt.expected, nil, tt.memPeak, tt.memLimit, tt.wallTime, tt.duration)
 			if got != tt.want {
 				t.Errorf("computeTestStatus = %q, want %q", got, tt.want)
 			}

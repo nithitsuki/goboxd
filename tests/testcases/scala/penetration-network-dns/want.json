@@ -1,0 +1,12 @@
+{
+  "status": "accepted",
+  "build": {
+    "status": "ok"
+  },
+  "tests": [
+    {
+      "status": "accepted",
+      "stdout": ""
+    }
+  ]
+}

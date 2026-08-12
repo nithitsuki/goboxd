@@ -1,0 +1,17 @@
+{
+  "language": "php",
+  "source": "<?php try { $s = @fsockopen('93.184.216.34', 80, $errno, $errstr, 3); if ($s) fclose($s); } catch (Exception $e) {} ?>",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 5,
+      "memory_kb": 102400,
+      "max_processes": 100
+    }
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "language": "csharp",
+  "source": "using System; using System.Net.Sockets; class P { static void Main() { try { var c = new TcpClient(); c.ConnectAsync(\"93.184.216.34\", 80).Wait(3000); c.Close(); } catch { } } }",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "build": {
+    "limits": {
+      "wall_time_s": 30,
+      "memory_kb": 1048576,
+      "max_processes": 100
+    }
+  },
+  "run": {
+    "limits": {
+      "wall_time_s": 5,
+      "memory_kb": 524288,
+      "max_processes": 64
+    }
+  }
+}

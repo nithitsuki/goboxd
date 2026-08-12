@@ -1,0 +1,17 @@
+{
+  "language": "ruby",
+  "source": "begin\n  File.symlink('/etc/passwd', '/app/link')\n  print File.read('/app/link')\nrescue\nend",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 5,
+      "memory_kb": 102400,
+      "max_processes": 100
+    }
+  }
+}

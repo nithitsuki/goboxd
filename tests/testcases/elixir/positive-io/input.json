@@ -1,0 +1,17 @@
+{
+  "language": "elixir",
+  "source": "n = IO.gets(\"\") |> String.trim() |> String.to_integer()\nfor i <- 1..n do\n  IO.puts(\"Line #{i}\")\nend",
+  "tests": [
+    {
+      "stdin": "3",
+      "expected_stdout": "Line 1\nLine 2\nLine 3\n"
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 9,
+      "memory_kb": 102400,
+      "max_processes": 100
+    }
+  }
+}

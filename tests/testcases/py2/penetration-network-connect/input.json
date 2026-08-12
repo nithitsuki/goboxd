@@ -1,0 +1,17 @@
+{
+  "language": "py2",
+  "source": "import socket\ntry:\n    s = socket.socket()\n    s.settimeout(3)\n    s.connect(('93.184.216.34', 80))\n    s.close()\nexcept Exception:\n    pass",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 5,
+      "memory_kb": 102400,
+      "max_processes": 100
+    }
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "language": "elixir",
+  "source": "IO.puts(\"Hello from Elixir!\")",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": "Hello from Elixir!\n"
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 9,
+      "memory_kb": 102400,
+      "max_processes": 100
+    }
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "language": "racket",
+  "source": "#lang racket\n(require racket/tcp)\n(define t (thread (lambda () (tcp-connect \"93.184.216.34\" 80))))\n(define r (sync/timeout 3 t))\n(when (thread? r) (kill-thread r))",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 5,
+      "memory_kb": 102400,
+      "max_processes": 100
+    }
+  }
+}
