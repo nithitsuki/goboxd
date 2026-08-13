@@ -51,12 +51,25 @@ make build LANGS=py3,c,swift
 LANGS=py3,c,swift make run
 ```
 
-**Build caching:** downloads and extracted toolchains are cached by the build
-(`scripts/build.sh`), so rebuilding a language layer does not re-download the
-compilers — for example `make build LANGS=py3,c` takes under a minute after
-the first full build. `docker builder prune` clears the cache. Build-time
-internet access is only needed for the first download of each toolchain;
-the running container has no outbound network (see Security architecture).
+**Build caching:** The base images use pinned digests. The apt packages use
+pinned versions. `scripts/check-pins.sh` verifies both rules. The build
+downloads each package and toolchain once per builder cache store. A fresh
+builder or `docker builder prune` starts over. Rebuilding a language layer
+does not re-download the compilers. For example, `make build LANGS=py3,c`
+takes less than one minute after the first full build. Build-time internet access is used only for package, toolchain, and Go module downloads. The running container has no
+outbound network (see Security architecture). A full rebuild with no
+cache needs about 33 GB of free disk space. If the build stops with 'no
+space left on device', run `docker builder prune` and retry.
+
+Builds use the `goboxd-builder` builder with the `docker-container` driver.
+`scripts/build.sh` passes the builder explicitly, so the build uses it even
+if the CLI default differs. The builder keeps the downloaded packages
+between builds. The image removes the `docker-clean` hook, so cached `.deb`
+files survive. The first build with a fresh builder downloads once.
+`--no-cache` resets the package cache by design.
+
+To bump a pinned version, change the version in the install script, then
+rebuild the image.
 
 Submit a Python 3 job:
 
@@ -249,7 +262,7 @@ tests during normal development.
   unbounded memory consumption
 - **Seccomp-bpf policy** — the policy file exists at
   `scripts/seccomp.policy`. The service does not load it. nsjail 3.4 kafel
-  parser limitations block it. This is planned work (see TODO.md Phase 4)
+  parser limitations block it. This is planned work (see TODO.md Phase 1)
 - **Request limits** — 256 KiB max body size, 50 max test cases, 64 KiB per
   field
 - **Panic recovery** — middleware catches panics so a single bad request

@@ -33,6 +33,10 @@ go.work.sum
 scratchpad.md
 goboxd
 greyapple
+# Agent session state (subagent runs, scratch) - excluded from git only;
+# the Docker build context is handled by .dockerignore
+.pi/
+.pi-subagents/
 hugo
 profile.cov
 pyjail-reference

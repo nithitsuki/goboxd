@@ -2,11 +2,13 @@
 set -e
 
 echo "Installing Swift (6.0.3 for Debian 12)..."
+# binutils-gold is a virtual package provided by binutils (which ships the
+# gold linker as /usr/bin/ld.gold), so the concrete package is pinned.
 apt-get install -y --no-install-recommends \
-    binutils-gold gcc git \
-    libcurl4-openssl-dev libedit-dev libicu-dev libncurses-dev \
-    libpython3-dev libsqlite3-dev libxml2-dev \
-    pkg-config tzdata uuid-dev
+    binutils=2.40-2 gcc=4:12.2.0-3 git=1:2.39.5-0+deb12u3 \
+    libcurl4-openssl-dev=7.88.1-10+deb12u15 libedit-dev=3.1-20221030-2 libicu-dev=72.1-3+deb12u1 libncurses-dev=6.4-4 \
+    libpython3-dev=3.11.2-1+b1 libsqlite3-dev=3.40.1-2+deb12u2 libxml2-dev=2.9.14+dfsg-1.3~deb12u6 \
+    pkg-config=1.8.1-1 tzdata=2026b-0+deb12u1 uuid-dev=2.38.1-5+deb12u3
 
 # Toolchain cache: /var/cache/goboxd-dl and /var/cache/goboxd-toolchains are
 # BuildKit cache mounts (see Dockerfile). Downloads and extractions survive

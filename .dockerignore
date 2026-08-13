@@ -1,0 +1,17 @@
+# Files excluded from the Docker build context. The runtime stage only
+# copies scripts/ and config/; the builder stage needs Go sources, go.mod,
+# and external/ (nsjail submodule). Everything else is unnecessary weight
+# and churn (any change re-runs the builder stage's COPY layer).
+.git
+.github
+.pi
+.pi-subagents
+bin
+docs
+playground
+tests
+pyjail-reference
+goboxd
+TODO.md
+README.md
+LICENSE

@@ -1,15 +1,16 @@
 # Step 1: Build nsjail and goboxd
-FROM golang:1.25-bookworm AS builder
+# Base image digests are pinned for reproducible builds (scripts/check-pins.sh).
+FROM golang:1.25-bookworm@sha256:c62765daa3fb92521a46cc8242797b81b03cf592b5aeffc36bae63d9abc1385c AS builder
 
-# Install nsjail build dependencies
+# Install nsjail build dependencies (pinned; see scripts/check-pins.sh)
 RUN apt-get update && apt-get install -y \
-    build-essential \
-    pkg-config \
-    bison \
-    flex \
-    libprotobuf-dev \
-    protobuf-compiler \
-    libnl-route-3-dev
+    build-essential=12.9 \
+    pkg-config=1.8.1-1 \
+    bison=2:3.8.2+dfsg-1+b1 \
+    flex=2.6.4-8.2 \
+    libprotobuf-dev=3.21.12-3+deb12u1 \
+    protobuf-compiler=3.21.12-3+deb12u1 \
+    libnl-route-3-dev=3.7.0-0.2+b1
 
 # Build nsjail
 COPY external/nsjail /nsjail-src
@@ -23,10 +24,10 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -o goboxd ./cmd/goboxd
 
 # Step 2a: Python 2 source (EOL runtime, not in Debian repos)
-FROM python:2.7-slim AS python2
+FROM python:2.7-slim@sha256:b68d40df862ac07e8955ea0fc0c5454cb4245b6165e79bc8ea2cc69170d9ba62 AS python2
 
 # Step 2: Runtime environment with languages
-FROM debian:bookworm-slim
+FROM debian:bookworm-slim@sha256:362e64223cc0da95422b3b13c045186fc0a81250e765d31c025fbddf257f6143
 
 # Build-time language selection. A comma-separated list of language ids, e.g.
 # "py3,c,swift". Excluded languages install nothing (fast, small image).
@@ -36,6 +37,13 @@ ARG LANGS=all
 # Copy scripts
 COPY scripts/ /app/scripts/
 WORKDIR /app
+
+# Debian images ship /etc/apt/apt.conf.d/docker-clean, a DPkg::Post-Invoke
+# hook that deletes downloaded .deb files after every install. With
+# /var/cache/apt/archives mounted as a BuildKit cache mount, this hook
+# empties the mount on every run and forces re-downloading. Remove it so
+# cached .deb files survive across builds.
+RUN rm -f /etc/apt/apt.conf.d/docker-clean
 
 # Make all scripts executable
 RUN chmod +x /app/scripts/lang_install/*.sh
@@ -201,16 +209,12 @@ RUN --mount=type=cache,target=/var/lib/apt/lists \
     --mount=type=cache,target=/var/cache/apt/archives \
     if [ "$LANGS" = "all" ] || echo ",$LANGS," | grep -q ",pascal,"; then /app/scripts/lang_install/pascal.sh; fi
 
-# --- Layer 29: Final cleanup ---
-RUN apt clean && rm -rf /var/lib/apt/lists/*
-
-# --- Layer 30: Container egress firewall ---
+# --- Layer 29: Container egress firewall ---
 # iptables for the entrypoint's OUTPUT firewall. Kept as its own layer so
 # the heavy language layers stay cached.
 RUN --mount=type=cache,target=/var/lib/apt/lists \
     --mount=type=cache,target=/var/cache/apt/archives \
-    apt-get update && apt-get install -y --no-install-recommends iptables \
-    && apt clean && rm -rf /var/lib/apt/lists/*
+    apt-get update && apt-get install -y --no-install-recommends iptables=1.8.9-2
 
 # Copy config
 COPY config/ /app/config/

@@ -45,6 +45,8 @@ jobs:
         run: go build ./...
       - name: Vet
         run: go vet ./...
+      - name: Check version pins
+        run: bash scripts/check-pins.sh
 
   playground:
     runs-on: ubuntu-latest

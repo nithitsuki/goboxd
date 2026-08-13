@@ -5,9 +5,11 @@ set -e
 # can be cold after a Dockerfile change; a warm mount skips the network update.
 [ -n "$(ls -A /var/lib/apt/lists 2>/dev/null)" ] || apt-get update
 echo "Installing Lisp (SBCL)..."
-apt-get install -y --no-install-recommends sbcl curl make git
+apt-get install -y --no-install-recommends sbcl=2:2.2.9-1 curl=7.88.1-10+deb12u15 make=4.3-4.1 git=1:2.39.5-0+deb12u3
 
 # Install Quicklisp
+# Note: quicklisp.lisp has no stable versioning, so it is intentionally
+# unpinned. Its installer pulls the current dist snapshot.
 curl -O https://beta.quicklisp.org/quicklisp.lisp
 sbcl --no-sysinit --no-userinit \
      --load quicklisp.lisp \

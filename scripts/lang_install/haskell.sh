@@ -5,7 +5,7 @@ set -e
 # can be cold after a Dockerfile change; a warm mount skips the network update.
 [ -n "$(ls -A /var/lib/apt/lists 2>/dev/null)" ] || apt-get update
 echo "Installing Haskell (GHC)..."
-apt-get install -y --no-install-recommends ghc
+apt-get install -y --no-install-recommends ghc=9.0.2-4
 
 # Verify Haskell is working
 if command -v ghc &> /dev/null; then

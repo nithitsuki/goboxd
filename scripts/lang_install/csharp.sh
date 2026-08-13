@@ -2,7 +2,12 @@
 set -e
 
 echo "Installing .NET SDK..."
-apt-get install -y --no-install-recommends curl libicu72 libssl3 zlib1g
+# Pin the SDK to an exact version for reproducible builds. The --channel
+# form floats to the newest SDK. To bump the SDK, read the release index at
+# https://dotnetcli.blob.core.windows.net/dotnet/release-metadata/releases-index.json
+# and update the version below. Old SDK versions can disappear from the CDN,
+# so keep the pin current.
+apt-get install -y --no-install-recommends curl=7.88.1-10+deb12u15 libicu72=72.1-3+deb12u1 libssl3=3.0.20-1~deb12u2 zlib1g=1:1.2.13.dfsg-1
 
 DL=/var/cache/goboxd-dl
 TC=/var/cache/goboxd-toolchains
@@ -10,7 +15,7 @@ mkdir -p "$DL" "$TC"
 
 if [ ! -d "$TC/dotnet/sdk" ]; then
     [ -f "$DL/dotnet-install.sh" ] || curl -fsSL https://dot.net/v1/dotnet-install.sh -o "$DL/dotnet-install.sh"
-    bash "$DL/dotnet-install.sh" --channel 10.0 --install-dir "$TC/dotnet" --no-path
+    bash "$DL/dotnet-install.sh" --version 10.0.400 --install-dir "$TC/dotnet" --no-path
 fi
 
 rm -rf /usr/local/dotnet

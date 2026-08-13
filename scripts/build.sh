@@ -13,8 +13,16 @@ set -euo pipefail
 
 LANGS="${LANGS:-${1:-all}}"
 
+# Use a docker-container builder: its isolated BuildKit cache store keeps
+# cache mounts (apt archives, toolchains) across builds. The builder is
+# passed explicitly with --builder, so the build uses it regardless of the
+# CLI default builder. Idempotent: create only when missing.
+if ! docker buildx inspect goboxd-builder >/dev/null 2>&1; then
+    docker buildx create --name goboxd-builder --driver docker-container --bootstrap
+fi
+
 echo "==> Building goboxd image (LANGS=${LANGS})"
-docker compose build --build-arg LANGS="${LANGS}"
+docker compose build --builder goboxd-builder --build-arg LANGS="${LANGS}"
 
 echo ""
 echo "==> Done."

@@ -37,6 +37,7 @@ image, you also add an install script in `scripts/lang_install/`.
 | perl | Perl | interpreted | — | `/usr/bin/perl` |
 | erl | Erlang | compiled | `/usr/bin/erlc` | `erl -noshell -pa /app -s solution start -s init stop` |
 | lisp | Lisp (SBCL) | interpreted | — | `/usr/bin/sbcl --script {{source}}` |
+| pascal | Pascal (Free Pascal) | compiled | `/usr/bin/fpc` | `./{{artifact}}` |
 
 ## Version notes
 
@@ -57,7 +58,9 @@ environments:
 1. Add a block to `config/languages.yml`.
 2. Create an install script at `scripts/lang_install/<id>.sh`. The script
    installs and verifies the compiler or runtime. See the existing scripts
-   for examples.
+   for examples. Pin each apt package to an exact version. Use the
+   `pkg=VERSION` form. Pin each downloaded toolchain to an exact version.
+   `scripts/check-pins.sh` verifies both rules in CI.
 3. Create test cases under `tests/testcases/{id}/`. Create at minimum a
    `positive-basic/` case with `input.json` and `want.json`.
 4. Rebuild the Docker image with `make build`. The staged Dockerfile rebuilds

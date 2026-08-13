@@ -7,7 +7,7 @@ set -e
 [ -n "$(ls -A /var/lib/apt/lists 2>/dev/null)" ] || apt-get update
 if ! command -v /usr/bin/gcc &> /dev/null; then
     echo "GCC is not installed. Installing GCC..."
-    apt-get install -y gcc
+    apt-get install -y gcc=4:12.2.0-3
 fi
 
 TEMP_C_FILE=$(mktemp /tmp/test_c_program.XXXX.c)

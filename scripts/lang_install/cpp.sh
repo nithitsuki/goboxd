@@ -7,7 +7,7 @@ set -e
 [ -n "$(ls -A /var/lib/apt/lists 2>/dev/null)" ] || apt-get update
 if ! command -v /usr/bin/g++ &> /dev/null; then
     echo "g++ is not installed. Installing g++ using apt-get..."
-    apt-get install -y g++
+    apt-get install -y g++=4:12.2.0-3
 fi
 
 temp_file=$(mktemp /tmp/test_cpp.XXXXXX.cpp)

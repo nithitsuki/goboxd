@@ -6,7 +6,7 @@ set -e
 [ -n "$(ls -A /var/lib/apt/lists 2>/dev/null)" ] || apt-get update
 echo "Installing Elixir..."
 # Requires the Erlang layer (erlang.sh) to run first in the Dockerfile.
-apt-get install -y --no-install-recommends elixir
+apt-get install -y --no-install-recommends elixir=1.14.0.dfsg-2
 
 if command -v elixir &> /dev/null; then
     echo "Elixir installation verified successfully."
