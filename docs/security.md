@@ -27,7 +27,7 @@ The goal is to prevent the attacker from:
 | 8 | nsjail error misclassification | `isInfraError` detects pipe and start failures. It separates infrastructure errors from user-code errors in both build and test paths. | `internal/runner/runner.go` |
 | 9 | Unbounded concurrency | Channel-based semaphore limits concurrent executions to `runtime.NumCPU()` (or `GOBOXD_MAX_JOBS`), preventing resource exhaustion under burst load | `internal/api/handlers.go` |
 | 10 | Server crash on handler panic | `RecoveryMiddleware` catches panics in all handlers, logs stack trace, returns 500. One bad request cannot crash the server. | `internal/api/logging.go` |
-| 11 | Sandbox escape via dangerous syscalls | The policy file exists at `scripts/seccomp.policy`. The service does not load it. nsjail 3.4 kafel parser limitations block it. This is planned work (see TODO.md Phase 4). | `scripts/seccomp.policy` |
+| 11 | Sandbox escape via dangerous syscalls | The policy file exists at `scripts/seccomp.policy`. The service does not load it. nsjail 3.4 kafel parser limitations block it. This is planned work (see TODO.md Phase 1). | `scripts/seccomp.policy` |
 
 ## What each fix does
 
@@ -97,4 +97,4 @@ The policy file `scripts/seccomp.policy` is a prepared artifact. The service
 does not load it. nsjail 3.4 kafel parser limitations block it. The parser
 accepts a maximum of 9 syscalls per rule. Multi-rule policies fail. This is
 planned work. It requires an nsjail upgrade or a different seccomp approach.
-See TODO.md Phase 4.
+See TODO.md Phase 1.
