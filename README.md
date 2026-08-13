@@ -25,10 +25,9 @@ measures throughput and breaking points.
 - **Penetration test suite** — 138 test cases across 21 languages. They probe
   file reads, shell injection, network isolation, write protection, symlink
   escapes, eval injection, and more.
-- **Ported payload suite** — 73 test cases ported from the Stage 2 challenge
-  specification. They cover accepted, build_failed, runtime_error,
-  time_exceeded, and wrong_output. They cover read-N-print-N*2 scenarios. All
-  ported payloads pass across all 25 compatible languages.
+- **Regression payload suite** — 73 test cases covering accepted, build_failed,
+  runtime_error, time_exceeded, and wrong_output across read-N-print-N*2
+  scenarios. All payloads pass across all 25 compatible languages.
 - **Fixture-driven tests** — test cases are JSON files. You do not need to
   recompile the code to add scenarios.
 - **Embedded playground** — a web UI for interactive testing. Go's `embed.FS`
@@ -111,8 +110,7 @@ These are the best results achievable with the default **Debian base image**
 and **stock OpenJDK**. The 3 RPS ceiling is set by memory pressure. Each
 request uses 354 MB. Four concurrent requests use 1.4 GB in a 2 GB container.
 
-**Further optimization potential** (not pursued due to challenge
-constraints):
+**Further optimization potential** (not pursued in the current scope):
 
 - **Alpine Linux** base would reduce per-sandbox memory overhead
 - **Custom JVM flags** (`-Xmx`, `-Xms`, `-XX:+UseSerialGC`) could shave about
@@ -315,12 +313,12 @@ JSON fixtures define the test cases in `tests/testcases/{lang}/{name}/`:
 tests/testcases/
 ├── py3/
 │   ├── positive-basic/
-│   ├── ported-accepted/
+│   ├── regression-accepted/
 │   ├── penetration-file-read-etc-passwd/
 │   └── ...
 ├── erl/
 │   ├── positive-basic/
-│   ├── ported-accepted/
+│   ├── regression-accepted/
 │   └── ...
 └── ...
 ```

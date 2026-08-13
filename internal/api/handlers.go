@@ -158,7 +158,7 @@ func validateFlags(flags []string, allowlist []string) (bool, string) {
 	return true, ""
 }
 
-// computeTopLevelStatus determines the top-level run status per spec rules.
+// computeTopLevelStatus determines the top-level run status per the API contract.
 func computeTopLevelStatus(build models.BuildResult, tests []models.TestResult) string {
 	if build.Status == "internal_error" {
 		return "internal_error"
@@ -466,7 +466,7 @@ func HandleRun(w http.ResponseWriter, r *http.Request) {
 		log.Printf("[handler] ExecuteRun error for lang=%s: %v | build.Status=%s build.Stderr=%s",
 			req.Language, err, buildRes.Status, buildRes.Stderr)
 		// If buildRes already has internal_error status, return 200 with it
-		// (per spec: internal_error is a status in the response body, not a 5xx)
+		// (per the API contract: internal_error is a status in the response body, not a 5xx)
 		if buildRes.Status == "internal_error" {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
@@ -489,7 +489,7 @@ func HandleRun(w http.ResponseWriter, r *http.Request) {
 
 	topStatus := computeTopLevelStatus(buildRes, testsRes)
 
-	// If build failed, construct not_executed entries for all tests per spec
+	// If build failed, construct not_executed entries for all tests per the API contract
 	if topStatus == "build_failed" || topStatus == "internal_error" {
 		if testsRes == nil && len(req.Tests) > 0 {
 			testsRes = make([]models.TestResult, len(req.Tests))

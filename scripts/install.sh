@@ -8,14 +8,14 @@ echo "==========================================="
 echo "  goboxd - Full Language Installation"
 echo "==========================================="
 
-# Stage 1: System dependencies
+# Step 1: System dependencies
 echo ""
-echo "==> Stage 1: Installing system dependencies..."
+echo "==> Step 1: Installing system dependencies..."
 "$LANG_DIR/system.sh"
 
-# Stage 2: Language toolchains
+# Step 2: Language toolchains
 echo ""
-echo "==> Stage 2: Installing language toolchains..."
+echo "==> Step 2: Installing language toolchains..."
 
 # C
 echo "  -> C"
@@ -77,9 +77,9 @@ echo "  -> Erlang"
 echo "  -> Lisp"
 "$LANG_DIR/lisp.sh"
 
-# Stage 3: Final verification
+# Step 3: Final verification
 echo ""
-echo "==> Stage 3: Final verification..."
+echo "==> Step 3: Final verification..."
 echo ""
 
 python3 --version && gcc --version && g++ --version

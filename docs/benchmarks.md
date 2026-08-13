@@ -15,7 +15,7 @@
 | 100 | 10281 | 4.30 | 31.30 | 41.70 |
 | 200 | 11023 | 10.20 | 45.40 | 59.60 |
 
-## MemoryHog Java workload (challenge spec)
+## MemoryHog Java workload
 
 - **Tool:** [vegeta](https://github.com/tsenart/vegeta) v12
 - **Scenario:** `POST /run` with 150 MB MemoryHog Java program, 30 s steady-state steps

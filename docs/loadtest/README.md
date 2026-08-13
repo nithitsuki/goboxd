@@ -95,7 +95,7 @@ Targeted changes can improve these results:
 | **Class data sharing** (CDS / AppCDS) | Faster JVM startup for repeated runs | Requires pre-built archive. Adds complexity |
 | **GraalVM native image** | Sub-ms startup, minimal memory | Not a drop-in replacement. Language compatibility issues |
 | **Pre-warmed JVM pool** | Skip JVM startup + compilation per request | Resource overhead of idle JVMs |
-| **Larger container** (4 GB RAM) | ~6 RPS throughput (double) | Goes beyond the challenge spec |
+| **Larger container** (4 GB RAM) | ~6 RPS throughput (double) | Goes beyond the tested configuration |
 
-Without changes to the challenge parameters (Debian, stock JVM, 2 GB RAM),
+Without changes to the workload parameters (Debian, stock JVM, 2 GB RAM),
 the 3 RPS breaking point is the ceiling.

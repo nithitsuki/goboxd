@@ -38,7 +38,7 @@ use. Each name must be a single path component. It must not contain `/` or
 is 64 characters. This prevents file writes outside the jail directory.
 
 ### Hole 2 — No shell commands
-The reference implementation used `os.system()` with string formatting.
+Naive implementations shell out via `os.system()` with string formatting.
 goboxd uses the Go filesystem APIs directly. The APIs are `os.MkdirTemp`,
 `os.RemoveAll`, and `os.WriteFile`. Every path operation uses
 `filepath.Join` to prevent path injection. A project-wide scan in
@@ -61,7 +61,7 @@ This prevents flag injection attacks, for example `-fplugin=evil.so` and
 
 ### Hole 5 — Unique directories
 `os.MkdirTemp` creates directories with random suffixes. No collision can
-occur. The reference used a 30k-range UID retry loop. That loop could
+occur. A fixed-range UID retry loop could
 collide under load.
 
 ### Hole 6 — Output capping

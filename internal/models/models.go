@@ -1,6 +1,6 @@
 // Package models defines the shared data types for the goboxd API.
 // These types are used by the HTTP handlers, the runner, and the test
-// fixtures. The JSON serialization tags match the public API specification.
+// fixtures. The JSON serialization tags match the public API contract.
 package models
 
 // Limits represents resource constraints for build or run stages.

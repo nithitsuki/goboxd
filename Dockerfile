@@ -1,4 +1,4 @@
-# Stage 1: Build nsjail and goboxd
+# Step 1: Build nsjail and goboxd
 FROM golang:1.25-bookworm AS builder
 
 # Install nsjail build dependencies
@@ -22,10 +22,10 @@ COPY go.mod ./
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -o goboxd ./cmd/goboxd
 
-# Stage 2a: Python 2 source (EOL runtime, not in Debian repos)
+# Step 2a: Python 2 source (EOL runtime, not in Debian repos)
 FROM python:2.7-slim AS python2
 
-# Stage 2: Runtime environment with languages
+# Step 2: Runtime environment with languages
 FROM debian:bookworm-slim
 
 # Build-time language selection. A comma-separated list of language ids, e.g.
