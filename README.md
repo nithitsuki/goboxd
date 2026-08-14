@@ -164,7 +164,6 @@ scripts/
 ├── install.sh                  Full language installation orchestrator
 ├── lang_install/               Per-language install + verify scripts
 ├── loadtest.sh                 Vegeta-based rate ladder
-└── seccomp.policy              Seccomp-bpf policy file (not loaded)
 docs/
 ├── loadtest/                   Load-test results, CSV, graphs
 ├── reference.md                Package reference from godoc
@@ -260,9 +259,10 @@ tests during normal development.
   `/lib`, `/bin`, `/etc`, `/dev`) read-only
 - **Output capping** — the service caps stdout/stderr at 64 KiB to prevent
   unbounded memory consumption
-- **Seccomp-bpf policy** — the policy file exists at
-  `scripts/seccomp.policy`. The service does not load it. nsjail 3.4 kafel
-  parser limitations block it. This is planned work (see TODO.md Phase 1)
+- **Seccomp-bpf policy** — every jail loads a deny-list policy
+  (`internal/seccomp/seccomp.policy`, embedded in the binary) via
+  `--seccomp_policy`, blocking mount, ptrace, bpf, and other escape
+  primitives with SECCOMP_RET_KILL while allowing everything else
 - **Request limits** — 256 KiB max body size, 50 max test cases, 64 KiB per
   field
 - **Panic recovery** — middleware catches panics so a single bad request

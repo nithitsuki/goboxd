@@ -32,6 +32,7 @@ import (
 
 	"github.com/thesouldev/goboxd/internal/config"
 	"github.com/thesouldev/goboxd/internal/models"
+	"github.com/thesouldev/goboxd/internal/seccomp"
 )
 
 // expandFlags replaces {{flags}} in cmdArgs with the provided flags.
@@ -181,9 +182,18 @@ func isInfraError(err error) bool {
 // hierarchy (the pids controller can be enabled but adding the pid to the child
 // cgroup.procs fails with EOPNOTSUPP). Falls back to --rlimit_nproc.
 // --max_cpus caps CPU usage; tune via GOBOXD_MAX_CPUS env var.
-func nsjailArgs(appDir string, wallTime, memKB, procs int) []string {
+func nsjailArgs(appDir string, wallTime, memKB, procs int) ([]string, error) {
 	memBytes := memKB * 1024
 	maxCPUs := os.Getenv("GOBOXD_MAX_CPUS")
+
+	// Materialize the embedded seccomp policy (once) and pass it to nsjail.
+	// nsjail compiles it with kafel at jail startup and applies the filter to
+	// the jailed process. Failure here is an infrastructure error: the jail
+	// must not start without its seccomp policy.
+	seccompPolicy, err := seccomp.PolicyPath()
+	if err != nil {
+		return nil, err
+	}
 	args := []string{
 		"-Q",
 		"--log", "/dev/null",
@@ -220,9 +230,12 @@ func nsjailArgs(appDir string, wallTime, memKB, procs int) []string {
 		"-B", "/bin",
 		"-B", "/dev",
 		"-B", "/var/lib",
+		// Deny-list seccomp policy (DEFAULT ALLOW): blocks escape primitives
+		// such as mount, ptrace, and kernel-module loading.
+		"--seccomp_policy", seccompPolicy,
 		"--",
 	)
-	return args
+	return args, nil
 }
 
 func execInJail(jailDir string, cmdArgs []string, wallTime, memKB, procs int) (string, string, error) {
@@ -231,7 +244,10 @@ func execInJail(jailDir string, cmdArgs []string, wallTime, memKB, procs int) (s
 		return "", "", fmt.Errorf("app dir: %w", err)
 	}
 
-	args := nsjailArgs(appDir, wallTime, memKB, procs)
+	args, err := nsjailArgs(appDir, wallTime, memKB, procs)
+	if err != nil {
+		return "", "", fmt.Errorf("start: %w", err)
+	}
 	args = append(args, cmdArgs...)
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(wallTime)*time.Second)
@@ -299,7 +315,10 @@ func runSingleTest(tc models.TestCase, lc config.LanguageConfig, jailDir string,
 	}
 
 	appDir := filepath.Join(jailDir, "app")
-	args := nsjailArgs(appDir, wallTime, memKB, procs)
+	args, err := nsjailArgs(appDir, wallTime, memKB, procs)
+	if err != nil {
+		return failResult("internal_error", err.Error(), start)
+	}
 	runFlags := []string{}
 	if runOpts != nil && len(runOpts.Flags) > 0 {
 		runFlags = runOpts.Flags

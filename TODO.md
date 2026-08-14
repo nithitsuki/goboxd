@@ -5,7 +5,7 @@ Items within each phase are ordered by value ÷ effort (highest first).
 ## Phase 1 — Security Hardening
 
 - [ ] **Multi-uid execution** — run each job as a different unprivileged uid inside the jail (piston's isolate model). The single most valuable sandbox property goboxd lacks: today every jail runs as the container user, so one escape is a container-wide compromise.
-- [ ] **Actually load the seccomp policy** — `scripts/seccomp.policy` exists (kafel, denies mount/ptrace/kernel-module ops) but no Go code references it and the nsjail invocation never passes `--seccomp_policy`. Either wire it up or delete the Hole 11 claim from docs/security.md — right now it's a false audit statement. (TODO note from earlier: nsjail 3.4 kafel parser limits may require upgrading nsjail or a different seccomp approach.)
+- [x] **Actually load the seccomp policy** — `internal/seccomp/seccomp.policy` is embedded in the binary and passed to every jail via `--seccomp_policy` (2026-08-14). kafel quirks worked around: `//` comments only, and `umount2` referenced as `SYSCALL[166]` (kafel's amd64 table lacks it; nsjail vendors its own maintained kafel fork, and the fork's table still lacks umount2). nsjail submodule bumped 3.4 → 3.6 in the same change.
 - [ ] **Downward-only per-request limits** — clients can currently raise build/run limits up to configured maxima; switch to piston's model where per-request limits can only go *down*, never up.
 - [ ] Add Slowloris mitigation (ReadHeaderTimeout, etc.)
 - [ ] Add TOCTOU symlink protection (O_EXCL | O_NOFOLLOW)

@@ -158,7 +158,7 @@ details for each component when any component is degraded.
 ```json
 {
   "status": "degraded",
-  "nsjail": { "ok": true, "version": "3.4" },
+  "nsjail": { "ok": true, "version": "3.6" },
   "languages": {
     "py3": { "ok": true, "version": "Python 3.11.2" },
     "c": { "ok": true, "version": "gcc 14" },
@@ -186,7 +186,7 @@ HTTP 200.
   },
   "nsjail": {
     "path": "/usr/bin/nsjail",
-    "version": "3.4"
+    "version": "3.6"
   },
   "languages": [
     {

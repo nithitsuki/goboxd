@@ -111,3 +111,43 @@ func TestE2E_Python3(t *testing.T) {
 		})
 	}
 }
+
+// TestE2E_SeccompMountBlocked verifies the seccomp policy is actually loaded in
+// every jail: mount() must be denied (SECCOMP_RET_KILL -> SIGSYS -> runtime_error).
+// Without the policy the jailed process either mounts successfully or fails with
+// EPERM and exits normally, so this test fails until --seccomp_policy is wired.
+func TestE2E_SeccompMountBlocked(t *testing.T) {
+	source := `#include <sys/mount.h>
+#include <stdio.h>
+
+int main(void) {
+    if (mount(NULL, "/tmp", "tmpfs", 0, NULL) == -1) {
+        perror("mount");
+        return 0;
+    }
+    printf("mount succeeded\n");
+    return 0;
+}`
+	req := models.RunRequest{
+		Language: "c",
+		Source:   source,
+		Tests: []models.TestCase{
+			{Stdin: "", ExpectedStdout: ""},
+		},
+	}
+
+	res := sendRun(t, req)
+
+	if res.Build.Status != "ok" {
+		t.Fatalf("build failed: status=%s stderr=%q", res.Build.Status, res.Build.Stderr)
+	}
+	if len(res.Tests) != 1 {
+		t.Fatalf("expected 1 test result, got %d", len(res.Tests))
+	}
+
+	got := res.Tests[0]
+	if got.Status != "runtime_error" {
+		t.Errorf("expected runtime_error (SIGSYS from seccomp), got %q (stdout=%q stderr=%q)",
+			got.Status, got.Stdout, got.Stderr)
+	}
+}

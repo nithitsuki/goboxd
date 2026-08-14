@@ -27,7 +27,7 @@ The goal is to prevent the attacker from:
 | 8 | nsjail error misclassification | `isInfraError` detects pipe and start failures. It separates infrastructure errors from user-code errors in both build and test paths. | `internal/runner/runner.go` |
 | 9 | Unbounded concurrency | Channel-based semaphore limits concurrent executions to `runtime.NumCPU()` (or `GOBOXD_MAX_JOBS`), preventing resource exhaustion under burst load | `internal/api/handlers.go` |
 | 10 | Server crash on handler panic | `RecoveryMiddleware` catches panics in all handlers, logs stack trace, returns 500. One bad request cannot crash the server. | `internal/api/logging.go` |
-| 11 | Sandbox escape via dangerous syscalls | The policy file exists at `scripts/seccomp.policy`. The service does not load it. nsjail 3.4 kafel parser limitations block it. This is planned work (see TODO.md Phase 1). | `scripts/seccomp.policy` |
+| 11 | Sandbox escape via dangerous syscalls | `--seccomp_policy` passes the embedded deny-list policy to every jail (build and run). kafel compiles it at jail start; DENY is SECCOMP_RET_KILL. | `internal/seccomp/seccomp.policy`, `internal/runner/runner.go` |
 
 ## What each fix does
 
@@ -92,9 +92,19 @@ prevents resource exhaustion. The capacity defaults to `runtime.NumCPU()`.
 You can override it with the `GOBOXD_MAX_JOBS` environment variable.
 Requests queue when the semaphore is full.
 
-### Hole 11 — Seccomp policy is not loaded
-The policy file `scripts/seccomp.policy` is a prepared artifact. The service
-does not load it. nsjail 3.4 kafel parser limitations block it. The parser
-accepts a maximum of 9 syscalls per rule. Multi-rule policies fail. This is
-planned work. It requires an nsjail upgrade or a different seccomp approach.
-See TODO.md Phase 1.
+### Hole 11 — Sandbox escape via dangerous syscalls
+The embedded deny-list policy `internal/seccomp/seccomp.policy` is passed to
+every jail via `--seccomp_policy` (build and run steps share `nsjailArgs`).
+nsjail compiles it with kafel at jail startup and applies the resulting
+seccomp-bpf filter; DENY is SECCOMP_RET_KILL and DEFAULT ALLOW keeps normal
+code execution working. A denied syscall (e.g. `mount`, `ptrace`, `bpf`)
+kills the jailed process with SIGSYS, which the runner reports as
+`runtime_error`.
+
+Two kafel quirks required workarounds. kafel's lexer only accepts `//` and
+`/* */` comments (no `#`), and kafel's amd64 syscall table is missing
+`umount2`, so the policy references it by number (`SYSCALL[166]`, the x86_64
+number shared with umount). nsjail vendors its own maintained kafel fork
+(the standalone google/kafel repo is dormant), and the fork's amd64 table
+still lacks umount2, so `SYSCALL[166]` remains the durable workaround. See
+TODO.md Phase 1 for the remaining hardening items (multi-uid, cgroup v2).

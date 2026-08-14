@@ -248,7 +248,7 @@ func probeReadiness() readyState {
 	return state
 }
 
-// probeNsjail checks nsjail via --help (it doesn't support --version in 3.4).
+// probeNsjail checks nsjail via --help (nsjail does not support --version).
 func probeNsjail() *readyProbe {
 	cmd := exec.Command("nsjail", "--help")
 	if err := cmd.Run(); err != nil {
@@ -259,7 +259,7 @@ func probeNsjail() *readyProbe {
 	}
 	return &readyProbe{
 		OK:      true,
-		Version: "3.4",
+		Version: "3.6",
 	}
 }
 
