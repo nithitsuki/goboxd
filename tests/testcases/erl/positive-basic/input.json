@@ -1,8 +1,17 @@
 {
   "language": "erl",
   "source": "-module(solution).\n-export([start/0]).\n\nstart() ->\n  io:format(\"Hello from Erlang!~n\").",
-  "build": { "limits": { "wall_time_s": 15, "memory_kb": 1048576, "max_processes": 100 } },
+  "build": {
+    "limits": {
+      "wall_time_s": 15,
+      "memory_kb": 2097152,
+      "max_processes": 100
+    }
+  },
   "tests": [
-    { "stdin": "", "expected_stdout": "Hello from Erlang!\n" }
+    {
+      "stdin": "",
+      "expected_stdout": "Hello from Erlang!\n"
+    }
   ]
 }

@@ -1,1 +1,19 @@
-{"language":"java","source":"public class Main { public static void main(String[] args) { System.out.print(\"Hello from Java!\"); } }","source_filename":"Main.java","artifact_filename":"Main","build":{"limits":{"wall_time_s":6,"memory_kb":102400,"max_processes":100}},"tests":[{"stdin":"","expected_stdout":"Hello from Java!"}]}
+{
+  "language": "java",
+  "source": "public class Main { public static void main(String[] args) { System.out.print(\"Hello from Java!\"); } }",
+  "source_filename": "Main.java",
+  "artifact_filename": "Main",
+  "build": {
+    "limits": {
+      "wall_time_s": 6,
+      "memory_kb": 4194304,
+      "max_processes": 100
+    }
+  },
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": "Hello from Java!"
+    }
+  ]
+}

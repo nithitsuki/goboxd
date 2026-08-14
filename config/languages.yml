@@ -57,14 +57,14 @@ languages:
       args: ["{{source}}"]
       limits:
         wall_time_s: 6
-        memory_kb: 102400
+        memory_kb: 4194304
         max_processes: 100
     run:
       cmd: /usr/bin/java
       args: ["-cp", ".", "{{artifact}}"]
       limits:
         wall_time_s: 6
-        memory_kb: 102400
+        memory_kb: 4194304
         max_processes: 100
 
   - id: bash
@@ -241,14 +241,14 @@ languages:
       args: ["-o", "/app", "/app/{{source}}"]
       limits:
         wall_time_s: 15
-        memory_kb: 1048576
+        memory_kb: 2097152
         max_processes: 100
     run:
       cmd: /usr/bin/erl
-      args: ["-noshell", "-pa", "/app", "-s", "solution", "start", "-s", "init", "stop"]
+      args: ["-noshell", "+S", "2:2", "-pa", "/app", "-s", "solution", "start", "-s", "init", "stop"]
       limits:
         wall_time_s: 5
-        memory_kb: 524288
+        memory_kb: 2097152
         max_processes: 64
 
   - id: lisp
@@ -256,10 +256,10 @@ languages:
     source_filename: solution.lisp
     run:
       cmd: /usr/bin/sbcl
-      args: ["--script", "{{source}}"]
+      args: ["--dynamic-space-size", "512", "--script", "{{source}}"]
       limits:
         wall_time_s: 9
-        memory_kb: 102400
+        memory_kb: 1048576
         max_processes: 100
 
   - id: py2
@@ -401,14 +401,14 @@ languages:
       args: ["{{source}}", "-include-runtime", "-d", "{{artifact}}"]
       limits:
         wall_time_s: 20
-        memory_kb: 1048576
+        memory_kb: 4194304
         max_processes: 100
     run:
       cmd: /usr/bin/java
       args: ["-jar", "{{artifact}}"]
       limits:
         wall_time_s: 9
-        memory_kb: 102400
+        memory_kb: 4194304
         max_processes: 64
 
   - id: dart
