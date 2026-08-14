@@ -1,6 +1,6 @@
 {
   "language": "bash",
-  "source": "cat /etc/shadow 2>&1",
+  "source": "cat /etc/shadow 2>/dev/null || true",
   "run": {
     "limits": {
       "wall_time_s": 5

@@ -1,8 +1,17 @@
 {
   "language": "rust",
   "source": "fn main() { panic!(\"crash\"); }",
-  "build": { "limits": { "wall_time_s": 10, "memory_kb": 1048576, "max_processes": 100 } },
+  "build": {
+    "limits": {
+      "wall_time_s": 10,
+      "memory_kb": 4194304,
+      "max_processes": 100
+    }
+  },
   "tests": [
-    { "stdin": "", "expected_stdout": "" }
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
   ]
 }

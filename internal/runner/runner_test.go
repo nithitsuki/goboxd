@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/thesouldev/goboxd/internal/config"
-	"github.com/thesouldev/goboxd/internal/models"
+	"github.com/nithitsuki/goboxd/internal/config"
+	"github.com/nithitsuki/goboxd/internal/models"
 )
 
 func TestExecuteRun(t *testing.T) {
@@ -178,7 +180,7 @@ func TestComputeTestStatus(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := computeTestStatus(context.Background(), tt.err, tt.stdout, tt.expected, nil, tt.memPeak, tt.memLimit, tt.wallTime, tt.duration)
+			got := computeTestStatus(context.Background(), tt.err, tt.stdout, tt.expected, nil, tt.memPeak, tt.memLimit, tt.wallTime, tt.duration, false)
 			if got != tt.want {
 				t.Errorf("computeTestStatus = %q, want %q", got, tt.want)
 			}
@@ -190,5 +192,132 @@ func TestSignalKillReason(t *testing.T) {
 	// signalKillReason with nil ProcessState should return ""
 	if got := signalKillReason(nil); got != "" {
 		t.Errorf("signalKillReason(nil) = %q, want ''", got)
+	}
+}
+
+// TestComputeTestStatusOOMKilled: a cgroup OOM kill (detected via the leaf's
+// memory.events) must be classified memory_exceeded, ahead of the exit-137 /
+// wall-time heuristics that would otherwise say time_exceeded.
+func TestComputeTestStatusOOMKilled(t *testing.T) {
+	cases := []struct {
+		name      string
+		err       error
+		oomKilled bool
+		wallTime  int
+		duration  int
+		want      string
+	}{
+		{"oom kill at 137", fmt.Errorf("exit status 137"), true, 10, 1000, "memory_exceeded"},
+		{"oom kill at wall time", fmt.Errorf("exit status 137"), true, 10, 10000, "memory_exceeded"},
+		{"oom kill with nil err", nil, true, 10, 1000, "memory_exceeded"},
+		{"no oom kill stays time_exceeded", fmt.Errorf("exit status 137"), false, 10, 10000, "time_exceeded"},
+	}
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			got := computeTestStatus(context.Background(), tt.err, "", "", nil, 0, 0, tt.wallTime, tt.duration, tt.oomKilled)
+			if got != tt.want {
+				t.Errorf("computeTestStatus = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestNsjailArgsRlimitUnits guards the nsjail unit contract: --rlimit_as and
+// --rlimit_fsize are in MB (nsjail help text; a bytes value silently becomes a
+// ~1024x larger limit). This was a real bug: memory limits were effectively
+// unenforced because the runner passed memKB*1024 bytes.
+//
+// The guard is TIGHT: RLIMIT_AS equals the memory limit in MB. Runtimes that
+// reserve large VIRTUAL address space up front (CoreCLR, BEAM) cannot fit and
+// are excluded from the registry via GOBOXD_EXCLUDE_LANGS instead of loosening
+// the guard. Real resident-memory enforcement is cgroup v2 when active; the
+// rlimit is the always-present fallback.
+func TestNsjailArgsRlimitUnits(t *testing.T) {
+	args, err := nsjailArgs("/app", 5, 65536, 100, 10000, nil) // 64MB, 100 procs
+	if err != nil {
+		t.Fatalf("nsjailArgs: %v", err)
+	}
+	want := map[string]string{
+		"--rlimit_as":    "64",  // 64MB limit -> 64MB virtual guard, tight
+		"--rlimit_nproc": "100", // count, unit-less
+	}
+	for i := 0; i < len(args)-1; i++ {
+		if wantV, ok := want[args[i]]; ok {
+			if args[i+1] != wantV {
+				t.Errorf("%s = %q, want %q (nsjail takes MB, not bytes)", args[i], args[i+1], wantV)
+			}
+			delete(want, args[i])
+		}
+	}
+	for k := range want {
+		t.Errorf("missing flag %s in nsjail args", k)
+	}
+
+	// Large limits pass through 1:1: 16GB limit -> 16384MB virtual guard.
+	args, err = nsjailArgs("/app", 5, 16*1024*1024, 100, 10000, nil)
+	if err != nil {
+		t.Fatalf("nsjailArgs (16GB): %v", err)
+	}
+	for i := 0; i < len(args)-1; i++ {
+		if args[i] == "--rlimit_as" && args[i+1] != "16384" {
+			t.Errorf("--rlimit_as for 16GB limit = %q, want 16384 (1:1 MB)", args[i+1])
+		}
+	}
+}
+
+// TestWriteSourceRejectsSymlink (TOCTOU): the source write must use
+// O_EXCL|O_NOFOLLOW so a symlink planted at the destination path is never
+// followed. Following it would let a concurrent actor redirect the write
+// outside the jail dir (classic symlink race).
+func TestWriteSourceRejectsSymlink(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "target.txt")
+	link := filepath.Join(dir, "source.c")
+	if err := os.WriteFile(target, []byte("keep"), 0600); err != nil {
+		t.Fatalf("writing target: %v", err)
+	}
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatalf("planting symlink: %v", err)
+	}
+
+	err := writeSource(link, []byte("evil"))
+	if err == nil {
+		t.Fatalf("writeSource followed the symlink: want error (ELOOP/EEXIST), got nil")
+	}
+	got, rerr := os.ReadFile(target)
+	if rerr != nil {
+		t.Fatalf("reading target: %v", rerr)
+	}
+	if string(got) != "keep" {
+		t.Errorf("symlink was followed: target now %q, want %q", got, "keep")
+	}
+}
+
+// TestNsjailArgsUidMapping guards the dual uid_map contract: the jail uid U
+// must be FIRST (the process runs as unprivileged host uid U) and inside-uid 0
+// must ALSO be mapped (0:0:1) for nsjail's mount-tree setup phase, which runs
+// before nsjail drops to U. With only U:U:1 mapped, that phase runs as the
+// unmapped overflow uid and mkdir('/tmp/nsjail.<pid>.root/...') fails EPERM
+// whenever a stale root dir from an earlier run exists.
+func TestNsjailArgsUidMapping(t *testing.T) {
+	args, err := nsjailArgs("/app", 5, 65536, 100, 12345, nil)
+	if err != nil {
+		t.Fatalf("nsjailArgs: %v", err)
+	}
+	// Find the -u and -g blocks in order.
+	var uVals, gVals []string
+	for i := 0; i < len(args); i++ {
+		if args[i] == "-u" && i+1 < len(args) {
+			uVals = append(uVals, args[i+1])
+		}
+		if args[i] == "-g" && i+1 < len(args) {
+			gVals = append(gVals, args[i+1])
+		}
+	}
+	if len(uVals) < 2 || uVals[0] != "12345:12345:1" || uVals[1] != "0:0:1" {
+		t.Errorf("-u maps = %v, want [12345:12345:1 0:0:1] (jail uid first, 0 mapped for setup)", uVals)
+	}
+	if len(gVals) < 2 || gVals[0] != "12345:12345:1" || gVals[1] != "0:0:1" {
+		t.Errorf("-g maps = %v, want [12345:12345:1 0:0:1]", gVals)
 	}
 }

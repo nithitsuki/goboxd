@@ -1,6 +1,7 @@
 package integration
 
 import (
+	"flag"
 	"fmt"
 	"log"
 	"net/http"
@@ -13,7 +14,18 @@ import (
 
 var apiURL string
 
+// flagLang and flagCase narrow TestFixtures to one language and/or one case:
+//
+//	go test ./tests/integration/ -lang go -case positive-basic
+//
+// Without them every advertised-language fixture runs.
+var (
+	flagLang = flag.String("lang", "", "run fixtures for this language only")
+	flagCase = flag.String("case", "", "run this fixture case only (use with -lang)")
+)
+
 func TestMain(m *testing.M) {
+	flag.Parse()
 	if url := os.Getenv("API_URL"); url != "" {
 		apiURL = url
 		os.Exit(m.Run())

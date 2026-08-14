@@ -139,6 +139,18 @@ func LoadRegistry() error {
 		}
 	}
 
+	// GOBOXD_EXCLUDE_LANGS removes languages from the registry (e.g. runtimes
+	// whose virtual-memory reservation exceeds the strict RLIMIT_AS guard).
+	// The image keeps every language; this only filters what the server
+	// advertises and executes. Applied after GOBOXD_LANGS.
+	if exclude := os.Getenv("GOBOXD_EXCLUDE_LANGS"); exclude != "" {
+		for _, id := range strings.Split(exclude, ",") {
+			if id = strings.TrimSpace(id); id != "" {
+				delete(DefaultRegistry, id)
+			}
+		}
+	}
+
 	return nil
 }
 

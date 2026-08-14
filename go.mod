@@ -1,4 +1,4 @@
-module github.com/thesouldev/goboxd
+module github.com/nithitsuki/goboxd
 
 go 1.24
 

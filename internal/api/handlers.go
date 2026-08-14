@@ -16,9 +16,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/thesouldev/goboxd/internal/config"
-	"github.com/thesouldev/goboxd/internal/models"
-	"github.com/thesouldev/goboxd/internal/runner"
+	"github.com/nithitsuki/goboxd/internal/cgroupv2"
+	"github.com/nithitsuki/goboxd/internal/config"
+	"github.com/nithitsuki/goboxd/internal/models"
+	"github.com/nithitsuki/goboxd/internal/runner"
 )
 
 // Global stats counters for the /info endpoint.
@@ -57,9 +58,9 @@ func GetStats() jobStatsSnapshot {
 
 // Concurrency semaphore — bounded global limit, requests queue when full.
 var (
-	jobSem      chan struct{}
-	jobSemOnce  sync.Once
-	maxJobs     int
+	jobSem     chan struct{}
+	jobSemOnce sync.Once
+	maxJobs    int
 )
 
 func initSemaphore() {
@@ -86,7 +87,7 @@ func releaseSlot() {
 	jobSem <- struct{}{}
 }
 
-const maxRequestBytes = 256 * 1024  // 256 KiB limit
+const maxRequestBytes = 256 * 1024 // 256 KiB limit
 const maxTests = 50                // max test cases per request
 const maxFieldBytes = 64 * 1024    // 64 KiB per stdin/expected_stdout field
 
@@ -207,10 +208,10 @@ func HandleReadyz(w http.ResponseWriter, r *http.Request) {
 
 // readyState holds the /readyz probe results.
 type readyState struct {
-	AllOK     bool                           `json:"-"`
-	Status    string                         `json:"status"`
-	Nsjail    *readyProbe                    `json:"nsjail"`
-	Languages map[string]*readyProbe         `json:"languages"`
+	AllOK     bool                   `json:"-"`
+	Status    string                 `json:"status"`
+	Nsjail    *readyProbe            `json:"nsjail"`
+	Languages map[string]*readyProbe `json:"languages"`
 }
 
 type readyProbe struct {
@@ -349,6 +350,10 @@ func HandleInfo(w http.ResponseWriter, r *http.Request) {
 			"path":    nsjailPath,
 			"version": nsjailVersion,
 		},
+		"cgroupv2": map[string]interface{}{
+			"active": cgroupv2.Default().Active(),
+			"mount":  cgroupv2.Default().Root(),
+		},
 		"languages": langs,
 		"limits": map[string]interface{}{
 			"max_source_bytes":    262144,
@@ -356,10 +361,10 @@ func HandleInfo(w http.ResponseWriter, r *http.Request) {
 			"max_concurrent_jobs": maxJobs,
 		},
 		"stats": map[string]interface{}{
-			"in_flight_jobs":         s.InFlight,
-			"jobs_total":             s.Total,
-			"jobs_failed_internal":   s.FailedInternal,
-			"last_internal_error_at": s.LastErrorAt,
+			"in_flight_jobs":           s.InFlight,
+			"jobs_total":               s.Total,
+			"jobs_failed_internal":     s.FailedInternal,
+			"last_internal_error_at":   s.LastErrorAt,
 			"disk_free_bytes_jail_dir": diskFree,
 		},
 	}

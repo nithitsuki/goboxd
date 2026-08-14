@@ -21,13 +21,16 @@ The goal is to prevent the attacker from:
 | 2 | Shell-style directory commands | Use `os.MkdirTemp` and `os.RemoveAll`, no shell exec. Unit test `TestSecurityHole2NoShellCommands` verifies zero shell invocations project-wide. | `internal/runner/runner.go`, `internal/api/handlers_test.go` |
 | 3 | Compiler-flag injection | Per-language allow-list with exact and prefix (`*`) matching | `internal/api/handlers.go` |
 | 4 | No request size limits | `http.MaxBytesReader` (256 KiB), test count cap (50), per-field cap (64 KiB), output capped at 64 KiB | `internal/api/handlers.go`, `internal/runner/runner.go` |
-| 5 | UID collisions under load | `os.MkdirTemp` guarantees unique directory names | `internal/runner/runner.go` |
+| 5 | UID collisions under load | Each jail runs as a distinct unprivileged host uid from a pool. Jail dirs are 0700 and owned by the jail uid. | `internal/uidpool/`, `internal/runner/runner.go` |
 | 6 | Unbounded child output | `io.LimitReader` caps stdout/stderr at 64 KiB, `readCapped` adds truncation marker | `internal/runner/runner.go` |
 | 7 | Stale jail directories | `defer os.RemoveAll` after every jail dir creation + startup orphan sweep (30 min) | `internal/runner/runner.go`, `cmd/goboxd/main.go` |
 | 8 | nsjail error misclassification | `isInfraError` detects pipe and start failures. It separates infrastructure errors from user-code errors in both build and test paths. | `internal/runner/runner.go` |
 | 9 | Unbounded concurrency | Channel-based semaphore limits concurrent executions to `runtime.NumCPU()` (or `GOBOXD_MAX_JOBS`), preventing resource exhaustion under burst load | `internal/api/handlers.go` |
 | 10 | Server crash on handler panic | `RecoveryMiddleware` catches panics in all handlers, logs stack trace, returns 500. One bad request cannot crash the server. | `internal/api/logging.go` |
 | 11 | Sandbox escape via dangerous syscalls | `--seccomp_policy` passes the embedded deny-list policy to every jail (build and run). kafel compiles it at jail start; DENY is SECCOMP_RET_KILL. | `internal/seccomp/seccomp.policy`, `internal/runner/runner.go` |
+| 12 | Memory limits not enforced | nsjail's `--rlimit_as` takes MB. The runner passed bytes. Limits were about 1024x too large. The guard is now tight and equal to the memory limit. | `internal/runner/runner.go` |
+| 13 | Symlink race on the source write | `writeSource` opens the source path with `O_EXCL` and `O_NOFOLLOW`. A planted symlink fails the open instead of being followed. | `internal/runner/runner.go` |
+| 14 | Memory and pids limits without cgroup v2 | Per-jail cgroup v2 dirs enforce `memory.max` and `pids.max`. Peak memory and OOM events come from the cgroup. The rlimit fallback stays active when cgroup v2 is not available. | `internal/cgroupv2/` |
 
 ## What each fix does
 
@@ -59,10 +62,18 @@ This prevents flag injection attacks, for example `-fplugin=evil.so` and
 - Child stdout/stderr: capped at 64 KiB per stream with truncation marker
 - File writes inside jail: limited via `--rlimit_fsize 100` (100 MB)
 
-### Hole 5 — Unique directories
-`os.MkdirTemp` creates directories with random suffixes. No collision can
-occur. A fixed-range UID retry loop could
-collide under load.
+### Hole 5 — One unprivileged uid per jail
+The uid pool gives each jail one uid from a fixed range. The range starts
+at `GOBOXD_UID_MIN` (default 10000). The pool size equals the concurrency
+semaphore bound. The pool can never be empty while the server admits jobs.
+An allocation failure returns `internal_error`. Two jails never share a uid.
+
+The jail dir starts root-owned with mode 0700. The runner chowns it to the
+jail uid. The jailed process can read and write its own dir. Other jails
+cannot traverse it. The nsjail uid map is `U:U:1` plus `0:0:1`. The first
+map pins the process to unprivileged host uid U. The second map lets the
+nsjail setup phase run. An escape from one jail yields only uid U
+privileges. It never yields root.
 
 ### Hole 6 — Output capping
 The server reads child stdout and stderr through `io.LimitReader`. If output
@@ -106,5 +117,45 @@ Two kafel quirks required workarounds. kafel's lexer only accepts `//` and
 `umount2`, so the policy references it by number (`SYSCALL[166]`, the x86_64
 number shared with umount). nsjail vendors its own maintained kafel fork
 (the standalone google/kafel repo is dormant), and the fork's amd64 table
-still lacks umount2, so `SYSCALL[166]` remains the durable workaround. See
-TODO.md Phase 1 for the remaining hardening items (multi-uid, cgroup v2).
+still lacks umount2, so `SYSCALL[166]` remains the durable workaround.
+
+### Hole 12 — Memory limits are now real
+nsjail reads `--rlimit_as` in megabytes. The runner passed kilobytes times
+1024. Every memory limit was about 1024x too large. The fix converts the
+limit to MB and passes it 1:1. RLIMIT_AS caps virtual address space. Some
+runtimes reserve large virtual regions at startup. The registry raises the
+limits for those runtimes. The registry excludes the two that cannot fit
+tight limits (csharp and elixir). See the deployment section.
+
+### Hole 13 — Symlink race on the source write
+The source write uses `O_EXCL` and `O_NOFOLLOW`. A symlink at the source
+path fails the open. The write never follows the link. The unit test
+`TestWriteSourceRejectsSymlink` plants a symlink and asserts the failure.
+
+### Hole 14 — cgroup v2 enforcement
+When the host exposes a writable cgroup2 hierarchy, goboxd creates one
+cgroup dir per jail. nsjail moves each exec into a leaf under it. The leaf
+enforces `memory.max` and `pids.max`. The jail dir reports `memory.peak`
+for the response. A polling loop reads `memory.events` to classify cgroup
+OOM kills as `memory_exceeded`.
+
+The startup probe proves that the memory controller really charges memory.
+It runs a small hog in a probe cgroup. If the peak does not move, the probe
+fails. The server then uses the rlimit path. Limits are never unenforced.
+
+## Deployment
+
+The cgroup v2 path needs a writable cgroup2 filesystem. On systemd hosts,
+run goboxd as root. Docker Desktop does not provide a writable hierarchy.
+It uses the rlimit path. Set `GOBOXD_CGROUPV2=off` to force the rlimit path.
+The server reports the state in `/info` under `cgroupv2`.
+
+Environment variables:
+
+- `GOBOXD_UID_MIN`: first uid in the jail uid pool. Default 10000.
+- `GOBOXD_CGROUPV2`: `auto` (default), `on`, or `off`.
+- `GOBOXD_EXCLUDE_LANGS`: comma list of languages to remove from the
+  registry. The image keeps them. The default excludes csharp and elixir.
+
+Run `scripts/dev-host.sh` for a native host server without Docker. It
+advertises the languages installed on the host.

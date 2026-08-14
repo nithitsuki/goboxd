@@ -4,12 +4,13 @@ Items within each phase are ordered by value ÷ effort (highest first).
 
 ## Phase 1 — Security Hardening
 
-- [ ] **Multi-uid execution** — run each job as a different unprivileged uid inside the jail (piston's isolate model). The single most valuable sandbox property goboxd lacks: today every jail runs as the container user, so one escape is a container-wide compromise.
+- [x] **Multi-uid execution** — each jail runs as a distinct unprivileged host uid from `internal/uidpool` (dual nsjail uid map `U:U:1` + `0:0:1`, 0700 jail dirs owned by the jail uid). An escape yields only uid U, never root. Shipped 2026-08-14.
 - [x] **Actually load the seccomp policy** — `internal/seccomp/seccomp.policy` is embedded in the binary and passed to every jail via `--seccomp_policy` (2026-08-14). kafel quirks worked around: `//` comments only, and `umount2` referenced as `SYSCALL[166]` (kafel's amd64 table lacks it; nsjail vendors its own maintained kafel fork, and the fork's table still lacks umount2). nsjail submodule bumped 3.4 → 3.6 in the same change.
 - [ ] **Downward-only per-request limits** — clients can currently raise build/run limits up to configured maxima; switch to piston's model where per-request limits can only go *down*, never up.
 - [ ] Add Slowloris mitigation (ReadHeaderTimeout, etc.)
-- [ ] Add TOCTOU symlink protection (O_EXCL | O_NOFOLLOW)
-- [ ] **Full cgroup v2 support** — replace the `--rlimit_as` / `--rlimit_nproc` fallbacks with real cgroup v2 memory + pids controllers (memory.peak tracking, OOM kill detection). Screw Docker Desktop — it doesn't expose a writable cgroup hierarchy; drop the workaround and document it as unsupported.
+- [x] Add TOCTOU symlink protection (writeSource uses O_EXCL|O_NOFOLLOW; `TestWriteSourceRejectsSymlink` proves a planted symlink fails the open). Shipped 2026-08-14.
+- [x] **Full cgroup v2 support** — per-jail cgroup dirs enforce memory.max/pids.max with per-jail memory.peak and OOM-vs-timeout classification (`internal/cgroupv2`). Startup probe proves real charging; any probe failure falls back to the always-present rlimit path (limits never unenforced). Docker Desktop = documented rlimit fallback. Shipped 2026-08-14.
+- [ ] **Re-enable excluded VM languages** — the tight RLIMIT_AS guard (now real, after the MB-units fix that made limits ~1024x too loose) cannot host CoreCLR (csharp) and BEAM (elixir): they reserve more virtual address space than any tight cap allows. They are excluded via GOBOXD_EXCLUDE_LANGS. Revisit when cgroup v2 memory.max is the primary enforcement and rlimit_as can be loosened, or ship raised per-language limits. Related: scala/racket/go/js/r limits were raised to their measured virtual needs (see config/languages.yml).
 
 ## Phase 2 — Observability & DX
 
@@ -19,7 +20,7 @@ Items within each phase are ordered by value ÷ effort (highest first).
 
 ## Phase 3 — Polish
 
-- [ ] Fix memory_peak_kb to use per-process (not global RUSAGE_CHILDREN)
+- [x] Fix memory_peak_kb — superseded by per-jail cgroup `memory.peak` (Hole 14). The global RUSAGE_CHILDREN read remains only as the fallback when cgroup v2 is inactive.
 - [ ] Add models package tests
 - [ ] Fix /readyz to return full breakdown on success
 - [ ] Add per-language smoke probe overrides in YAML

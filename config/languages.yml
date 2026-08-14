@@ -86,7 +86,7 @@ languages:
       args: ["{{source}}"]
       limits:
         wall_time_s: 9
-        memory_kb: 102400
+        memory_kb: 2097152
         max_processes: 100
 
   - id: verilog
@@ -117,7 +117,7 @@ languages:
       args: ["{{flags}}", "-o", "{{artifact}}", "{{source}}"]
       limits:
         wall_time_s: 10
-        memory_kb: 1048576
+        memory_kb: 4194304
         max_processes: 100
       flag_allowlist: ["-O*"]
     run:
@@ -133,17 +133,17 @@ languages:
     artifact: main
     build:
       cmd: /usr/bin/go
-      args: ["build", "{{flags}}", "-o", "{{artifact}}", "{{source}}"]
+      args: ["build", "{{flags}}", "-p", "4", "-o", "{{artifact}}", "{{source}}"]
       limits:
         wall_time_s: 15
-        memory_kb: 1048576
+        memory_kb: 4194304
         max_processes: 100
       flag_allowlist: ["-ldflags*", "-tags*"]
     run:
       cmd: ./{{artifact}}
       limits:
         wall_time_s: 5
-        memory_kb: 524288
+        memory_kb: 1048576
         max_processes: 64
 
   - id: haskell
@@ -190,7 +190,7 @@ languages:
       args: ["{{source}}"]
       limits:
         wall_time_s: 9
-        memory_kb: 102400
+        memory_kb: 4194304
         max_processes: 100
 
   - id: d
@@ -303,7 +303,7 @@ languages:
       args: ["{{source}}"]
       limits:
         wall_time_s: 9
-        memory_kb: 102400
+        memory_kb: 524288
         max_processes: 100
 
   - id: elixir
@@ -382,14 +382,14 @@ languages:
       args: ["-d", ".", "{{source}}"]
       limits:
         wall_time_s: 20
-        memory_kb: 1048576
+        memory_kb: 4194304
         max_processes: 100
     run:
       cmd: /usr/local/scala3/bin/scala
       args: ["{{artifact}}"]
       limits:
         wall_time_s: 9
-        memory_kb: 102400
+        memory_kb: 4194304
         max_processes: 64
 
   - id: kotlin

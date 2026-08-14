@@ -9,6 +9,13 @@ services:
     ports:
       - "8080:8080"
     privileged: true # Required for nsjail to create namespaces
+    # cgroup v2: goboxd auto-detects a writable cgroup2 hierarchy at startup
+    # and enforces per-jail memory/pids limits with it, falling back to rlimit
+    # enforcement where unavailable (e.g. Docker Desktop, or containers whose
+    # cgroup namespace has no delegated controllers). On Linux hosts run the
+    # container with --cgroupns=host (docker run) to expose the host hierarchy
+    # and enable cgroup v2; compose on this version accepts no cgroupns field.
+    # See docs/security.md for the deployment matrix.
     restart: unless-stopped
     deploy:
       resources:
@@ -24,3 +31,8 @@ services:
       # Advertise only the languages the image was built with.
       # Follows the LANGS used at build time; empty = all.
       - GOBOXD_LANGS=${LANGS:-}
+      # Exclude runtimes whose upfront VIRTUAL address-space reservation
+      # exceeds the strict RLIMIT_AS guard (1:1 with the memory limit):
+      # CoreCLR (csharp) and BEAM (elixir) fail to initialize under it.
+      # Re-enable when cgroup v2 is the primary memory enforcement.
+      - GOBOXD_EXCLUDE_LANGS=csharp,elixir

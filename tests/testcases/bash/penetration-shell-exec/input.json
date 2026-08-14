@@ -1,6 +1,6 @@
 {
   "language": "bash",
-  "source": "id\nwhoami\nhostname",
+  "source": "id\nwhoami\nuname -n",
   "run": {
     "limits": {
       "wall_time_s": 5

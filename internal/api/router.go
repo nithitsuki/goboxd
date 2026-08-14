@@ -10,13 +10,14 @@ import "net/http"
 
 // NewRouter constructs and wires up the API routes with structured logging.
 // Registered endpoints:
-//   GET  /healthz     — liveness check
-//   GET  /readyz      — readiness probe (checks nsjail + all languages)
-//   GET  /info        — service metadata and runtime stats
-//   POST /run         — execute untrusted code
-//   GET  /playground           — web UI (if embedded via embed.FS)
-//   GET  /testcases              — list all testcases
-//   GET  /testcases/{lang}/{name} — get a specific testcase
+//
+//	GET  /healthz     — liveness check
+//	GET  /readyz      — readiness probe (checks nsjail + all languages)
+//	GET  /info        — service metadata and runtime stats
+//	POST /run         — execute untrusted code
+//	GET  /playground           — web UI (if embedded via embed.FS)
+//	GET  /testcases              — list all testcases
+//	GET  /testcases/{lang}/{name} — get a specific testcase
 func NewRouter() http.Handler {
 	mux := http.NewServeMux()
 

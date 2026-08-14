@@ -2,8 +2,20 @@
   "language": "cpp",
   "source": "#include <iostream>\nint main() { std::cout << \"extra args test\"; return 0; }",
   "build": {
-    "limits": { "wall_time_s": 5, "memory_kb": 102400, "max_processes": 100 },
-    "flags": ["-std=c++17", "-Wall"]
+    "limits": {
+      "wall_time_s": 5,
+      "memory_kb": 1048576,
+      "max_processes": 100
+    },
+    "flags": [
+      "-std=c++17",
+      "-Wall"
+    ]
   },
-  "tests": [{ "stdin": "", "expected_stdout": "extra args test" }]
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": "extra args test"
+    }
+  ]
 }

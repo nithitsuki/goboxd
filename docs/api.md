@@ -188,6 +188,10 @@ HTTP 200.
     "path": "/usr/bin/nsjail",
     "version": "3.6"
   },
+  "cgroupv2": {
+    "active": true,
+    "mount": "/sys/fs/cgroup"
+  },
   "languages": [
     {
       "id": "py3",

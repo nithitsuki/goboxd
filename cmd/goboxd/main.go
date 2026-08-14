@@ -11,12 +11,21 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/thesouldev/goboxd/internal/api"
-	"github.com/thesouldev/goboxd/internal/config"
-	"github.com/thesouldev/goboxd/internal/runner"
+	"github.com/nithitsuki/goboxd/internal/api"
+	"github.com/nithitsuki/goboxd/internal/cgroupv2"
+	"github.com/nithitsuki/goboxd/internal/config"
+	"github.com/nithitsuki/goboxd/internal/runner"
 )
 
 func main() {
+	// Enforcement probe support: the cgroupv2 package re-execs this binary
+	// with GOBOXD_CGROUP_PROBE_HOG set to verify the memory controller really
+	// charges memory before goboxd trusts the cgroup hierarchy.
+	if os.Getenv("GOBOXD_CGROUP_PROBE_HOG") == "1" {
+		cgroupv2.ProbeHog()
+		return
+	}
+
 	// Load language registry from YAML (config/languages.yml)
 	if err := config.LoadRegistry(); err != nil {
 		log.Fatalf("Loading language registry: %v", err)
@@ -25,6 +34,11 @@ func main() {
 	// Sweep orphan jail dirs older than 30 minutes from previous runs.
 	// This is a startup safety net (see Security Hole #7).
 	runner.SweepOrphans()
+
+	// Probe cgroup v2 availability (logs active/inactive; the runner falls
+	// back to rlimits when inactive). Must run before the server accepts
+	// requests so /info and the runner agree on the state.
+	cgroupv2.Default()
 
 	port := os.Getenv("PORT")
 	if port == "" {

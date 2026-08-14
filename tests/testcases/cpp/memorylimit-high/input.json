@@ -1,6 +1,17 @@
 {
   "language": "cpp",
   "source": "#include <iostream>\nint main() { int a = 0; std::cout << \"done\"; return 0; }",
-  "build": { "limits": { "wall_time_s": 5, "memory_kb": 102400, "max_processes": 100 } },
-  "tests": [{ "stdin": "", "expected_stdout": "done" }]
+  "build": {
+    "limits": {
+      "wall_time_s": 5,
+      "memory_kb": 1048576,
+      "max_processes": 100
+    }
+  },
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": "done"
+    }
+  ]
 }

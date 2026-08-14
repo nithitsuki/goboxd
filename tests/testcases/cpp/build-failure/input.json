@@ -1,1 +1,17 @@
-{"language":"cpp","source":"this is not valid cpp code at all","build":{"limits":{"wall_time_s":5,"memory_kb":102400,"max_processes":100}},"tests":[{"stdin":"","expected_stdout":""}]}
+{
+  "language": "cpp",
+  "source": "this is not valid cpp code at all",
+  "build": {
+    "limits": {
+      "wall_time_s": 5,
+      "memory_kb": 1048576,
+      "max_processes": 100
+    }
+  },
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ]
+}

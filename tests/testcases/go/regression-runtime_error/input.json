@@ -10,14 +10,14 @@
   "run": {
     "limits": {
       "wall_time_s": 5,
-      "memory_kb": 524288,
+      "memory_kb": 1048576,
       "max_processes": 64
     }
   },
   "build": {
     "limits": {
       "wall_time_s": 5,
-      "memory_kb": 1048576,
+      "memory_kb": 4194304,
       "max_processes": 100
     }
   }

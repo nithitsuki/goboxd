@@ -155,3 +155,20 @@ func TestLoadRegistryAllKeyword(t *testing.T) {
 		t.Errorf("GOBOXD_LANGS=all: got %d languages, want >= 28", len(DefaultRegistry))
 	}
 }
+
+func TestLoadRegistryExcludesByEnv(t *testing.T) {
+	t.Setenv("GOBOXD_LANGS", "")
+	t.Setenv("GOBOXD_EXCLUDE_LANGS", "csharp,elixir")
+	if err := LoadRegistry(); err != nil {
+		t.Fatalf("LoadRegistry: %v", err)
+	}
+	if _, ok := DefaultRegistry["csharp"]; ok {
+		t.Error("GOBOXD_EXCLUDE_LANGS=csharp,elixir: csharp should be excluded")
+	}
+	if _, ok := DefaultRegistry["elixir"]; ok {
+		t.Error("GOBOXD_EXCLUDE_LANGS=csharp,elixir: elixir should be excluded")
+	}
+	if _, ok := DefaultRegistry["py3"]; !ok {
+		t.Error("GOBOXD_EXCLUDE_LANGS must not remove py3")
+	}
+}

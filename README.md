@@ -19,9 +19,14 @@ measures throughput and breaking points.
   not need to change Go code.
 - **Bounded concurrency** — a channel-based semaphore prevents resource
   exhaustion under burst load. Configure it with `GOBOXD_MAX_JOBS`.
-- **Security-first** — path traversal prevention, flag allow-lists, request
-  size limits (256 KiB), output capping (64 KiB), automatic jail directory
-  cleanup, panic recovery middleware
+- **Security-first** — per-jail unprivileged uids (multi-uid), seccomp
+  deny-list, cgroup v2 memory/pids limits with rlimit fallback, path
+  traversal prevention, flag allow-lists, request size limits (256 KiB),
+  output capping (64 KiB), automatic jail directory cleanup, panic recovery
+  middleware
+- **Environment controls** — `GOBOXD_UID_MIN` (first jail uid),
+  `GOBOXD_CGROUPV2` (auto/on/off), `GOBOXD_EXCLUDE_LANGS` (registry filter,
+  default excludes csharp and elixir). See docs/security.md.
 - **Penetration test suite** — 138 test cases across 21 languages. They probe
   file reads, shell injection, network isolation, write protection, symlink
   escapes, eval injection, and more.
@@ -164,6 +169,7 @@ scripts/
 ├── install.sh                  Full language installation orchestrator
 ├── lang_install/               Per-language install + verify scripts
 ├── loadtest.sh                 Vegeta-based rate ladder
+├── dev-host.sh                 Run goboxd natively on the host (no docker)
 docs/
 ├── loadtest/                   Load-test results, CSV, graphs
 ├── reference.md                Package reference from godoc

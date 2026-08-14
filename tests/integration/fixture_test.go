@@ -3,6 +3,7 @@ package integration
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -21,11 +22,54 @@ func TestFixtures(t *testing.T) {
 		t.Fatal("no test fixtures found in tests/testcases/")
 	}
 
+	// Skip fixtures for languages the server does not advertise (e.g. removed
+	// via GOBOXD_EXCLUDE_LANGS). Posting them would fail with a 400 and bury
+	// real regressions under noise.
+	advertised, err := advertisedLanguages(baseURL)
+	if err != nil {
+		t.Fatalf("fetching advertised languages: %v", err)
+	}
+
 	for _, f := range fixtures {
+		if !advertised[f.Lang] {
+			t.Run(f.Name, func(t *testing.T) {
+				t.Skipf("language %q not advertised by the server (registry filtered)", f.Lang)
+			})
+			continue
+		}
+		if *flagLang != "" && f.Lang != *flagLang {
+			continue
+		}
+		if *flagCase != "" && filepath.Base(f.Name) != *flagCase {
+			continue
+		}
 		t.Run(f.Name, func(t *testing.T) {
 			runFixture(t, baseURL, f)
 		})
 	}
+}
+
+// advertisedLanguages returns the set of language ids the server serves,
+// from GET /info.
+func advertisedLanguages(baseURL string) (map[string]bool, error) {
+	resp, err := http.Get(baseURL + "/info")
+	if err != nil {
+		return nil, fmt.Errorf("GET /info: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	var info struct {
+		Languages []struct {
+			ID string `json:"id"`
+		} `json:"languages"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
+		return nil, fmt.Errorf("decoding /info: %w", err)
+	}
+	set := make(map[string]bool, len(info.Languages))
+	for _, l := range info.Languages {
+		set[l.ID] = true
+	}
+	return set, nil
 }
 
 // TestFixtureNamesUnique guards the subtest naming scheme. Every fixture name

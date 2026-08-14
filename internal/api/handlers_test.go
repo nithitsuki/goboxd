@@ -12,8 +12,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/thesouldev/goboxd/internal/config"
-	"github.com/thesouldev/goboxd/internal/models"
+	"github.com/nithitsuki/goboxd/internal/config"
+	"github.com/nithitsuki/goboxd/internal/models"
 )
 
 func TestHandleHealthz(t *testing.T) {
@@ -62,6 +62,16 @@ func TestHandleInfo(t *testing.T) {
 	}
 	if _, ok := body["languages"]; !ok {
 		t.Error("missing languages")
+	}
+	// cgroupv2 state must be exposed so clients (and the e2e suite) can tell
+	// whether cgroup limits are enforced or the rlimit fallback is in use.
+	cg, ok := body["cgroupv2"].(map[string]interface{})
+	if !ok {
+		t.Error("missing cgroupv2 field")
+	} else {
+		if _, ok := cg["active"].(bool); !ok {
+			t.Error("cgroupv2.active must be a bool")
+		}
 	}
 }
 

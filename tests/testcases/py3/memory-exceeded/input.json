@@ -1,7 +1,13 @@
 {
   "language": "py3",
   "source": "l = []\nwhile True:\n    l.append('a' * 1024 * 1024)",
-  "run": { "limits": { "wall_time_s": 5, "memory_kb": 10240, "max_processes": 100 } },
+  "run": {
+    "limits": {
+      "wall_time_s": 5,
+      "memory_kb": 1048576,
+      "max_processes": 100
+    }
+  },
   "tests": [
     {
       "stdin": "",
