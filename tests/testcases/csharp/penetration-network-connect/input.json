@@ -9,15 +9,15 @@
   ],
   "build": {
     "limits": {
-      "wall_time_s": 30,
-      "memory_kb": 1048576,
+      "wall_time_s": 20,
+      "memory_kb": 4194304,
       "max_processes": 100
     }
   },
   "run": {
     "limits": {
       "wall_time_s": 5,
-      "memory_kb": 524288,
+      "memory_kb": 4194304,
       "max_processes": 64
     }
   }

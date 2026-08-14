@@ -31,8 +31,6 @@ services:
       # Advertise only the languages the image was built with.
       # Follows the LANGS used at build time; empty = all.
       - GOBOXD_LANGS=${LANGS:-}
-      # Exclude runtimes whose upfront VIRTUAL address-space reservation
-      # exceeds the strict RLIMIT_AS guard (1:1 with the memory limit):
-      # CoreCLR (csharp) and BEAM (elixir) fail to initialize under it.
-      # Re-enable when cgroup v2 is the primary memory enforcement.
-      - GOBOXD_EXCLUDE_LANGS=csharp,elixir
+      # GOBOXD_EXCLUDE_LANGS removes languages from the advertised registry
+      # (the image keeps them). Empty = all languages advertised.
+      - GOBOXD_EXCLUDE_LANGS=${GOBOXD_EXCLUDE_LANGS:-}

@@ -155,7 +155,7 @@ Environment variables:
 - `GOBOXD_UID_MIN`: first uid in the jail uid pool. Default 10000.
 - `GOBOXD_CGROUPV2`: `auto` (default), `on`, or `off`.
 - `GOBOXD_EXCLUDE_LANGS`: comma list of languages to remove from the
-  registry. The image keeps them. The default excludes csharp and elixir.
+  registry. The image keeps them. The default is empty (all languages run).
 
 Run `scripts/dev-host.sh` for a native host server without Docker. It
 advertises the languages installed on the host.

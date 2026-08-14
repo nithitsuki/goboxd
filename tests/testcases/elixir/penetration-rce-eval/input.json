@@ -10,7 +10,7 @@
   "run": {
     "limits": {
       "wall_time_s": 5,
-      "memory_kb": 102400,
+      "memory_kb": 8388608,
       "max_processes": 100
     }
   }

@@ -13,7 +13,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 GOBOXD_LANGS="${GOBOXD_LANGS:-py3,c,cpp,bash,js,rust,go,lua,perl,r,py2}"
-GOBOXD_EXCLUDE_LANGS="${GOBOXD_EXCLUDE_LANGS:-csharp,elixir}"
+GOBOXD_EXCLUDE_LANGS="${GOBOXD_EXCLUDE_LANGS:-}"
 # Unset = full host resources: GOBOXD_MAX_JOBS defaults to runtime.NumCPU()
 # (the uid pool sizes to it) and no per-jail CPU cap is applied.
 GOBOXD_MAX_JOBS="${GOBOXD_MAX_JOBS:-}"

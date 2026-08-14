@@ -311,10 +311,10 @@ languages:
     source_filename: solution.exs
     run:
       cmd: /usr/bin/elixir
-      args: ["{{source}}"]
+      args: ["--erl", "+S 2:2", "{{source}}"]
       limits:
         wall_time_s: 9
-        memory_kb: 102400
+        memory_kb: 8388608
         max_processes: 100
 
   - id: ts
@@ -345,14 +345,14 @@ languages:
       args: ["{{source}}"]
       limits:
         wall_time_s: 20
-        memory_kb: 1048576
+        memory_kb: 4194304
         max_processes: 100
     run:
       cmd: /usr/local/dotnet/dotnet
       args: ["{{artifact}}"]
       limits:
         wall_time_s: 9
-        memory_kb: 102400
+        memory_kb: 4194304
         max_processes: 64
 
   - id: swift
