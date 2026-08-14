@@ -26,13 +26,13 @@ measures throughput and breaking points.
   middleware
 - **Environment controls** — `GOBOXD_UID_MIN` (first jail uid),
   `GOBOXD_CGROUPV2` (auto/on/off), `GOBOXD_EXCLUDE_LANGS` (registry filter,
-  default excludes csharp and elixir). See docs/security.md.
-- **Penetration test suite** — 138 test cases across 21 languages. They probe
+  empty = all languages). See docs/security.md.
+- **Penetration test suite** — 145 test cases across 22 languages. They probe
   file reads, shell injection, network isolation, write protection, symlink
   escapes, eval injection, and more.
-- **Regression payload suite** — 73 test cases covering accepted, build_failed,
+- **Regression payload suite** — 74 test cases covering accepted, build_failed,
   runtime_error, time_exceeded, and wrong_output across read-N-print-N*2
-  scenarios. All payloads pass across all 25 compatible languages.
+  scenarios. All payloads pass across all 26 compatible languages.
 - **Fixture-driven tests** — test cases are JSON files. You do not need to
   recompile the code to add scenarios.
 - **Embedded playground** — a web UI for interactive testing. Go's `embed.FS`
@@ -46,7 +46,7 @@ measures throughput and breaking points.
 # First-time only: fetch the nsjail (+ kafel) submodules required by the build
 git submodule update --init --recursive
 
-# Build and start (installs all 29 languages)
+# Build and start (installs all 30 languages)
 make build
 make run
 
@@ -231,8 +231,8 @@ instructions for adding new languages.
 
 ## Penetration testing
 
-goboxd includes 138 automated penetration test cases organized by attack
-vector. The test cases cover 21 languages. The table shows the attack
+goboxd includes 145 automated penetration test cases organized by attack
+vector. The test cases cover 22 languages. The table shows the attack
 vectors and the languages they cover:
 
 | Vector | Languages | What it probes |
