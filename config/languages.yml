@@ -51,6 +51,7 @@ languages:
   - id: java
     name: Java
     source_filename: Main.java
+    source_filename_strategy: fixed
     artifact: Main
     build:
       cmd: /usr/bin/javac
@@ -347,6 +348,8 @@ languages:
         wall_time_s: 20
         memory_kb: 4194304
         max_processes: 100
+      smoke_cmd: /usr/local/dotnet/dotnet
+      smoke_args: ["--version"]
     run:
       cmd: /usr/local/dotnet/dotnet
       args: ["{{artifact}}"]

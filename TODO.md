@@ -21,11 +21,11 @@ Items within each phase are ordered by value ÷ effort (highest first).
 ## Phase 3 — Polish
 
 - [x] Fix memory_peak_kb — superseded by per-jail cgroup `memory.peak` (Hole 14). The global RUSAGE_CHILDREN read remains only as the fallback when cgroup v2 is inactive.
-- [ ] Add models package tests
-- [ ] Fix /readyz to return full breakdown on success
-- [ ] Add per-language smoke probe overrides in YAML
-- [ ] Add source_filename_strategy / artifact_filename_strategy for Java
-- [ ] Update docs/languages.md with all registered languages
+- [x] Add models package tests — JSON contract tests for RunRequest/StageConfig/RunResponse/APIError (field names, pointer semantics, omitempty, error envelope). Shipped 2026-08-14.
+- [x] Fix /readyz to return full breakdown on success — /readyz always returns status + nsjail + per-language probes (200 vs 503 by health). Shipped 2026-08-14.
+- [x] Add per-language smoke probe overrides in YAML — optional smoke_cmd/smoke_args per language for runtimes whose build/run binary cannot answer --version (csharp uses dotnet --version). Shipped 2026-08-14.
+- [x] Add source_filename_strategy for Java — java pins source_filename_strategy: fixed so the client's filename is ignored and Main.java always matches the public class. Shipped 2026-08-14.
+- [x] Update docs/languages.md with all registered languages — verified: the table already matches the 29-language registry exactly. Shipped 2026-08-14.
 
 ## Phase 4 — Auth
 

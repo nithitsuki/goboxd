@@ -172,3 +172,50 @@ func TestLoadRegistryExcludesByEnv(t *testing.T) {
 		t.Error("GOBOXD_EXCLUDE_LANGS must not remove py3")
 	}
 }
+
+// TestSmokeCmdParsedFromYAML locks the per-language readiness probe override:
+// a language whose build/run binary cannot answer --version can declare an
+// explicit smoke command in the YAML.
+func TestSmokeCmdParsedFromYAML(t *testing.T) {
+	tmp := filepath.Join(t.TempDir(), "languages.yml")
+	yaml := `languages:
+  - id: fake
+    name: Fake
+    source_filename: fake.fk
+    run:
+      cmd: /bin/false
+      args: ["{{source}}"]
+      limits: {wall_time_s: 1, memory_kb: 1024, max_processes: 1}
+    smoke_cmd: /bin/echo
+    smoke_args: ["fake-version"]
+`
+	if err := os.WriteFile(tmp, []byte(yaml), 0644); err != nil {
+		t.Fatalf("writing yaml: %v", err)
+	}
+	orig := RegistryPath
+	RegistryPath = tmp
+	defer func() { RegistryPath = orig }()
+	if err := LoadRegistry(); err != nil {
+		t.Fatalf("LoadRegistry: %v", err)
+	}
+	lc, ok := DefaultRegistry["fake"]
+	if !ok {
+		t.Fatal("fake language not loaded")
+	}
+	if len(lc.SmokeCmd) != 2 || lc.SmokeCmd[0] != "/bin/echo" || lc.SmokeCmd[1] != "fake-version" {
+		t.Errorf("SmokeCmd = %v, want [/bin/echo fake-version]", lc.SmokeCmd)
+	}
+}
+
+// TestJavaFilenameStrategyParsed locks the fixed source-filename strategy for
+// Java: javac needs the public class name to match the file name, so the
+// registry pins Main.java regardless of the client's filename.
+func TestJavaFilenameStrategyParsed(t *testing.T) {
+	lc, ok := DefaultRegistry["java"]
+	if !ok {
+		t.Skip("java not in registry")
+	}
+	if lc.SourceFilenameStrategy != "fixed" {
+		t.Errorf("java SourceFilenameStrategy = %q, want fixed", lc.SourceFilenameStrategy)
+	}
+}

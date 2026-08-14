@@ -192,14 +192,13 @@ func HandleReadyz(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	if ready.AllOK {
 		w.WriteHeader(http.StatusOK)
-		if err := json.NewEncoder(w).Encode(map[string]string{"status": "ok"}); err != nil {
-			log.Printf("failed to write readyz OK response: %v", err)
-		}
 	} else {
 		w.WriteHeader(http.StatusServiceUnavailable)
-		if err := json.NewEncoder(w).Encode(ready); err != nil {
-			log.Printf("failed to write readyz degraded response: %v", err)
-		}
+	}
+	// The full breakdown is returned on success AND failure: operators need
+	// the per-component state either way.
+	if err := json.NewEncoder(w).Encode(ready); err != nil {
+		log.Printf("failed to write readyz response: %v", err)
 	}
 }
 
@@ -229,11 +228,18 @@ func probeReadiness() readyState {
 	}
 
 	for lid, lc := range config.DefaultRegistry {
-		probeCmd := lc.RunCmd[0]
-		if len(lc.BuildCmd) > 0 {
-			probeCmd = lc.BuildCmd[0]
+		var p *readyProbe
+		if len(lc.SmokeCmd) > 0 {
+			// Explicit smoke command from the YAML (languages whose build/run
+			// binary cannot answer --version).
+			p = probeExecArgs(lc.SmokeCmd[0], lc.SmokeCmd[1:]...)
+		} else {
+			probeCmd := lc.RunCmd[0]
+			if len(lc.BuildCmd) > 0 {
+				probeCmd = lc.BuildCmd[0]
+			}
+			p = probeExec(probeCmd, "--version")
 		}
-		p := probeExec(probeCmd, "--version")
 		state.Languages[lid] = p
 		if !p.OK {
 			state.AllOK = false
@@ -262,14 +268,18 @@ func probeNsjail() *readyProbe {
 }
 
 func probeExec(binary, arg string) *readyProbe {
-	out, err := exec.Command(binary, arg).Output()
+	return probeExecArgs(binary, arg)
+}
+
+func probeExecArgs(binary string, args ...string) *readyProbe {
+	out, err := exec.Command(binary, args...).Output()
 	if err == nil {
 		return &readyProbe{
 			OK:      true,
 			Version: strings.TrimSpace(string(out)),
 		}
 	}
-	// --version failed, try just confirming the binary exists
+	// The command failed, try just confirming the binary exists
 	if path, lookupErr := exec.LookPath(binary); lookupErr == nil {
 		return &readyProbe{
 			OK:      true,

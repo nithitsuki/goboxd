@@ -321,3 +321,28 @@ func TestNsjailArgsUidMapping(t *testing.T) {
 		t.Errorf("-g maps = %v, want [12345:12345:1 0:0:1]", gVals)
 	}
 }
+
+// TestResolveSourceName locks the filename strategy contract: languages with
+// source_filename_strategy "fixed" always use the configured filename (Java
+// requires the public class name to match the file name), ignoring whatever
+// the client sends.
+func TestResolveSourceName(t *testing.T) {
+	req := models.RunRequest{Language: "java", SourceFilename: "Whatever.java"}
+	lc := config.LanguageConfig{
+		ID:                     "java",
+		SourceFilename:         "Main.java",
+		SourceFilenameStrategy: "fixed",
+	}
+	if got := resolveSourceName(req, lc); got != "Main.java" {
+		t.Errorf("fixed strategy: got %q, want Main.java", got)
+	}
+
+	lc2 := config.LanguageConfig{ID: "py3", SourceFilename: "solution.py"}
+	if got := resolveSourceName(req, lc2); got != "Whatever.java" {
+		t.Errorf("default strategy must honor client filename: got %q", got)
+	}
+	req2 := models.RunRequest{Language: "py3"}
+	if got := resolveSourceName(req2, lc2); got != "solution.py" {
+		t.Errorf("default strategy must fall back to config: got %q", got)
+	}
+}

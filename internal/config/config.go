@@ -40,6 +40,11 @@ type LanguageYAML struct {
 	Artifact       string    `yaml:"artifact,omitempty"`
 	Build          *StageCmd `yaml:"build,omitempty"`
 	Run            StageCmd  `yaml:"run"`
+	SmokeCmd       string    `yaml:"smoke_cmd,omitempty"`
+	SmokeArgs      []string  `yaml:"smoke_args,omitempty"`
+	// SourceFilenameStrategy "fixed" means: always use the configured source
+	// filename and ignore the client's (Java needs the class name to match).
+	SourceFilenameStrategy string `yaml:"source_filename_strategy,omitempty"`
 }
 
 // ConfigYAML is the top-level YAML structure.
@@ -49,16 +54,18 @@ type ConfigYAML struct {
 
 // LanguageConfig holds the fully-resolved execution parameters for a language.
 type LanguageConfig struct {
-	ID               string
-	Name             string
-	SourceFilename   string
-	ArtifactFilename string
-	BuildCmd         []string // pre-expanded build command + args (empty for interpreted)
-	RunCmd           []string // pre-expanded run command + args
-	DefaultLimits    Limits   // merged limits (build limits for compiled, run for interpreted)
-	BuildLimits      Limits   // YAML build limits (for compiled languages)
-	RunLimits        Limits   // YAML run limits
-	FlagAllowlist    []string
+	ID                     string
+	Name                   string
+	SourceFilename         string
+	ArtifactFilename       string
+	BuildCmd               []string // pre-expanded build command + args (empty for interpreted)
+	RunCmd                 []string // pre-expanded run command + args
+	DefaultLimits          Limits   // merged limits (build limits for compiled, run for interpreted)
+	BuildLimits            Limits   // YAML build limits (for compiled languages)
+	RunLimits              Limits   // YAML run limits
+	FlagAllowlist          []string
+	SmokeCmd               []string // readiness probe override (nil = probe build/run cmd)
+	SourceFilenameStrategy string
 }
 
 // DefaultRegistry is populated at startup from YAML, with hardcoded fallback.
@@ -90,9 +97,10 @@ func LoadRegistry() error {
 		}
 
 		lc := LanguageConfig{
-			ID:             lang.ID,
-			Name:           lang.Name,
-			SourceFilename: lang.SourceFilename,
+			ID:                     lang.ID,
+			Name:                   lang.Name,
+			SourceFilename:         lang.SourceFilename,
+			SourceFilenameStrategy: lang.SourceFilenameStrategy,
 		}
 
 		// Expand build command
@@ -104,6 +112,12 @@ func LoadRegistry() error {
 
 		// Expand run command
 		lc.RunCmd = expandCmd(lang.Run.Cmd, lang.Run.Args, lang.SourceFilename, lang.Artifact)
+
+		// Readiness probe override (optional): languages whose build/run
+		// binary cannot answer --version declare an explicit smoke command.
+		if lang.SmokeCmd != "" {
+			lc.SmokeCmd = append([]string{lang.SmokeCmd}, lang.SmokeArgs...)
+		}
 
 		// Store separate build and run limits from YAML
 		if lang.Build != nil {

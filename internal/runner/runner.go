@@ -118,10 +118,7 @@ func ExecuteRun(req models.RunRequest, lc config.LanguageConfig) (models.BuildRe
 		}
 	}
 
-	srcName := req.SourceFilename
-	if srcName == "" {
-		srcName = lc.SourceFilename
-	}
+	srcName := resolveSourceName(req, lc)
 
 	srcDir := filepath.Join(jailDir, "app")
 	if err := os.MkdirAll(srcDir, 0755); err != nil {
@@ -708,4 +705,18 @@ func writeSource(srcPath string, data []byte) error {
 		return err
 	}
 	return f.Close()
+}
+
+// resolveSourceName picks the source filename for a request. Languages with
+// strategy "fixed" always use the configured filename (Java: the public class
+// name must match the file name); others honor the client's filename and fall
+// back to the configured one.
+func resolveSourceName(req models.RunRequest, lc config.LanguageConfig) string {
+	if lc.SourceFilenameStrategy == "fixed" {
+		return lc.SourceFilename
+	}
+	if req.SourceFilename != "" {
+		return req.SourceFilename
+	}
+	return lc.SourceFilename
 }

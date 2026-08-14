@@ -580,3 +580,66 @@ func TestHandleDashboard(t *testing.T) {
 		t.Error("dashboard page does not reference /metrics")
 	}
 }
+
+// TestReadyzFullBreakdownOnSuccess locks the readiness contract: the success
+// response must include the full per-component breakdown (nsjail + per
+// language), not just {"status":"ok"}. Operators need the breakdown to see
+// which components are healthy without a failure.
+func TestReadyzFullBreakdownOnSuccess(t *testing.T) {
+	// Pin the registry to one reachable binary so the probe succeeds
+	// deterministically in any environment (the real registry includes
+	// languages that may not be installed on the test host).
+	orig := config.DefaultRegistry
+	config.DefaultRegistry = map[string]config.LanguageConfig{
+		"sh": {ID: "sh", RunCmd: []string{"/bin/sh"}},
+	}
+	defer func() { config.DefaultRegistry = orig }()
+
+	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+	w := httptest.NewRecorder()
+	HandleReadyz(w, req)
+
+	res := w.Result()
+	defer func() { _ = res.Body.Close() }()
+
+	var body struct {
+		Status    string                 `json:"status"`
+		Nsjail    *readyProbe            `json:"nsjail"`
+		Languages map[string]*readyProbe `json:"languages"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&body); err != nil {
+		t.Fatalf("decoding readyz: %v", err)
+	}
+	if res.StatusCode != http.StatusOK {
+		t.Errorf("status = %d, want 200", res.StatusCode)
+	}
+	if body.Nsjail == nil {
+		t.Error("success response missing nsjail breakdown")
+	}
+	if len(body.Languages) == 0 {
+		t.Error("success response missing languages breakdown")
+	}
+}
+
+// TestProbeReadinessSmokeOverride locks the smoke-probe behavior: a language
+// with SmokeCmd set is probed with that command, not its run/build binary.
+func TestProbeReadinessSmokeOverride(t *testing.T) {
+	orig := config.DefaultRegistry
+	config.DefaultRegistry = map[string]config.LanguageConfig{
+		"smoked": {ID: "smoked", RunCmd: []string{"/bin/false"}, SmokeCmd: []string{"/bin/echo", "smoke-version-42"}},
+		"plain":  {ID: "plain", RunCmd: []string{"/bin/echo"}},
+	}
+	defer func() { config.DefaultRegistry = orig }()
+
+	state := probeReadiness()
+	smoked := state.Languages["smoked"]
+	if smoked == nil || !smoked.OK {
+		t.Fatalf("smoked probe not OK: %+v", smoked)
+	}
+	if smoked.Version != "smoke-version-42" {
+		t.Errorf("smoked version = %q, want smoke-version-42 (SmokeCmd must be used)", smoked.Version)
+	}
+	if p := state.Languages["plain"]; p == nil || !p.OK {
+		t.Errorf("plain probe should still work: %+v", p)
+	}
+}
