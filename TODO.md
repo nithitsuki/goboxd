@@ -37,7 +37,9 @@ Items within each phase are ordered by value ÷ effort (highest first).
 
 Missing languages:
 
-- **Mainstream**: clojure, cobol, coffeescript, crystal, dash, deno, dotnet, dragon, emacs (elisp), freebasic, gawk, groovy, julia, nasm, nim, octave, ponylang, prolog, pure, pwsh, raku, smalltalk, sqlite3, vlang, zig
+- [x] gawk — shipped 2026-08-14 (YAML + install script + fixtures, host-verified).
+- **Mainstream**: clojure, cobol, coffeescript, crystal, dash, deno, dotnet, dragon, emacs (elisp), freebasic, groovy, julia, nasm, nim, octave, ponylang, prolog, pure, pwsh, raku, smalltalk, sqlite3, vlang, zig
+- **deno**: present on the dev host (2.9.5) but SIGTRAPs under ANY finite RLIMIT_AS (V8 traps when the limit is not infinite, even at 32GB). Deferred: needs an image-side version test or an rlimit-optional mechanism. Same for **julia**: the host has only a juliaup launcher with no installed channel (half-install).
 - **Misc**: file (arbitrary binary execution), llvm_ir
 
 Notes:

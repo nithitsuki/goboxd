@@ -1,0 +1,10 @@
+{
+  "language": "gawk",
+  "source": "{ print \"Line \" NR }",
+  "tests": [
+    {
+      "stdin": "a\nb\nc\n",
+      "expected_stdout": "Line 1\nLine 2\nLine 3\n"
+    }
+  ]
+}

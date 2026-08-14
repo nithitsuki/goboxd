@@ -1,0 +1,10 @@
+{
+  "language": "gawk",
+  "source": "BEGIN { print \"Hello from AWK!\" }",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": "Hello from AWK!\n"
+    }
+  ]
+}

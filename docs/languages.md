@@ -34,6 +34,7 @@ image, you also add an install script in `scripts/lang_install/`.
 | r | R | interpreted | — | `/usr/bin/Rscript` |
 | d | D (GDC) | compiled | `/usr/bin/gdc` | `./{{artifact}}` |
 | lua | Lua (LuaJIT) | interpreted | — | `/usr/bin/luajit` |
+| gawk | AWK (gawk) | interpreted | — | `/usr/bin/gawk -f {{source}}` |
 | perl | Perl | interpreted | — | `/usr/bin/perl` |
 | erl | Erlang | compiled | `/usr/bin/erlc` | `erl -noshell -pa /app -s solution start -s init stop` |
 | lisp | Lisp (SBCL) | interpreted | — | `/usr/bin/sbcl --script {{source}}` |

@@ -10,6 +10,17 @@ languages:
         memory_kb: 1048576
         max_processes: 100
 
+  - id: gawk
+    name: AWK (gawk)
+    source_filename: solution.awk
+    run:
+      cmd: /usr/bin/gawk
+      args: ["-f", "{{source}}"]
+      limits:
+        wall_time_s: 5
+        memory_kb: 262144
+        max_processes: 64
+
   - id: c
     name: C
     source_filename: solution.c
