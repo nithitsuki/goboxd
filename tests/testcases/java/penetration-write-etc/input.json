@@ -3,7 +3,7 @@
   "source": "import java.io.*;\nimport java.nio.file.*;\npublic class Main {\n  public static void main(String[] args) throws Exception {\n    try {\n      Files.writeString(Path.of(\"/etc/hosts\"), \"evil\");\n      System.out.println(\"write succeeded\");\n    } catch(Exception e) {\n      System.out.println(\"error: \" + e.getMessage());\n    }\n  }\n}",
   "build": {
     "limits": {
-      "wall_time_s": 10
+      "wall_time_s": 6
     }
   },
   "run": {

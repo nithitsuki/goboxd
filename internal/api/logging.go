@@ -4,15 +4,45 @@ package api
 
 import (
 	"bytes"
+	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"log"
 	"net/http"
 	"runtime/debug"
-	"sync/atomic"
 	"time"
 )
 
-var reqIDCounter int64
+// requestIDKey is the context key for the trace id.
+type requestIDKey struct{}
+
+// RequestIDFrom returns the trace id stored in the request context, or "".
+func RequestIDFrom(r *http.Request) string {
+	if id, ok := r.Context().Value(requestIDKey{}).(string); ok {
+		return id
+	}
+	return ""
+}
+
+// RequestIDMiddleware assigns a trace id to every request: a client-supplied
+// X-Request-Id is honored and echoed, otherwise a crypto-random id is
+// generated. The id is stored in the context for the access logger.
+func RequestIDMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id := r.Header.Get("X-Request-Id")
+		if id == "" {
+			buf := make([]byte, 16)
+			if _, err := rand.Read(buf); err != nil {
+				id = time.Now().Format("20060102150405.000000000")
+			} else {
+				id = hex.EncodeToString(buf)
+			}
+		}
+		w.Header().Set("X-Request-Id", id)
+		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), requestIDKey{}, id)))
+	})
+}
 
 // bodyRecorder wraps http.ResponseWriter to capture the status code and
 // response body for structured request logging.
@@ -56,8 +86,7 @@ func LoggingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		rec := &bodyRecorder{ResponseWriter: w, statusCode: 200}
-		rid := atomic.AddInt64(&reqIDCounter, 1)
-		w.Header().Set("X-Request-Id", itoa64(rid))
+		rid := RequestIDFrom(r)
 
 		next.ServeHTTP(rec, r)
 
@@ -78,7 +107,7 @@ func LoggingMiddleware(next http.Handler) http.Handler {
 			Status     int    `json:"status"`
 			DurationMs int64  `json:"duration_ms"`
 			RunStatus  string `json:"run_status,omitempty"`
-			RequestID  int64  `json:"request_id"`
+			RequestID  string `json:"request_id"`
 		}{
 			Time:       start.Format(time.RFC3339),
 			Method:     r.Method,
@@ -92,16 +121,4 @@ func LoggingMiddleware(next http.Handler) http.Handler {
 		data, _ := json.Marshal(entry)
 		log.Println(string(data))
 	})
-}
-
-func itoa64(n int64) string {
-	if n == 0 {
-		return "0"
-	}
-	buf := make([]byte, 0, 20)
-	for n > 0 {
-		buf = append([]byte{byte('0' + n%10)}, buf...)
-		n /= 10
-	}
-	return string(buf)
 }

@@ -22,15 +22,10 @@ import (
 	"github.com/nithitsuki/goboxd/internal/runner"
 )
 
-// Global stats counters for the /info endpoint.
+// lastInternalErr records the last sandbox infrastructure failure for /info.
 var (
-	jobStats struct {
-		InFlight       int64
-		Total          int64
-		FailedInternal int64
-	}
-	jobStatsMu      sync.Mutex
-	lastInternalErr time.Time
+	lastInternalErrMu sync.Mutex
+	lastInternalErr   time.Time
 )
 
 // jobStatsSnapshot is a thread-safe copy of the stats.
@@ -41,17 +36,19 @@ type jobStatsSnapshot struct {
 	LastErrorAt    *time.Time
 }
 
-// GetStats returns a snapshot of the current job stats.
+// GetStats returns a snapshot of the current job stats (fed by the metrics
+// tracker in metrics.go).
 func GetStats() jobStatsSnapshot {
-	jobStatsMu.Lock()
-	defer jobStatsMu.Unlock()
 	s := jobStatsSnapshot{
-		InFlight:       int(atomic.LoadInt64(&jobStats.InFlight)),
-		Total:          atomic.LoadInt64(&jobStats.Total),
-		FailedInternal: atomic.LoadInt64(&jobStats.FailedInternal),
+		InFlight:       int(atomic.LoadInt64(&metrics.InFlight)),
+		Total:          atomic.LoadInt64(&metrics.TotalRuns),
+		FailedInternal: atomic.LoadInt64(&metrics.Errors),
 	}
+	lastInternalErrMu.Lock()
+	defer lastInternalErrMu.Unlock()
 	if !lastInternalErr.IsZero() {
-		s.LastErrorAt = &lastInternalErr
+		t := lastInternalErr
+		s.LastErrorAt = &t
 	}
 	return s
 }
@@ -444,6 +441,16 @@ func HandleRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Downward-only limits: client-requested build/run limits may never
+	// exceed the configured YAML maxima, and must be positive. The YAML
+	// defaults are the effective caps (piston model).
+	if !validateStageLimits(w, req.Build, lc.BuildLimits, len(lc.BuildCmd) > 0, "build") {
+		return
+	}
+	if !validateStageLimits(w, req.Run, lc.RunLimits, true, "run") {
+		return
+	}
+
 	// Flag allow-list validation (Security Hole #3)
 	if req.Build != nil && len(req.Build.Flags) > 0 {
 		if ok, bad := validateFlags(req.Build.Flags, lc.FlagAllowlist); !ok {
@@ -458,12 +465,14 @@ func HandleRun(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Execute with concurrency semaphore + stats tracking
+	// Execute with concurrency semaphore + metrics tracking
+	atomic.AddInt64(&metrics.Queued, 1)
 	acquireSlot()
-	atomic.AddInt64(&jobStats.InFlight, 1)
-	atomic.AddInt64(&jobStats.Total, 1)
+	atomic.AddInt64(&metrics.Queued, -1)
+	start := time.Now()
+	atomic.AddInt64(&metrics.InFlight, 1)
 	defer func() {
-		atomic.AddInt64(&jobStats.InFlight, -1)
+		atomic.AddInt64(&metrics.InFlight, -1)
 		releaseSlot()
 	}()
 	buildRes, testsRes, err := runner.ExecuteRun(req, lc)
@@ -481,14 +490,15 @@ func HandleRun(w http.ResponseWriter, r *http.Request) {
 			}); err != nil {
 				log.Printf("failed to write internal_error response: %v", err)
 			}
+			recordRun("internal_error", time.Since(start), true)
 			return
 		}
 		log.Printf("Internal error during execution: %v", err)
-		atomic.AddInt64(&jobStats.FailedInternal, 1)
-		jobStatsMu.Lock()
+		lastInternalErrMu.Lock()
 		lastInternalErr = time.Now()
-		jobStatsMu.Unlock()
+		lastInternalErrMu.Unlock()
 		writeInternalError(w, "sandbox execution failed")
+		recordRun("internal_error", time.Since(start), true)
 		return
 	}
 
@@ -515,4 +525,41 @@ func HandleRun(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
 		log.Printf("failed to write run response: %v", err)
 	}
+	recordRun(topStatus, time.Since(start), topStatus == "internal_error")
+}
+
+// validateStageLimits enforces the downward-only limit contract for one stage.
+// Returns false (after writing the error response) when a limit is invalid or
+// exceeds the configured maximum. Interpreted languages (hasBuild == false)
+// reject any build limits: they have no build stage.
+func validateStageLimits(w http.ResponseWriter, stage *models.StageConfig, max config.Limits, hasBuild bool, stageName string) bool {
+	if stage == nil || stage.Limits == nil {
+		return true
+	}
+	if !hasBuild {
+		writeError(w, "invalid_limit", fmt.Sprintf("%s.limits are not allowed: this language has no %s stage", stageName, stageName))
+		return false
+	}
+	check := func(field string, value int, maximum int) bool {
+		if value <= 0 {
+			writeError(w, "invalid_limit", fmt.Sprintf("%s.limits.%s must be positive", stageName, field))
+			return false
+		}
+		if value > maximum {
+			writeError(w, "limit_exceeded", fmt.Sprintf("%s.limits.%s of %d exceeds maximum of %d", stageName, field, value, maximum))
+			return false
+		}
+		return true
+	}
+	l := stage.Limits
+	if l.WallTimeS != nil && !check("wall_time_s", *l.WallTimeS, max.WallTimeS) {
+		return false
+	}
+	if l.MemoryKB != nil && !check("memory_kb", *l.MemoryKB, max.MemoryKB) {
+		return false
+	}
+	if l.MaxProcesses != nil && !check("max_processes", *l.MaxProcesses, max.MaxProcesses) {
+		return false
+	}
+	return true
 }

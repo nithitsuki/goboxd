@@ -12,7 +12,7 @@
     "limits": {
       "wall_time_s": 2,
       "memory_kb": 102400,
-      "max_processes": 100
+      "max_processes": 64
     }
   },
   "tests": [

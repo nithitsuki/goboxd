@@ -6,7 +6,10 @@
 // to the runner package for sandboxed execution inside nsjail.
 package api
 
-import "net/http"
+import (
+	"net/http"
+	"time"
+)
 
 // NewRouter constructs and wires up the API routes with structured logging.
 // Registered endpoints:
@@ -24,6 +27,9 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("GET /healthz", HandleHealthz)
 	mux.HandleFunc("GET /readyz", HandleReadyz)
 	mux.HandleFunc("GET /info", HandleInfo)
+	mux.HandleFunc("GET /openapi.json", HandleOpenAPI)
+	mux.HandleFunc("GET /metrics", HandleMetrics)
+	mux.HandleFunc("GET /dashboard", HandleDashboard)
 	mux.HandleFunc("POST /run", HandleRun)
 	mux.HandleFunc("GET /testcases", HandleTestcasesList)
 	mux.HandleFunc("GET /testcases/{lang}/{name}", HandleTestcasesGet)
@@ -32,5 +38,19 @@ func NewRouter() http.Handler {
 		mux.Handle("GET /playground/", http.StripPrefix("/playground", http.HandlerFunc(HandlePlayground)))
 	}
 
-	return RecoveryMiddleware(LoggingMiddleware(mux))
+	return RecoveryMiddleware(RequestIDMiddleware(LoggingMiddleware(mux)))
+}
+
+// NewServer builds the HTTP server with Slowloris mitigations: bounded header
+// read time (10s), bounded total read time (60s), and idle connection reaping
+// (120s). WriteTimeout stays 0: run responses stream output and must not be
+// cut by a blanket write deadline.
+func NewServer(addr string, handler http.Handler) *http.Server {
+	return &http.Server{
+		Addr:              addr,
+		Handler:           handler,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       60 * time.Second,
+		IdleTimeout:       120 * time.Second,
+	}
 }

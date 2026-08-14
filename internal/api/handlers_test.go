@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -327,4 +328,255 @@ func TestSecurityHole2NoShellCommands(t *testing.T) {
 		t.Fatalf("Security hole #2: OPEN — found %d shell invocations", errs)
 	}
 	t.Log("Security hole #2: CLOSED — no shell interpreters invoked")
+}
+
+// TestHandleRunLimitValidation guards the downward-only limit contract:
+// client-requested build/run limits must never exceed the configured YAML
+// maxima (HTTP 400 limit_exceeded), must be positive (400 invalid_limit),
+// and interpreted languages reject build limits (no build stage).
+func TestHandleRunLimitValidation(t *testing.T) {
+	c := config.DefaultRegistry["c"]
+	py := config.DefaultRegistry["py3"]
+	if c.BuildLimits.MemoryKB == 0 || py.RunLimits.MemoryKB == 0 {
+		t.Fatal("test requires c build limits and py3 run limits in the registry")
+	}
+
+	tests := []struct {
+		name         string
+		body         string
+		expectedCode int
+		errorCode    string
+	}{
+		{
+			name: "build memory above max",
+			body: fmt.Sprintf(`{"language":"c","source":"int main(){return 0;}","build":{"limits":{"memory_kb":%d}},"tests":[{"stdin":"","expected_stdout":""}]}`,
+				c.BuildLimits.MemoryKB+1),
+			expectedCode: http.StatusBadRequest,
+			errorCode:    "limit_exceeded",
+		},
+		{
+			name: "run memory above max",
+			body: fmt.Sprintf(`{"language":"py3","source":"print(1)","run":{"limits":{"memory_kb":%d}},"tests":[{"stdin":"","expected_stdout":"1\n"}]}`,
+				py.RunLimits.MemoryKB+1),
+			expectedCode: http.StatusBadRequest,
+			errorCode:    "limit_exceeded",
+		},
+		{
+			name: "run wall time above max",
+			body: fmt.Sprintf(`{"language":"py3","source":"print(1)","run":{"limits":{"wall_time_s":%d}},"tests":[{"stdin":"","expected_stdout":"1\n"}]}`,
+				py.RunLimits.WallTimeS+1),
+			expectedCode: http.StatusBadRequest,
+			errorCode:    "limit_exceeded",
+		},
+		{
+			name:         "zero wall time",
+			body:         `{"language":"py3","source":"print(1)","run":{"limits":{"wall_time_s":0}},"tests":[{"stdin":"","expected_stdout":"1\n"}]}`,
+			expectedCode: http.StatusBadRequest,
+			errorCode:    "invalid_limit",
+		},
+		{
+			name:         "negative processes",
+			body:         `{"language":"py3","source":"print(1)","run":{"limits":{"max_processes":-1}},"tests":[{"stdin":"","expected_stdout":"1\n"}]}`,
+			expectedCode: http.StatusBadRequest,
+			errorCode:    "invalid_limit",
+		},
+		{
+			name:         "build limits on interpreted language",
+			body:         `{"language":"py3","source":"print(1)","build":{"limits":{"memory_kb":1000}},"tests":[{"stdin":"","expected_stdout":"1\n"}]}`,
+			expectedCode: http.StatusBadRequest,
+			errorCode:    "invalid_limit",
+		},
+		{
+			name: "equal to max is accepted",
+			body: fmt.Sprintf(`{"language":"py3","source":"print(1)","run":{"limits":{"memory_kb":%d}},"tests":[{"stdin":"","expected_stdout":"1\n"}]}`,
+				py.RunLimits.MemoryKB),
+			expectedCode: http.StatusOK,
+		},
+		{
+			name: "below max is accepted",
+			body: fmt.Sprintf(`{"language":"py3","source":"print(1)","run":{"limits":{"memory_kb":%d}},"tests":[{"stdin":"","expected_stdout":"1\n"}]}`,
+				py.RunLimits.MemoryKB-1),
+			expectedCode: http.StatusOK,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "/run", bytes.NewBufferString(tt.body))
+			w := httptest.NewRecorder()
+			HandleRun(w, req)
+
+			res := w.Result()
+			defer func() { _ = res.Body.Close() }()
+
+			if res.StatusCode != tt.expectedCode {
+				t.Errorf("expected status %d, got %d", tt.expectedCode, res.StatusCode)
+			}
+			if tt.errorCode != "" {
+				var apiErr models.APIError
+				if err := json.NewDecoder(res.Body).Decode(&apiErr); err == nil {
+					if apiErr.Error.Code != tt.errorCode {
+						t.Errorf("expected error code %s, got %s", tt.errorCode, apiErr.Error.Code)
+					}
+				}
+			}
+		})
+	}
+}
+
+// TestNewServerTimeouts guards the Slowloris mitigation: the HTTP server must
+// bound header read time and total read time, and reap idle connections.
+// Without these, a client that opens connections and drips bytes can hold
+// goroutines and file descriptors indefinitely. It also pins the listen
+// address: NewServer must bind the addr it is given (a missing Addr silently
+// defaults to :http, which cost a full debugging session).
+func TestNewServerTimeouts(t *testing.T) {
+	srv := NewServer(":8080", http.NewServeMux())
+	if srv.Addr != ":8080" {
+		t.Errorf("Addr = %q, want :8080 (empty Addr defaults to :http)", srv.Addr)
+	}
+	if srv.ReadHeaderTimeout <= 0 {
+		t.Errorf("ReadHeaderTimeout = %v, want > 0 (Slowloris mitigation)", srv.ReadHeaderTimeout)
+	}
+	if srv.ReadTimeout <= 0 {
+		t.Errorf("ReadTimeout = %v, want > 0", srv.ReadTimeout)
+	}
+	if srv.IdleTimeout <= 0 {
+		t.Errorf("IdleTimeout = %v, want > 0", srv.IdleTimeout)
+	}
+}
+
+// TestRequestIDMiddleware guards the trace-ID contract: a client-supplied
+// X-Request-Id is honored and echoed, a missing one is generated (unique
+// across requests), and the id lands in the response header.
+func TestRequestIDMiddleware(t *testing.T) {
+	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if RequestIDFrom(r) == "" {
+			t.Error("request id missing from context")
+		}
+		w.WriteHeader(http.StatusOK)
+	})
+
+	// Client-supplied id is honored.
+	req := httptest.NewRequest(http.MethodGet, "/x", nil)
+	req.Header.Set("X-Request-Id", "trace-abc-123")
+	w := httptest.NewRecorder()
+	RequestIDMiddleware(inner).ServeHTTP(w, req)
+	if got := w.Header().Get("X-Request-Id"); got != "trace-abc-123" {
+		t.Errorf("echoed id = %q, want trace-abc-123", got)
+	}
+
+	// Generated ids are non-empty and unique.
+	seen := map[string]bool{}
+	for i := 0; i < 50; i++ {
+		req := httptest.NewRequest(http.MethodGet, "/x", nil)
+		w := httptest.NewRecorder()
+		RequestIDMiddleware(inner).ServeHTTP(w, req)
+		got := w.Header().Get("X-Request-Id")
+		if got == "" {
+			t.Fatal("generated request id is empty")
+		}
+		if seen[got] {
+			t.Errorf("generated id %q repeated", got)
+		}
+		seen[got] = true
+	}
+}
+
+// TestHandleOpenAPI guards the machine-readable API contract: /openapi.json
+// must serve a valid OpenAPI 3 document that covers the public endpoints and
+// the /run request/response schemas.
+func TestHandleOpenAPI(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/openapi.json", nil)
+	w := httptest.NewRecorder()
+	HandleOpenAPI(w, req)
+
+	res := w.Result()
+	defer func() { _ = res.Body.Close() }()
+
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", res.StatusCode)
+	}
+	if ct := res.Header.Get("Content-Type"); ct != "application/json" {
+		t.Errorf("content-type = %q, want application/json", ct)
+	}
+
+	var doc struct {
+		OpenAPI string                     `json:"openapi"`
+		Paths   map[string]json.RawMessage `json:"paths"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&doc); err != nil {
+		t.Fatalf("decoding spec: %v", err)
+	}
+	if !strings.HasPrefix(doc.OpenAPI, "3.") {
+		t.Errorf("openapi = %q, want 3.x", doc.OpenAPI)
+	}
+	for _, p := range []string{"/healthz", "/readyz", "/info", "/run", "/openapi.json"} {
+		if _, ok := doc.Paths[p]; !ok {
+			t.Errorf("spec missing path %s", p)
+		}
+	}
+}
+
+// TestHandleMetrics guards the live-metrics contract: /metrics returns a JSON
+// snapshot with the dashboard fields, and a completed run moves the counters.
+func TestHandleMetrics(t *testing.T) {
+	// One run so the counters move (works with or without a live sandbox:
+	// a failed sandbox setup is still a counted run).
+	body := `{"language":"py3","source":"print(1)","tests":[{"stdin":"","expected_stdout":"1\n"}]}`
+	req := httptest.NewRequest(http.MethodPost, "/run", bytes.NewBufferString(body))
+	w := httptest.NewRecorder()
+	HandleRun(w, req)
+
+	req = httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	w = httptest.NewRecorder()
+	HandleMetrics(w, req)
+
+	res := w.Result()
+	defer func() { _ = res.Body.Close() }()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", res.StatusCode)
+	}
+
+	var m map[string]json.RawMessage
+	if err := json.NewDecoder(res.Body).Decode(&m); err != nil {
+		t.Fatalf("decoding metrics: %v", err)
+	}
+	for _, field := range []string{"in_flight", "queue_depth", "total_runs", "error_count", "status_counts", "latency_histogram_ms"} {
+		if _, ok := m[field]; !ok {
+			t.Errorf("metrics missing field %s", field)
+		}
+	}
+
+	var total int
+	_ = json.Unmarshal(m["total_runs"], &total)
+	if total < 1 {
+		t.Errorf("total_runs = %d, want >= 1 after one run", total)
+	}
+	var counts map[string]int
+	_ = json.Unmarshal(m["status_counts"], &counts)
+	if len(counts) == 0 {
+		t.Error("status_counts empty after one run")
+	}
+}
+
+// TestHandleDashboard guards the embedded dashboard page: HTML that polls the
+// metrics endpoint (no external assets).
+func TestHandleDashboard(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/dashboard", nil)
+	w := httptest.NewRecorder()
+	HandleDashboard(w, req)
+
+	res := w.Result()
+	defer func() { _ = res.Body.Close() }()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", res.StatusCode)
+	}
+	if ct := res.Header.Get("Content-Type"); !strings.HasPrefix(ct, "text/html") {
+		t.Errorf("content-type = %q, want text/html", ct)
+	}
+	b, _ := io.ReadAll(res.Body)
+	if !strings.Contains(string(b), "/metrics") {
+		t.Error("dashboard page does not reference /metrics")
+	}
 }

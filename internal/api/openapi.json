@@ -1,0 +1,254 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "goboxd API",
+    "version": "0.1.0",
+    "description": "Sandboxed multi-language code execution. Untrusted code runs inside nsjail with per-jail uids, seccomp, and cgroup v2 or rlimit resource enforcement."
+  },
+  "paths": {
+    "/healthz": {
+      "get": {
+        "summary": "Liveness check",
+        "responses": {
+          "200": {
+            "description": "The server is alive",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Status" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/readyz": {
+      "get": {
+        "summary": "Readiness probe",
+        "description": "Checks nsjail and every registered language.",
+        "responses": {
+          "200": {
+            "description": "All probes passed",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ReadyState" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/info": {
+      "get": {
+        "summary": "Service metadata",
+        "description": "Build info, nsjail version, cgroup v2 state, registered languages, and limits.",
+        "responses": {
+          "200": {
+            "description": "Service metadata",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Info" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/metrics": {
+      "get": {
+        "summary": "Live metrics",
+        "description": "In-flight runs, queue depth, latency histogram, and error counters for the dashboard.",
+        "responses": {
+          "200": {
+            "description": "Metrics snapshot",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Metrics" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/dashboard": {
+      "get": {
+        "summary": "Live dashboard",
+        "description": "Embedded HTML page that polls /metrics.",
+        "responses": {
+          "200": {
+            "description": "Dashboard HTML",
+            "content": {
+              "text/html": {}
+            }
+          }
+        }
+      }
+    },
+    "/run": {
+      "post": {
+        "summary": "Execute untrusted code",
+        "description": "Runs source against test cases inside a sandbox. Per-request build/run limits may only go down from the configured maxima.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/RunRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Execution result",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/RunResponse" }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/APIError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/openapi.json": {
+      "get": {
+        "summary": "This document",
+        "responses": {
+          "200": {
+            "description": "OpenAPI 3 document",
+            "content": {
+              "application/json": {}
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Status": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" }
+        }
+      },
+      "Limits": {
+        "type": "object",
+        "properties": {
+          "wall_time_s": { "type": "integer" },
+          "memory_kb": { "type": "integer" },
+          "max_processes": { "type": "integer" }
+        }
+      },
+      "StageConfig": {
+        "type": "object",
+        "properties": {
+          "limits": { "$ref": "#/components/schemas/Limits" },
+          "flags": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      },
+      "TestCase": {
+        "type": "object",
+        "properties": {
+          "stdin": { "type": "string" },
+          "expected_stdout": { "type": "string" }
+        }
+      },
+      "RunRequest": {
+        "type": "object",
+        "required": ["language", "source", "tests"],
+        "properties": {
+          "language": { "type": "string" },
+          "source": { "type": "string" },
+          "source_filename": { "type": "string" },
+          "artifact_filename": { "type": "string" },
+          "build": { "$ref": "#/components/schemas/StageConfig" },
+          "run": { "$ref": "#/components/schemas/StageConfig" },
+          "tests": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/TestCase" }
+          }
+        }
+      },
+      "BuildResult": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "stdout": { "type": "string" },
+          "stderr": { "type": "string" },
+          "duration_ms": { "type": "integer" }
+        }
+      },
+      "TestResult": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "stdout": { "type": "string" },
+          "stderr": { "type": "string" },
+          "duration_ms": { "type": "integer" },
+          "memory_peak_kb": { "type": "integer" }
+        }
+      },
+      "RunResponse": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "build": { "$ref": "#/components/schemas/BuildResult" },
+          "tests": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/TestResult" }
+          }
+        }
+      },
+      "APIError": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": { "type": "string" },
+              "message": { "type": "string" }
+            }
+          }
+        }
+      },
+      "ReadyState": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "nsjail": { "type": "object" },
+          "languages": { "type": "object" }
+        }
+      },
+      "Info": {
+        "type": "object",
+        "properties": {
+          "build_info": { "type": "object" },
+          "nsjail": { "type": "object" },
+          "cgroupv2": { "type": "object" },
+          "languages": { "type": "array", "items": { "type": "object" } },
+          "limits": { "type": "object" }
+        }
+      },
+      "Metrics": {
+        "type": "object",
+        "properties": {
+          "in_flight": { "type": "integer" },
+          "queue_depth": { "type": "integer" },
+          "total_runs": { "type": "integer" },
+          "error_count": { "type": "integer" },
+          "status_counts": { "type": "object" },
+          "latency_histogram_ms": { "type": "object" }
+        }
+      }
+    }
+  }
+}

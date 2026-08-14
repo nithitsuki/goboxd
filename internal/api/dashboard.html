@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>goboxd dashboard</title>
+<style>
+  body { font-family: ui-monospace, monospace; background: #0d1117; color: #c9d1d9; margin: 2rem; }
+  h1 { font-size: 1.2rem; }
+  .cards { display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; }
+  .card { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 0.8rem 1.2rem; min-width: 9rem; }
+  .card .value { font-size: 1.6rem; font-weight: bold; color: #58a6ff; }
+  .card .label { font-size: 0.75rem; color: #8b949e; text-transform: uppercase; }
+  table { border-collapse: collapse; width: 100%; max-width: 46rem; }
+  td, th { border: 1px solid #30363d; padding: 0.3rem 0.6rem; text-align: left; font-size: 0.85rem; }
+  th { color: #8b949e; }
+  .bar { background: #58a6ff; height: 0.8rem; display: inline-block; vertical-align: middle; }
+  #error { color: #f85149; }
+</style>
+</head>
+<body>
+<h1>goboxd live dashboard</h1>
+<div class="cards">
+  <div class="card"><div class="value" id="in_flight">-</div><div class="label">in flight</div></div>
+  <div class="card"><div class="value" id="queue_depth">-</div><div class="label">queue depth</div></div>
+  <div class="card"><div class="value" id="total_runs">-</div><div class="label">total runs</div></div>
+  <div class="card"><div class="value" id="error_rate">-</div><div class="label">error rate</div></div>
+</div>
+<h2>Status counts</h2>
+<table id="statuses"><tr><th>status</th><th>count</th></tr></table>
+<h2>Latency histogram (ms)</h2>
+<table id="latency"><tr><th>bucket</th><th>count</th><th></th></tr></table>
+<p id="error"></p>
+<script>
+async function refresh() {
+  try {
+    const r = await fetch("/metrics");
+    const m = await r.json();
+    document.getElementById("in_flight").textContent = m.in_flight;
+    document.getElementById("queue_depth").textContent = m.queue_depth;
+    document.getElementById("total_runs").textContent = m.total_runs;
+    const err = m.error_count || 0;
+    document.getElementById("error_rate").textContent =
+      m.total_runs ? (100 * err / m.total_runs).toFixed(1) + "%" : "0%";
+    renderTable("statuses", m.status_counts);
+    renderHistogram(m.latency_histogram_ms);
+    document.getElementById("error").textContent = "";
+  } catch (e) {
+    document.getElementById("error").textContent = "metrics fetch failed: " + e;
+  }
+}
+function renderTable(id, obj) {
+  const t = document.getElementById(id);
+  while (t.rows.length > 1) t.deleteRow(1);
+  const max = Math.max(1, ...Object.values(obj || {}));
+  for (const [k, v] of Object.entries(obj || {}).sort()) {
+    const row = t.insertRow();
+    row.insertCell().textContent = k;
+    row.insertCell().textContent = v;
+  }
+}
+function renderHistogram(hist) {
+  const t = document.getElementById("latency");
+  while (t.rows.length > 1) t.deleteRow(1);
+  const max = Math.max(1, ...Object.values(hist || {}));
+  for (const [bucket, count] of Object.entries(hist || {}).sort()) {
+    const row = t.insertRow();
+    row.insertCell().textContent = bucket;
+    row.insertCell().textContent = count;
+    const c = row.insertCell();
+    const b = document.createElement("span");
+    b.className = "bar";
+    b.style.width = Math.round(160 * count / max) + "px";
+    c.appendChild(b);
+  }
+}
+refresh();
+setInterval(refresh, 2000);
+</script>
+</body>
+</html>

@@ -3,14 +3,14 @@
   "source": "fn main() {\n  match std::fs::write(\"/etc/hosts\", \"evil\") {\n    Ok(()) => println!(\"write succeeded\"),\n    Err(e) => println!(\"error: {}\", e),\n  }\n}",
   "build": {
     "limits": {
-      "wall_time_s": 15
+      "wall_time_s": 10
     }
   },
   "run": {
     "limits": {
       "wall_time_s": 5,
       "memory_kb": 102400,
-      "max_processes": 100
+      "max_processes": 64
     }
   },
   "tests": [

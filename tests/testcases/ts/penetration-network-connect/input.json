@@ -9,7 +9,7 @@
   ],
   "build": {
     "limits": {
-      "wall_time_s": 30,
+      "wall_time_s": 15,
       "memory_kb": 1048576,
       "max_processes": 100
     }

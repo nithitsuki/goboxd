@@ -7,7 +7,7 @@ languages:
       args: ["{{source}}"]
       limits:
         wall_time_s: 9
-        memory_kb: 102400
+        memory_kb: 1048576
         max_processes: 100
 
   - id: c
@@ -333,7 +333,7 @@ languages:
       args: ["{{artifact}}"]
       limits:
         wall_time_s: 9
-        memory_kb: 102400
+        memory_kb: 524288
         max_processes: 64
 
   - id: csharp

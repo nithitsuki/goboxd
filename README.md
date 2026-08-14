@@ -187,6 +187,9 @@ docs/
 | `GET` | `/playground` | Web UI (if embedded) |
 | `GET` | `/testcases` | List available test fixtures |
 | `GET` | `/testcases/{lang}/{name}` | Get a specific test fixture |
+| `GET` | `/metrics` | Live metrics (in-flight, queue depth, latency histogram) |
+| `GET` | `/dashboard` | Live auto-refreshing dashboard (embedded, no external assets) |
+| `GET` | `/openapi.json` | OpenAPI 3 document of the public API |
 
 See [docs/api.md](docs/api.md) for the full API reference.
 
