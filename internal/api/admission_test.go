@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 )
@@ -200,6 +201,119 @@ func TestAdmissionMultipleSlots(t *testing.T) {
 	}
 	g.release()
 	g.release()
+}
+
+// TestAdmissionStopRejectsNewAndQueued locks the shutdown path: Stop wakes
+// a queued waiter with errShuttingDown (ticket freed), new acquires are
+// rejected with errShuttingDown, and release after Stop stays safe.
+func TestAdmissionStopRejectsNewAndQueued(t *testing.T) {
+	g := newAdmissionGate(1, 1)
+
+	if err := g.acquire(context.Background()); err != nil {
+		t.Fatalf("first acquire: %v, want nil", err)
+	}
+
+	done := make(chan error, 1)
+	waitCtx, waitCancel := context.WithCancel(context.Background())
+	t.Cleanup(waitCancel)
+	go func() { done <- g.acquire(waitCtx) }()
+	waitForGate(t, g, 2*time.Second, func() bool { return g.snapQueued() == 1 }, "waiter to queue")
+
+	g.Stop()
+
+	select {
+	case err := <-done:
+		if !errors.Is(err, errShuttingDown) {
+			t.Fatalf("queued acquire after Stop = %v, want errShuttingDown", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("queued acquire never woke after Stop")
+	}
+
+	if q := g.snapQueued(); q != 0 {
+		t.Errorf("queued after Stop = %d, want 0 (ticket not freed)", q)
+	}
+
+	if err := g.acquire(context.Background()); !errors.Is(err, errShuttingDown) {
+		t.Fatalf("new acquire after Stop = %v, want errShuttingDown", err)
+	}
+
+	// release of the pre-Stop in-flight slot must not panic and must not
+	// reopen admission.
+	g.release()
+	if n := g.snapInFlight(); n != 0 {
+		t.Errorf("inFlight after release = %d, want 0", n)
+	}
+	if err := g.acquire(context.Background()); !errors.Is(err, errShuttingDown) {
+		t.Fatalf("acquire after release post-Stop = %v, want errShuttingDown", err)
+	}
+}
+
+// TestAdmissionStopWakesAllWaiters locks the broadcast wakeup on Stop: with
+// M=2 every queued waiter returns errShuttingDown and the queue empties.
+func TestAdmissionStopWakesAllWaiters(t *testing.T) {
+	g := newAdmissionGate(1, 2)
+
+	if err := g.acquire(context.Background()); err != nil {
+		t.Fatalf("first acquire: %v, want nil", err)
+	}
+
+	doneA := make(chan error, 1)
+	doneB := make(chan error, 1)
+	ctxA, cancelA := context.WithCancel(context.Background())
+	t.Cleanup(cancelA)
+	ctxB, cancelB := context.WithCancel(context.Background())
+	t.Cleanup(cancelB)
+	go func() { doneA <- g.acquire(ctxA) }()
+	waitForGate(t, g, 2*time.Second, func() bool { return g.snapQueued() == 1 }, "waiter A to queue")
+	go func() { doneB <- g.acquire(ctxB) }()
+	waitForGate(t, g, 2*time.Second, func() bool { return g.snapQueued() == 2 }, "waiter B to queue")
+
+	g.Stop()
+
+	for i, done := range []chan error{doneA, doneB} {
+		select {
+		case err := <-done:
+			if !errors.Is(err, errShuttingDown) {
+				t.Fatalf("queued acquire %d after Stop = %v, want errShuttingDown", i, err)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatalf("queued acquire %d never woke after Stop", i)
+		}
+	}
+
+	if q := g.snapQueued(); q != 0 {
+		t.Errorf("queued after Stop = %d, want 0", q)
+	}
+	g.release()
+}
+
+// TestAdmissionStopIdempotent proves a second Stop is safe (no double close
+// of the broadcast channel) and admission stays closed.
+func TestAdmissionStopIdempotent(t *testing.T) {
+	g := newAdmissionGate(1, 1)
+	g.Stop()
+	g.Stop()
+	if err := g.acquire(context.Background()); !errors.Is(err, errShuttingDown) {
+		t.Fatalf("acquire after double Stop = %v, want errShuttingDown", err)
+	}
+}
+
+// TestAdmissionStopWhileQueueFull rejects the queue-full path too once the
+// gate is stopped: errShuttingDown beats errQueueFull.
+func TestAdmissionStopWhileQueueFull(t *testing.T) {
+	g := newAdmissionGate(1, 0)
+	if err := g.acquire(context.Background()); err != nil {
+		t.Fatalf("first acquire: %v, want nil", err)
+	}
+	g.Stop()
+	if err := g.acquire(context.Background()); !errors.Is(err, errShuttingDown) {
+		t.Fatalf("acquire on a full stopped gate = %v, want errShuttingDown", err)
+	}
+	g.release()
+	if err := g.acquire(context.Background()); !errors.Is(err, errShuttingDown) {
+		t.Fatalf("acquire on an empty stopped gate = %v, want errShuttingDown", err)
+	}
 }
 
 // TestAdmissionWakeupWhileFull proves a waiter that wakes into a still-full

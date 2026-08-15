@@ -960,3 +960,102 @@ func TestProbeReadinessSmokeOverride(t *testing.T) {
 		t.Errorf("plain probe should still work: %+v", p)
 	}
 }
+
+// TestClassifyAcquireErr locks the shutdown-vs-cancel branch order: a dead
+// client context beats errShuttingDown, so a queued request whose client
+// disconnected at the same moment Stop closed the broadcast records
+// "cancelled" (not an error), while a live client records "shutting_down".
+func TestClassifyAcquireErr(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	status, isErr := classifyAcquireErr(ctx, errShuttingDown)
+	if status != "cancelled" || isErr {
+		t.Errorf("dead ctx + shutting down = (%q, %v), want (cancelled, false)", status, isErr)
+	}
+
+	status, isErr = classifyAcquireErr(context.Background(), errShuttingDown)
+	if status != "shutting_down" || !isErr {
+		t.Errorf("live ctx + shutting down = (%q, %v), want (shutting_down, true)", status, isErr)
+	}
+
+	status, isErr = classifyAcquireErr(context.Background(), context.Canceled)
+	if status != "cancelled" || isErr {
+		t.Errorf("live ctx + cancel = (%q, %v), want (cancelled, false)", status, isErr)
+	}
+}
+
+// TestHandleRunShuttingDown locks the shutdown mapping: once the gate is
+// stopped, POST /run answers 503 with Retry-After: 1, body code
+// shutting_down, and a shutting_down entry in the live metrics. The request
+// never reaches execution, so this test needs no nsjail.
+func TestHandleRunShuttingDown(t *testing.T) {
+	orig := gate
+	g := newAdmissionGate(1, 0)
+	g.Stop()
+	gate = g
+	defer func() { gate = orig }()
+
+	statuses := Snapshot()["status_counts"].(map[string]int64)
+	before := statuses["shutting_down"]
+
+	body := `{"language":"py3","source":"print('hi')","tests":[{"stdin":"","expected_stdout":"hi\n"}]}`
+	w := httptest.NewRecorder()
+	HandleRun(w, httptest.NewRequest(http.MethodPost, "/run", bytes.NewBufferString(body)))
+
+	res := w.Result()
+	defer func() { _ = res.Body.Close() }()
+	if res.StatusCode != http.StatusServiceUnavailable {
+		t.Errorf("expected 503, got %d", res.StatusCode)
+	}
+	if got := res.Header.Get("Retry-After"); got != "1" {
+		t.Errorf("Retry-After = %q, want \"1\"", got)
+	}
+	var apiErr models.APIError
+	if err := json.NewDecoder(res.Body).Decode(&apiErr); err != nil {
+		t.Fatalf("failed to decode error body: %v", err)
+	}
+	if apiErr.Error.Code != "shutting_down" {
+		t.Errorf("error code = %q, want shutting_down", apiErr.Error.Code)
+	}
+	if apiErr.Error.Message == "" {
+		t.Error("shutting_down message is empty")
+	}
+
+	statuses = Snapshot()["status_counts"].(map[string]int64)
+	if after := statuses["shutting_down"]; after != before+1 {
+		t.Errorf("status_counts[shutting_down] = %d, want %d", after, before+1)
+	}
+}
+
+// TestReadyzShuttingDown locks the readiness flip: after StartShutdown,
+// readyz returns 503 with status shutting_down and healthz stays 200.
+func TestReadyzShuttingDown(t *testing.T) {
+	StartShutdown()
+	t.Cleanup(func() { shuttingDown.Store(false) })
+
+	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+	w := httptest.NewRecorder()
+	HandleReadyz(w, req)
+
+	res := w.Result()
+	defer func() { _ = res.Body.Close() }()
+	if res.StatusCode != http.StatusServiceUnavailable {
+		t.Errorf("readyz status = %d, want 503", res.StatusCode)
+	}
+	var body struct {
+		Status string `json:"status"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&body); err != nil {
+		t.Fatalf("decoding readyz: %v", err)
+	}
+	if body.Status != "shutting_down" {
+		t.Errorf("readyz body status = %q, want shutting_down", body.Status)
+	}
+
+	hw := httptest.NewRecorder()
+	HandleHealthz(hw, httptest.NewRequest(http.MethodGet, "/healthz", nil))
+	if hw.Code != http.StatusOK {
+		t.Errorf("healthz during shutdown = %d, want 200", hw.Code)
+	}
+}

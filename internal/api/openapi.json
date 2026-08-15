@@ -113,7 +113,7 @@
             }
           },
           "503": {
-            "description": "At capacity (code queue_full)",
+            "description": "Service unavailable (code queue_full or shutting_down)",
             "headers": {
               "Retry-After": {
                 "description": "Seconds to wait before a retry",
@@ -259,7 +259,7 @@
         "type": "object",
         "properties": {
           "status": { "type": "string" },
-          "nsjail": { "type": "object" },
+          "nsjail": { "type": "object", "nullable": true },
           "languages": { "type": "object" }
         }
       },

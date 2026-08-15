@@ -14,6 +14,10 @@ import (
 // and the queue is full (or disabled). HandleRun maps it to HTTP 503.
 var errQueueFull = errors.New("admission queue full")
 
+// errShuttingDown is returned by acquire once Stop has been called: the
+// server is draining and admits no new work. HandleRun maps it to HTTP 503.
+var errShuttingDown = errors.New("server is shutting down")
+
 // admissionGate bounds concurrency: at most maxJobs requests in flight and
 // maxQueued waiting. A queued waiter is woken by a broadcast (the channel is
 // closed and replaced under the mutex, so a release can never be missed by a
@@ -24,6 +28,7 @@ type admissionGate struct {
 	queued    int
 	maxJobs   int
 	maxQueued int
+	stopped   bool
 	broadcast chan struct{}
 }
 
@@ -40,9 +45,13 @@ func newAdmissionGate(n, m int) *admissionGate {
 // queue has room (maxQueued > 0 and queued < maxQueued), and returns
 // errQueueFull otherwise. While queued it waits for a slot release (broadcast)
 // or the request context to be cancelled; a cancellation frees the queue
-// ticket and returns ctx.Err().
+// ticket and returns ctx.Err(). After Stop every path returns errShuttingDown.
 func (g *admissionGate) acquire(ctx context.Context) error {
 	g.mu.Lock()
+	if g.stopped {
+		g.mu.Unlock()
+		return errShuttingDown
+	}
 	if g.inFlight < g.maxJobs {
 		g.inFlight++
 		g.mu.Unlock()
@@ -67,6 +76,12 @@ func (g *admissionGate) acquire(ctx context.Context) error {
 			return ctx.Err()
 		case <-b:
 			g.mu.Lock()
+			if g.stopped {
+				g.queued--
+				atomic.AddInt64(&metrics.Queued, -1)
+				g.mu.Unlock()
+				return errShuttingDown
+			}
 			if g.inFlight < g.maxJobs {
 				g.queued--
 				atomic.AddInt64(&metrics.Queued, -1)
@@ -93,6 +108,19 @@ func (g *admissionGate) release() {
 		g.broadcast = make(chan struct{})
 	}
 	g.mu.Unlock()
+}
+
+// Stop closes admission: new callers fail immediately and queued waiters are
+// woken under the mutex (they return errShuttingDown and free their tickets).
+// In-flight slots are untouched; release() drains them. Stop is idempotent.
+func (g *admissionGate) Stop() {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.stopped = true
+	if g.queued > 0 {
+		close(g.broadcast)
+		g.broadcast = make(chan struct{})
+	}
 }
 
 // readMaxJobs parses GOBOXD_MAX_JOBS (default runtime.NumCPU()).

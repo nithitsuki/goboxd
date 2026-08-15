@@ -31,6 +31,14 @@ func TestMain(m *testing.M) {
 		os.Exit(m.Run())
 	}
 
+	// Run inside a helper so the defers (binary removal, server kill+wait)
+	// execute before the process exits. A bare os.Exit(code) skips them and
+	// leaves the harness server alive, which makes go test report
+	// "Test I/O incomplete" once it lingers past the exit.
+	os.Exit(runWithServer(m))
+}
+
+func runWithServer(m *testing.M) int {
 	dir, err := os.Getwd()
 	if err != nil {
 		log.Fatalf("getwd: %v", err)
@@ -51,7 +59,12 @@ func TestMain(m *testing.M) {
 	testPort := "18923"
 	apiURL = "http://localhost:" + testPort
 
+	repoRoot := filepath.Join(dir, "..", "..")
 	cmd := exec.Command(binary)
+	// The registry path (config/languages.yml) is relative to the repo
+	// root, so the server must start there (the test binary's cwd is the
+	// package dir).
+	cmd.Dir = repoRoot
 	cmd.Env = append(os.Environ(), "PORT="+testPort)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -90,8 +103,7 @@ func TestMain(m *testing.M) {
 	}
 
 	fmt.Fprintf(os.Stderr, "goboxd integration server ready at %s\n", apiURL)
-	code := m.Run()
-	os.Exit(code)
+	return m.Run()
 }
 
 func getAPIURL() string {

@@ -881,10 +881,17 @@ func computeTestStatus(ctx context.Context, err error, stdout, expected string, 
 }
 
 // SweepOrphans removes jail dirs older than 30 minutes. Call at startup.
-func SweepOrphans() {
+func SweepOrphans() { sweepJails(30 * time.Minute) }
+
+// SweepAllJails removes every jail dir regardless of age. Call at shutdown
+// after the drain, when no jail can be active.
+func SweepAllJails() { sweepJails(0) }
+
+// sweepJails removes jail dirs older than minAge from the temp dir.
+func sweepJails(minAge time.Duration) {
 	entries, err := os.ReadDir(os.TempDir())
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "orphan sweep: reading temp dir: %v\n", err)
+		fmt.Fprintf(os.Stderr, "jail sweep: reading temp dir: %v\n", err)
 		return
 	}
 	now := time.Now()
@@ -896,10 +903,10 @@ func SweepOrphans() {
 		if err != nil {
 			continue
 		}
-		if now.Sub(info.ModTime()) > 30*time.Minute {
+		if now.Sub(info.ModTime()) > minAge {
 			path := filepath.Join(os.TempDir(), e.Name())
 			if err := os.RemoveAll(path); err != nil {
-				fmt.Fprintf(os.Stderr, "orphan sweep: removing %s: %v\n", path, err)
+				fmt.Fprintf(os.Stderr, "jail sweep: removing %s: %v\n", path, err)
 			}
 		}
 	}

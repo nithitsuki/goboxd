@@ -310,8 +310,8 @@ func (m *Manager) NewJail(id string) (*Jail, error) {
 	return &Jail{manager: m, path: p, cpuActive: m.CPUActive()}, nil
 }
 
-// Sweep removes leftover jail cgroup dirs (crashed runs). Called at probe
-// time, when no jails can be active yet.
+// Sweep removes leftover jail cgroup dirs (crashed runs). Call it only when
+// no jails can be active: at probe time and after the shutdown drain.
 func (m *Manager) Sweep() {
 	entries, err := os.ReadDir(m.base)
 	if err != nil {

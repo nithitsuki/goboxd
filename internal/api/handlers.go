@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -188,13 +189,33 @@ type readyProbe struct {
 	Error   string `json:"error,omitempty"`
 }
 
+// shuttingDown is set by StartShutdown when a termination signal arrives.
+// probeReadiness reports it so readyz flips to 503 before the process exits.
+// healthz stays ok: liveness never depends on shutdown state.
+var shuttingDown atomic.Bool
+
+// StartShutdown marks the process as shutting down. readyz then reports
+// status shutting_down until the process exits.
+func StartShutdown() { shuttingDown.Store(true) }
+
+// StopAdmission stops the admission gate: new runs are rejected with
+// 503 shutting_down and queued requests are released immediately.
+func StopAdmission() { gate.Stop() }
+
 func probeReadiness() readyState {
 	state := readyState{
 		AllOK:     true,
 		Status:    "ok",
-		Nsjail:    probeNsjail(),
 		Languages: make(map[string]*readyProbe),
 	}
+	if shuttingDown.Load() {
+		// Shutdown in progress: no point probing runtimes. The response
+		// keeps the contract (503 + full state shape) without the execs.
+		state.AllOK = false
+		state.Status = "shutting_down"
+		return state
+	}
+	state.Nsjail = probeNsjail()
 	if !state.Nsjail.OK {
 		state.AllOK = false
 	}
@@ -460,9 +481,13 @@ func HandleRun(w http.ResponseWriter, r *http.Request) {
 			recordRun("queue_full", time.Since(start), true)
 			return
 		}
-		// Cancelled while queued: the client is gone, so the response cannot
-		// be delivered and the write is skipped (P0-1 semantics).
-		recordRun("cancelled", time.Since(start), false)
+		status, isError := classifyAcquireErr(r.Context(), err)
+		if isError {
+			w.Header().Set("Retry-After", "1")
+			writeErrorStatus(w, http.StatusServiceUnavailable, "shutting_down",
+				"server is shutting down: retry shortly")
+		}
+		recordRun(status, time.Since(start), isError)
 		return
 	}
 	atomic.AddInt64(&metrics.InFlight, 1)
@@ -540,6 +565,20 @@ func HandleRun(w http.ResponseWriter, r *http.Request) {
 		log.Printf("failed to write run response: %v", err)
 	}
 	recordRun(topStatus, time.Since(start), topStatus == "internal_error")
+}
+
+// classifyAcquireErr maps an admission failure to the recorded metric
+// status. A dead client context wins over errShuttingDown: Stop's broadcast
+// may close at the same moment a queued client disconnects, and a
+// shutting_down record (an error) for a client that never saw the 503 would
+// inflate the error counter.
+func classifyAcquireErr(ctx context.Context, err error) (status string, isError bool) {
+	if ctx.Err() == nil && errors.Is(err, errShuttingDown) {
+		return "shutting_down", true
+	}
+	// Cancelled while queued: the client is gone, so the response cannot
+	// be delivered and the write is skipped (P0-1 semantics).
+	return "cancelled", false
 }
 
 // validateStageLimits enforces the downward-only limit contract for one stage.

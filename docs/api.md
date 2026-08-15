@@ -192,6 +192,18 @@ The queue length is `GOBOXD_MAX_QUEUED`. It defaults to `GOBOXD_MAX_JOBS`. A
 value of `0` disables the queue. The server then rejects over-capacity
 requests at once.
 
+During a graceful shutdown the server stops admitting work. `POST /run` then
+returns HTTP 503 with `Retry-After: 1` and code `shutting_down`:
+
+```json
+{ "error": { "code": "shutting_down", "message": "server is shutting down: retry shortly" } }
+```
+
+Runs already admitted finish within the drain deadline
+(`GOBOXD_SHUTDOWN_TIMEOUT` seconds, default 10). `/readyz` returns HTTP 503
+with status `shutting_down` until the process exits. `/healthz` stays ok.
+A second signal during the drain forces the shutdown. The server closes connections at once and skips the rest of the drain deadline.
+
 ---
 
 ## `GET /healthz`
@@ -224,6 +236,17 @@ details for each component when any component is degraded.
 
 The server probes each language by running `<compiler/runtime> --version`.
 If that fails, it falls back to `exec.LookPath` to confirm the binary exists.
+
+During shutdown the server skips the probes. The per-component fields stay
+present but empty. The status is `shutting_down`.
+
+```json
+{
+  "status": "shutting_down",
+  "nsjail": null,
+  "languages": {}
+}
+```
 
 ---
 
