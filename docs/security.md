@@ -25,7 +25,7 @@ The goal is to prevent the attacker from:
 | 6 | Unbounded child output | `io.LimitReader` caps stdout/stderr at 64 KiB, `readCapped` adds truncation marker | `internal/runner/runner.go` |
 | 7 | Stale jail directories | `defer os.RemoveAll` after every jail dir creation + startup orphan sweep (30 min) | `internal/runner/runner.go`, `cmd/goboxd/main.go` |
 | 8 | nsjail error misclassification | `isInfraError` detects pipe and start failures. It separates infrastructure errors from user-code errors in both build and test paths. | `internal/runner/runner.go` |
-| 9 | Unbounded concurrency | Channel-based semaphore limits concurrent executions to `runtime.NumCPU()` (or `GOBOXD_MAX_JOBS`), preventing resource exhaustion under burst load | `internal/api/handlers.go` |
+| 9 | Unbounded concurrency | The admission gate limits concurrent executions to `runtime.NumCPU()` (or `GOBOXD_MAX_JOBS`) with at most `GOBOXD_MAX_QUEUED` queued, preventing resource exhaustion under burst load | `internal/api/handlers.go` |
 | 10 | Server crash on handler panic | `RecoveryMiddleware` catches panics in all handlers, logs stack trace, returns 500. One bad request cannot crash the server. | `internal/api/logging.go` |
 | 11 | Sandbox escape via dangerous syscalls | `--seccomp_policy` passes the embedded deny-list policy to every jail (build and run). kafel compiles it at jail start; DENY is SECCOMP_RET_KILL. | `internal/seccomp/seccomp.policy`, `internal/runner/runner.go` |
 | 12 | Memory limits not enforced | nsjail's `--rlimit_as` takes MB. The runner passed bytes. Limits were about 1024x too large. The guard is now tight and equal to the memory limit. | `internal/runner/runner.go` |
@@ -98,10 +98,12 @@ code of the user program. The code 255 comes from the user program, not from
 nsjail.
 
 ### Hole 9 — Concurrency limiting
-A channel-based semaphore (`jobSem`) limits concurrent executions. This
-prevents resource exhaustion. The capacity defaults to `runtime.NumCPU()`.
-You can override it with the `GOBOXD_MAX_JOBS` environment variable.
-Requests queue when the semaphore is full.
+The admission gate limits concurrent executions. This prevents resource
+exhaustion. The capacity defaults to `runtime.NumCPU()`. You can override it
+with the `GOBOXD_MAX_JOBS` environment variable. At most `GOBOXD_MAX_QUEUED`
+requests wait in the queue. When the queue is full the server rejects the
+request with HTTP 503 `queue_full` and a `Retry-After` header. A queued
+request releases its ticket when the client disconnects.
 
 ### Hole 11 — Sandbox escape via dangerous syscalls
 The embedded deny-list policy `internal/seccomp/seccomp.policy` is passed to

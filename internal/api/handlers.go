@@ -2,14 +2,13 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
-	"os"
 	"os/exec"
 	"runtime"
 	"runtime/debug"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -53,44 +52,13 @@ func GetStats() jobStatsSnapshot {
 	return s
 }
 
-// Concurrency semaphore — bounded global limit, requests queue when full.
-var (
-	jobSem     chan struct{}
-	jobSemOnce sync.Once
-	maxJobs    int
-)
-
-func initSemaphore() {
-	n := runtime.NumCPU()
-	if e := os.Getenv("GOBOXD_MAX_JOBS"); e != "" {
-		if v, err := strconv.Atoi(e); err == nil && v > 0 {
-			n = v
-		}
-	}
-	maxJobs = n
-	jobSem = make(chan struct{}, n)
-	// Fill the semaphore so acquire is send, release is receive
-	for i := 0; i < n; i++ {
-		jobSem <- struct{}{}
-	}
-}
-
-func acquireSlot() {
-	jobSemOnce.Do(initSemaphore)
-	<-jobSem
-}
-
-func releaseSlot() {
-	jobSem <- struct{}{}
-}
-
 const maxRequestBytes = 256 * 1024 // 256 KiB limit
 const maxTests = 50                // max test cases per request
 const maxFieldBytes = 64 * 1024    // 64 KiB per stdin/expected_stdout field
 
-func writeError(w http.ResponseWriter, code, message string) {
+func writeErrorStatus(w http.ResponseWriter, status int, code, message string) {
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusBadRequest)
+	w.WriteHeader(status)
 	resp := models.APIError{
 		Error: models.ErrorDetail{
 			Code:    code,
@@ -100,6 +68,10 @@ func writeError(w http.ResponseWriter, code, message string) {
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
 		log.Printf("failed to write error response: %v", err)
 	}
+}
+
+func writeError(w http.ResponseWriter, code, message string) {
+	writeErrorStatus(w, http.StatusBadRequest, code, message)
 }
 
 func writeInternalError(w http.ResponseWriter, message string) {
@@ -366,6 +338,7 @@ func HandleInfo(w http.ResponseWriter, r *http.Request) {
 			"max_source_bytes":    262144,
 			"max_tests":           50,
 			"max_concurrent_jobs": maxJobs,
+			"max_queued_jobs":     maxQueued,
 		},
 		"stats": map[string]interface{}{
 			"in_flight_jobs":           s.InFlight,
@@ -475,15 +448,26 @@ func HandleRun(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Execute with concurrency semaphore + metrics tracking
-	atomic.AddInt64(&metrics.Queued, 1)
-	acquireSlot()
-	atomic.AddInt64(&metrics.Queued, -1)
+	// Bounded admission: at most maxJobs in flight, maxQueued waiting. A
+	// queued request gives up its ticket the moment the client disconnects.
 	start := time.Now()
+	if err := gate.acquire(r.Context()); err != nil {
+		if errors.Is(err, errQueueFull) {
+			w.Header().Set("Retry-After", "1")
+			writeErrorStatus(w, http.StatusServiceUnavailable, "queue_full",
+				"server is at capacity: too many jobs queued, retry shortly")
+			recordRun("queue_full", time.Since(start), true)
+			return
+		}
+		// Cancelled while queued: the client is gone, so the response cannot
+		// be delivered and the write is skipped (P0-1 semantics).
+		recordRun("cancelled", time.Since(start), false)
+		return
+	}
 	atomic.AddInt64(&metrics.InFlight, 1)
 	defer func() {
 		atomic.AddInt64(&metrics.InFlight, -1)
-		releaseSlot()
+		gate.release()
 	}()
 	buildRes, testsRes, err := runner.ExecuteRun(r.Context(), req, lc)
 	if r.Context().Err() != nil {

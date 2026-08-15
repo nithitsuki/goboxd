@@ -30,7 +30,7 @@ internal/api/handlers.go
   │   ├─ per-field size caps (64 KiB stdin/expected_stdout)
   │   ├─ source_filename / artifact_filename path-safety (Security Hole #1)
   │   └─ compiler flags match allow-list (Security Hole #3)
-  ├─ acquireSlot()                (bounded concurrency semaphore)
+  ├─ admission gate                (N in flight, M queued, 503 queue_full)
   │
   ▼
 internal/runner/runner.go
@@ -59,7 +59,7 @@ internal/runner/runner.go
   │
   ▼
 Back in handler
-  ├─ releaseSlot()
+  ├─ admission gate release        (deferred)
   ├─ computeTopLevelStatus()      (accepted / build_failed / internal_error / and more)
   ├─ If build_failed or internal_error → mark all tests "not_executed"
   ├─ Stats tracking (atomic counters for in_flight, total, failed_internal)
@@ -109,16 +109,14 @@ Go 1.22 added native method routing to `net/http.ServeMux`. Examples are
 any third-party framework. It keeps the binary small and the dependencies
 minimal.
 
-### Bounded concurrency semaphore
-A channel-based semaphore limits concurrent executions to
-`runtime.NumCPU()`. You can override this with the `GOBOXD_MAX_JOBS`
-environment variable. Requests queue when the semaphore is full. The host is
-not overwhelmed. The semaphore initializes lazily on the first request.
-
-```
-acquireSlot() → <-jobSem     (reads a token, blocks if empty)
-releaseSlot() → jobSem <- _  (returns the token)
-```
+### Bounded admission
+The admission gate limits concurrent executions to `runtime.NumCPU()`. You
+can override this with the `GOBOXD_MAX_JOBS` environment variable. At most
+`GOBOXD_MAX_QUEUED` requests wait in the queue (it defaults to
+`GOBOXD_MAX_JOBS`). When the queue is full the server rejects the request
+with HTTP 503 `queue_full` and a `Retry-After` header. A queued request
+releases its ticket when the client disconnects. The host is not
+overwhelmed.
 
 ### Fixture-driven test suite
 Test cases are JSON files in `tests/testcases/{lang}/{name}/`. Each directory

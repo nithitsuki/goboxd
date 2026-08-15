@@ -224,6 +224,190 @@ func TestHandleRunContextCancel(t *testing.T) {
 	}
 }
 
+// TestHandleRunQueueFull locks the bounded-admission contract end to end:
+// with a gate of N=1 M=0, one busy-loop run holds the only slot and a second
+// request is rejected with 503, Retry-After: 1, body code queue_full, and a
+// queue_full entry in the live metrics.
+func TestHandleRunQueueFull(t *testing.T) {
+	// only run this if nsjail is available
+	if _, err := exec.LookPath("nsjail"); err != nil {
+		t.Skip("nsjail not found, skipping execution test")
+	}
+	if os.Geteuid() != 0 {
+		t.Skip("requires root to run nsjail")
+	}
+
+	// Warm up the one-time sandbox setup (cgroup probe ~3s on first run).
+	warmBody := `{"language":"py3","source":"print('warm')","tests":[{"stdin":"","expected_stdout":"warm\n"}]}`
+	HandleRun(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/run", bytes.NewBufferString(warmBody)))
+
+	orig := gate
+	gate = newAdmissionGate(1, 0)
+
+	statuses := Snapshot()["status_counts"].(map[string]int64)
+	before := statuses["queue_full"]
+
+	// The holder's wall_time_s matches the py3 registry run max (9s in
+	// config/languages.yml). Setting it explicitly keeps the holder alive
+	// for the full registry window even if the YAML default changes.
+	body := `{"language":"py3","source":"while True:\n    pass","run":{"limits":{"wall_time_s":9}},"tests":[{"stdin":"","expected_stdout":""}]}`
+	ctx1, cancel1 := context.WithCancel(context.Background())
+	firstDone := make(chan struct{})
+	// Restore the package gate only after the holder goroutine has fully
+	// exited. Its deferred release reads the package gate variable, so a
+	// failure path must never swap the gate back while the holder still
+	// owns a slot in the swapped gate. Waiting here (instead of deferring
+	// the swap) also covers t.Fatalf exits: the cleanup runs after the
+	// test's defers and cannot corrupt the real gate.
+	t.Cleanup(func() {
+		cancel1()
+		select {
+		case <-firstDone:
+		case <-time.After(10 * time.Second):
+			t.Errorf("holder goroutine did not exit during gate cleanup")
+		}
+		gate = orig
+	})
+	go func() {
+		defer close(firstDone)
+		req1 := httptest.NewRequest(http.MethodPost, "/run", bytes.NewBufferString(body))
+		HandleRun(httptest.NewRecorder(), req1.WithContext(ctx1))
+	}()
+	waitForGate(t, gate, 10*time.Second, func() bool { return gate.snapInFlight() == 1 }, "first run to hold the slot")
+
+	req2 := httptest.NewRequest(http.MethodPost, "/run", bytes.NewBufferString(body))
+	w2 := httptest.NewRecorder()
+	HandleRun(w2, req2)
+
+	res2 := w2.Result()
+	defer func() { _ = res2.Body.Close() }()
+	if res2.StatusCode != http.StatusServiceUnavailable {
+		t.Errorf("expected 503, got %d", res2.StatusCode)
+	}
+	if got := res2.Header.Get("Retry-After"); got != "1" {
+		t.Errorf("Retry-After = %q, want \"1\"", got)
+	}
+	var apiErr models.APIError
+	if err := json.NewDecoder(res2.Body).Decode(&apiErr); err != nil {
+		t.Fatalf("failed to decode error body: %v", err)
+	}
+	if apiErr.Error.Code != "queue_full" {
+		t.Errorf("error code = %q, want queue_full", apiErr.Error.Code)
+	}
+	if apiErr.Error.Message == "" {
+		t.Error("queue_full message is empty")
+	}
+
+	statuses = Snapshot()["status_counts"].(map[string]int64)
+	if after := statuses["queue_full"]; after != before+1 {
+		t.Errorf("status_counts[queue_full] = %d, want %d", after, before+1)
+	}
+
+	// Tear down: cancel the busy loop so the suite does not wait out its
+	// wall-time limit.
+	cancel1()
+	select {
+	case <-firstDone:
+	case <-time.After(10 * time.Second):
+		t.Fatal("first run did not finish after context cancel")
+	}
+}
+
+// TestHandleRunQueuedCancel locks the disconnect-while-queued path: with a
+// gate of N=1 M=1, a second request waits in the queue; cancelling its
+// context frees the ticket, writes nothing to the response, and records
+// "cancelled" in the live metrics.
+func TestHandleRunQueuedCancel(t *testing.T) {
+	// only run this if nsjail is available
+	if _, err := exec.LookPath("nsjail"); err != nil {
+		t.Skip("nsjail not found, skipping execution test")
+	}
+	if os.Geteuid() != 0 {
+		t.Skip("requires root to run nsjail")
+	}
+
+	// Warm up the one-time sandbox setup (cgroup probe ~3s on first run).
+	warmBody := `{"language":"py3","source":"print('warm')","tests":[{"stdin":"","expected_stdout":"warm\n"}]}`
+	HandleRun(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/run", bytes.NewBufferString(warmBody)))
+
+	orig := gate
+	gate = newAdmissionGate(1, 1)
+
+	statuses := Snapshot()["status_counts"].(map[string]int64)
+	before := statuses["cancelled"]
+
+	// The holder's wall_time_s matches the py3 registry run max (9s in
+	// config/languages.yml). Setting it explicitly keeps the holder alive
+	// for the full registry window even if the YAML default changes.
+	body := `{"language":"py3","source":"while True:\n    pass","run":{"limits":{"wall_time_s":9}},"tests":[{"stdin":"","expected_stdout":""}]}`
+	ctx1, cancel1 := context.WithCancel(context.Background())
+	firstDone := make(chan struct{})
+	ctx2, cancel2 := context.WithCancel(context.Background())
+	secondDone := make(chan struct{})
+	// Restore the package gate only after both goroutines have fully
+	// exited. The holder's deferred release reads the package gate variable,
+	// so a failure path must never swap the gate back while the holder still
+	// owns a slot in the swapped gate. Waiting here (instead of deferring
+	// the swap) also covers t.Fatalf exits: the cleanup runs after the
+	// test's defers and cannot corrupt the real gate.
+	t.Cleanup(func() {
+		cancel1()
+		cancel2()
+		select {
+		case <-firstDone:
+		case <-time.After(10 * time.Second):
+			t.Errorf("holder goroutine did not exit during gate cleanup")
+		}
+		select {
+		case <-secondDone:
+		case <-time.After(10 * time.Second):
+			t.Errorf("queued goroutine did not exit during gate cleanup")
+		}
+		gate = orig
+	})
+	go func() {
+		defer close(firstDone)
+		req1 := httptest.NewRequest(http.MethodPost, "/run", bytes.NewBufferString(body))
+		HandleRun(httptest.NewRecorder(), req1.WithContext(ctx1))
+	}()
+	waitForGate(t, gate, 10*time.Second, func() bool { return gate.snapInFlight() == 1 }, "first run to hold the slot")
+
+	w2 := httptest.NewRecorder()
+	go func() {
+		defer close(secondDone)
+		req2 := httptest.NewRequest(http.MethodPost, "/run", bytes.NewBufferString(body))
+		HandleRun(w2, req2.WithContext(ctx2))
+	}()
+	waitForGate(t, gate, 10*time.Second, func() bool { return gate.snapQueued() == 1 }, "second run to queue")
+
+	cancel2()
+	select {
+	case <-secondDone:
+	case <-time.After(10 * time.Second):
+		t.Fatal("queued request did not finish after context cancel")
+	}
+
+	if w2.Body.Len() != 0 {
+		t.Errorf("cancelled queued request received a response body: %q", w2.Body.String())
+	}
+	if w2.Header().Get("Content-Type") != "" {
+		t.Errorf("cancelled queued request received response headers: %v", w2.Header())
+	}
+
+	statuses = Snapshot()["status_counts"].(map[string]int64)
+	if after := statuses["cancelled"]; after != before+1 {
+		t.Errorf("status_counts[cancelled] = %d, want %d", after, before+1)
+	}
+
+	// Tear down: cancel the busy loop holding the slot.
+	cancel1()
+	select {
+	case <-firstDone:
+	case <-time.After(10 * time.Second):
+		t.Fatal("first run did not finish after context cancel")
+	}
+}
+
 func TestComputeTopLevelStatus(t *testing.T) {
 	tests := []struct {
 		name     string

@@ -137,6 +137,18 @@ The server computes the top-level status with this procedure:
 
 Internal errors (500) return the same shape with code `internal_error`.
 
+### Error responses (503)
+
+When all in-flight slots are busy and the admission queue is full, `POST /run`
+returns HTTP 503 with `Retry-After: 1` and code `queue_full`:
+
+```json
+{ "error": { "code": "queue_full", "message": "server is at capacity: too many jobs queued, retry shortly" } }
+```
+
+The queue length is `GOBOXD_MAX_QUEUED`. It defaults to `GOBOXD_MAX_JOBS`. A
+value of `0` disables queueing, so over-capacity requests are rejected at once.
+
 ---
 
 ## `GET /healthz`
@@ -207,7 +219,8 @@ HTTP 200.
   "limits": {
     "max_source_bytes": 262144,
     "max_tests": 50,
-    "max_concurrent_jobs": 16
+    "max_concurrent_jobs": 16,
+    "max_queued_jobs": 16
   },
   "stats": {
     "in_flight_jobs": 0,

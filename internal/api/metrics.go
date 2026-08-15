@@ -12,15 +12,16 @@ import (
 )
 
 // latencyBucketsMs are the fixed histogram buckets for run duration (ms).
+// The clock starts before admission, so the duration includes queue wait.
 var latencyBucketsMs = []int64{50, 100, 250, 500, 1000, 2000, 5000}
 
 // Metrics holds the live counters behind /metrics and the dashboard.
-// All counters are updated from HandleRun only (single writer per request
-// path, but the reads from /metrics may race: atomics and a mutex keep the
-// snapshot consistent).
+// The run counters are updated from HandleRun. metrics.Queued is updated by
+// the admission gate (acquire and cancel paths). The reads from /metrics may
+// race with these writers: atomics and a mutex keep the snapshot consistent.
 type Metrics struct {
 	InFlight  int64 // atomic: runs currently executing
-	Queued    int64 // atomic: requests blocked on the semaphore
+	Queued    int64 // atomic: requests waiting in the admission queue
 	TotalRuns int64 // atomic: POST /run completions
 	Errors    int64 // atomic: runs ending internal_error or HTTP 5xx
 	statusMu  sync.Mutex
