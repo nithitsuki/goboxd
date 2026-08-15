@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/nithitsuki/goboxd/internal/config"
 	"github.com/nithitsuki/goboxd/internal/models"
@@ -175,6 +177,50 @@ func TestHandleRunExecution(t *testing.T) {
 
 	if resp.Status == "" {
 		t.Error("response status should not be empty")
+	}
+}
+
+// TestHandleRunContextCancel proves the client-disconnect path: a request
+// whose context is cancelled mid-run gets no response written (the client is
+// gone), and the run is still recorded as "cancelled" in the live metrics.
+func TestHandleRunContextCancel(t *testing.T) {
+	// only run this if nsjail is available
+	if _, err := exec.LookPath("nsjail"); err != nil {
+		t.Skip("nsjail not found, skipping execution test")
+	}
+	if os.Geteuid() != 0 {
+		t.Skip("requires root to run nsjail")
+	}
+
+	// Warm up the one-time sandbox setup (cgroup probe ~3s on first run) so
+	// the cancel timer below lands during the busy loop, not during setup.
+	warmBody := `{"language":"py3","source":"print('warm')","tests":[{"stdin":"","expected_stdout":"warm\n"}]}`
+	warmReq := httptest.NewRequest(http.MethodPost, "/run", bytes.NewBufferString(warmBody))
+	HandleRun(httptest.NewRecorder(), warmReq)
+
+	statuses := Snapshot()["status_counts"].(map[string]int64)
+	before := statuses["cancelled"]
+
+	body := `{"language":"py3","source":"while True:\n    pass","tests":[{"stdin":"","expected_stdout":""}]}`
+	req := httptest.NewRequest(http.MethodPost, "/run", bytes.NewBufferString(body))
+	ctx, cancel := context.WithCancel(req.Context())
+	defer cancel()
+	req = req.WithContext(ctx)
+	time.AfterFunc(500*time.Millisecond, cancel)
+
+	w := httptest.NewRecorder()
+	HandleRun(w, req)
+
+	if w.Body.Len() != 0 {
+		t.Errorf("cancelled request received a response body: %q", w.Body.String())
+	}
+	if w.Header().Get("Content-Type") != "" {
+		t.Errorf("cancelled request received response headers: %v", w.Header())
+	}
+
+	statuses = Snapshot()["status_counts"].(map[string]int64)
+	if after := statuses["cancelled"]; after != before+1 {
+		t.Errorf("status_counts[cancelled] = %d, want %d", after, before+1)
 	}
 }
 

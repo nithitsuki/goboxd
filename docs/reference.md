@@ -368,7 +368,7 @@ status.
 ### Functions
 
 ```go
-func ExecuteRun(req models.RunRequest, lc config.LanguageConfig) (models.BuildResult, []models.TestResult, error)
+func ExecuteRun(ctx context.Context, req models.RunRequest, lc config.LanguageConfig) (models.BuildResult, []models.TestResult, error)
 ```
 
 ExecuteRun runs the full request. It builds the code when the language needs

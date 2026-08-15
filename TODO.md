@@ -6,7 +6,7 @@ The bundled package (the judge layer) wraps /run and owns everything that needs 
 
 ## P0 — Fix the contract (stateless, mostly bug fixes)
 
-1. [ ] **Client-disconnect cancellation** — execInJail and runSingleTest use context.Background() (internal/runner/runner.go:346,467). Platforms will time out and retry. Every abandoned run burns a slot and jail resources for the full wall time. Tie execution to the request context (with a timeout) so disconnects free the slot. This is the most important executor fix there is.
+1. [x] **Client-disconnect cancellation** — shipped 2026-08-15. Request ctx threaded through ExecuteRun/runBuild/runSingleTest/execInJail; WithTimeout derives from it; cancelled runs free uid/jail/cgroup/slot immediately (nsjail PDEATHSIG cascade). New "cancelled" status recorded in metrics; handler skips the response write. Verified: TestExecuteRunContextCancel (60s wall, 1s cancel → ~4s kill, uid reusable, no jail dirs) + TestHandleRunContextCancel, both graded by breaking the code; sudo runner suite green, golangci-lint clean.
 2. [ ] **Bounded admission with 503** — replace the blocking semaphore (internal/api/handlers.go:58-85) with in-flight + queued counters. Reject when the queue is full. An executor's queue must be the platform's problem. Unbounded blocked connections is how you get pwned by accident.
 3. [ ] **CPU time via the cgroup cpu controller** — enable it alongside memory+pids (internal/cgroupv2/cgroupv2.go:95-111), read cpu.stat per jail. This gives:
     - exact cpu_time vs wall_time in results (Judge0/isolate report both — the bundle needs them to map to Judge0 statuses)

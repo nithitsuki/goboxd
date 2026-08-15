@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/nithitsuki/goboxd/internal/config"
 	"github.com/nithitsuki/goboxd/internal/models"
@@ -92,7 +93,7 @@ func TestExecuteRun(t *testing.T) {
 				Tests:    tt.testCases,
 			}
 
-			_, results, err := ExecuteRun(req, py3Config)
+			_, results, err := ExecuteRun(context.Background(), req, py3Config)
 			if err != nil {
 				t.Fatalf("ExecuteRun dropped a hard error: %v", err)
 			}
@@ -120,6 +121,99 @@ func TestExecuteRun(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestExecuteRunContextCancel proves client-disconnect cancellation: a run
+// with a 60s wall time must return ~1s after the request context is canceled,
+// classify the test as "cancelled", free the uid, and leave no jail dir.
+func TestExecuteRunContextCancel(t *testing.T) {
+	if _, err := exec.LookPath("nsjail"); err != nil {
+		t.Skip("nsjail not found in PATH, skipping runner tests (run inside docker-compose)")
+	}
+	if os.Geteuid() != 0 {
+		t.Skip("requires root to run nsjail")
+	}
+
+	py3Config := config.LanguageConfig{
+		ID:             "py3",
+		Name:           "Python 3",
+		RunCmd:         []string{"/usr/bin/python3", "main.py"},
+		SourceFilename: "main.py",
+		DefaultLimits: config.Limits{
+			WallTimeS:    60,
+			MemoryKB:     102400,
+			MaxProcesses: 100,
+		},
+		RunLimits: config.Limits{
+			WallTimeS:    60,
+			MemoryKB:     102400,
+			MaxProcesses: 100,
+		},
+	}
+
+	req := models.RunRequest{
+		Language: "py3",
+		Source:   "while True:\n    pass",
+		Tests: []models.TestCase{
+			{Stdin: "", ExpectedStdout: ""},
+		},
+	}
+
+	// Warm up the one-time infrastructure (cgroup probe, seccomp policy) so
+	// the ~1s cancel timer below lands during the busy loop, not during
+	// first-run setup (probe alone costs ~3s).
+	warmReq := models.RunRequest{
+		Language: "py3",
+		Source:   "print('warm')",
+		Tests: []models.TestCase{
+			{Stdin: "", ExpectedStdout: "warm\n"},
+		},
+	}
+	if _, _, err := ExecuteRun(context.Background(), warmReq, py3Config); err != nil {
+		t.Fatalf("warmup ExecuteRun: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	time.AfterFunc(time.Second, cancel)
+
+	start := time.Now()
+	_, results, err := ExecuteRun(ctx, req, py3Config)
+	elapsed := time.Since(start)
+	if err != nil {
+		t.Fatalf("ExecuteRun dropped a hard error: %v", err)
+	}
+
+	if elapsed >= 10*time.Second {
+		t.Fatalf("ExecuteRun took %v on cancel, want < 10s (wall time was 60s)", elapsed)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	if results[0].Status != "cancelled" {
+		t.Errorf("expected status %q, got %q (stderr: %q)", "cancelled", results[0].Status, results[0].Stderr)
+	}
+	if results[0].Stdout != "" {
+		t.Errorf("expected empty stdout, got %q", results[0].Stdout)
+	}
+
+	// The uid must be immediately reusable after the canceled run.
+	uid, err := uidPool.Alloc()
+	if err != nil {
+		t.Fatalf("uid pool not reusable after cancel: %v", err)
+	}
+	uidPool.Release(uid)
+
+	// No jail dir may remain after the canceled run returned.
+	entries, err := os.ReadDir(os.TempDir())
+	if err != nil {
+		t.Fatalf("reading temp dir: %v", err)
+	}
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), "goboxd-jail-") {
+			t.Errorf("leftover jail dir after cancel: %s", e.Name())
+		}
 	}
 }
 

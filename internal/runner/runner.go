@@ -62,7 +62,7 @@ const maxOutputBytes = 64 * 1024 // 64 KiB
 // can never be exhausted while jobs are admitted.
 var uidPool = uidpool.New(uidpool.ConcurrentJobs())
 
-func ExecuteRun(req models.RunRequest, lc config.LanguageConfig) (models.BuildResult, []models.TestResult, error) {
+func ExecuteRun(ctx context.Context, req models.RunRequest, lc config.LanguageConfig) (models.BuildResult, []models.TestResult, error) {
 	buildRes := models.BuildResult{
 		Status:     "ok",
 		Stdout:     "",
@@ -146,7 +146,7 @@ func ExecuteRun(req models.RunRequest, lc config.LanguageConfig) (models.BuildRe
 	// Build step for compiled languages
 	buildStart := time.Now()
 	if len(lc.BuildCmd) > 0 {
-		buildRes, err = runBuild(jailDir, req, lc, uid, jailCg)
+		buildRes, err = runBuild(ctx, jailDir, req, lc, uid, jailCg)
 		buildRes.DurationMs = int(time.Since(buildStart).Milliseconds())
 		if err != nil {
 			return buildRes, nil, err
@@ -161,7 +161,10 @@ func ExecuteRun(req models.RunRequest, lc config.LanguageConfig) (models.BuildRe
 
 	var results []models.TestResult
 	for _, tc := range req.Tests {
-		res := runSingleTest(tc, lc, jailDir, req.Run, uid, jailCg)
+		if ctx.Err() != nil {
+			break
+		}
+		res := runSingleTest(ctx, tc, lc, jailDir, req.Run, uid, jailCg)
 		results = append(results, res)
 	}
 
@@ -169,7 +172,7 @@ func ExecuteRun(req models.RunRequest, lc config.LanguageConfig) (models.BuildRe
 }
 
 // runBuild compiles the source inside nsjail using lc.BuildCmd.
-func runBuild(jailDir string, req models.RunRequest, lc config.LanguageConfig, uid int, jailCg *cgroupv2.Jail) (models.BuildResult, error) {
+func runBuild(ctx context.Context, jailDir string, req models.RunRequest, lc config.LanguageConfig, uid int, jailCg *cgroupv2.Jail) (models.BuildResult, error) {
 	wallTime := lc.BuildLimits.WallTimeS
 	memKB := lc.BuildLimits.MemoryKB
 	procs := lc.BuildLimits.MaxProcesses
@@ -193,7 +196,7 @@ func runBuild(jailDir string, req models.RunRequest, lc config.LanguageConfig, u
 	}
 	cmdArgs = expandFlags(cmdArgs, flags)
 
-	stdout, stderr, _, err := execInJail(jailDir, cmdArgs, wallTime, memKB, procs, uid, jailCg)
+	stdout, stderr, _, err := execInJail(ctx, jailDir, cmdArgs, wallTime, memKB, procs, uid, jailCg)
 	res := models.BuildResult{
 		Status: "ok",
 		Stdout: stdout,
@@ -331,7 +334,7 @@ func nsjailArgs(appDir string, wallTime, memKB, procs, uid int, jailCg *cgroupv2
 	return args, nil
 }
 
-func execInJail(jailDir string, cmdArgs []string, wallTime, memKB, procs, uid int, jailCg *cgroupv2.Jail) (string, string, bool, error) {
+func execInJail(ctx context.Context, jailDir string, cmdArgs []string, wallTime, memKB, procs, uid int, jailCg *cgroupv2.Jail) (string, string, bool, error) {
 	appDir := filepath.Join(jailDir, "app")
 	if err := os.MkdirAll(appDir, 0755); err != nil {
 		return "", "", false, fmt.Errorf("app dir: %w", err)
@@ -343,7 +346,7 @@ func execInJail(jailDir string, cmdArgs []string, wallTime, memKB, procs, uid in
 	}
 	args = append(args, cmdArgs...)
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(wallTime)*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, time.Duration(wallTime)*time.Second)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, "nsjail", args...)
@@ -427,8 +430,12 @@ func execInJail(jailDir string, cmdArgs []string, wallTime, memKB, procs, uid in
 	return stdout, stderr, oomKilled, nil
 }
 
-func runSingleTest(tc models.TestCase, lc config.LanguageConfig, jailDir string, runOpts *models.StageConfig, uid int, jailCg *cgroupv2.Jail) models.TestResult {
+func runSingleTest(ctx context.Context, tc models.TestCase, lc config.LanguageConfig, jailDir string, runOpts *models.StageConfig, uid int, jailCg *cgroupv2.Jail) models.TestResult {
 	start := time.Now()
+
+	if ctx.Err() != nil {
+		return failResult("cancelled", "", start)
+	}
 
 	// Use language-specific run limits, not build limits
 	wallTime := lc.RunLimits.WallTimeS
@@ -464,7 +471,7 @@ func runSingleTest(tc models.TestCase, lc config.LanguageConfig, jailDir string,
 	args = append(args, expandFlags(lc.RunCmd, runFlags)...)
 
 	// Go context deadline matches nsjail's time_limit so both fire together
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(wallTime)*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, time.Duration(wallTime)*time.Second)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, "nsjail", args...)
@@ -613,6 +620,11 @@ func computeTestStatus(ctx context.Context, err error, stdout, expected string, 
 	// the process died for memory, not wall time.
 	if oomKilled {
 		return "memory_exceeded"
+	}
+	// Client disconnect / request-context cancellation beats everything else:
+	// the run was killed on purpose, not by its limits.
+	if ctx.Err() == context.Canceled {
+		return "cancelled"
 	}
 	// Check context deadline first (Go killed the process)
 	if ctx.Err() == context.DeadlineExceeded {

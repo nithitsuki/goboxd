@@ -485,7 +485,26 @@ func HandleRun(w http.ResponseWriter, r *http.Request) {
 		atomic.AddInt64(&metrics.InFlight, -1)
 		releaseSlot()
 	}()
-	buildRes, testsRes, err := runner.ExecuteRun(req, lc)
+	buildRes, testsRes, err := runner.ExecuteRun(r.Context(), req, lc)
+	if r.Context().Err() != nil {
+		// The client is gone, so the response cannot be delivered and the
+		// write is skipped. The context may have been cancelled mid-run
+		// (killing it on purpose) or after the run completed — either way
+		// the run is recorded as a cancellation.
+		if err != nil {
+			// The run also hit an infrastructure failure; surface it via
+			// /info and count it as an error even though the client never
+			// sees the response.
+			log.Printf("Internal error during execution (client gone): %v", err)
+			lastInternalErrMu.Lock()
+			lastInternalErr = time.Now()
+			lastInternalErrMu.Unlock()
+			recordRun("cancelled", time.Since(start), true)
+			return
+		}
+		recordRun("cancelled", time.Since(start), false)
+		return
+	}
 	if err != nil {
 		log.Printf("[handler] ExecuteRun error for lang=%s: %v | build.Status=%s build.Stderr=%s",
 			req.Language, err, buildRes.Status, buildRes.Stderr)
