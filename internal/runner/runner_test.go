@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"testing"
@@ -225,6 +226,10 @@ func TestExecuteRunContextCancel(t *testing.T) {
 	if results[0].Stdout != "" {
 		t.Errorf("expected empty stdout, got %q", results[0].Stdout)
 	}
+	// The ctx kill is a goboxd kill: ProcessState is signaled with SIGKILL.
+	if results[0].ExitCode != -1 || results[0].TerminationSignal != 9 {
+		t.Errorf("cancel exit facts = (%d, %d), want (-1, 9)", results[0].ExitCode, results[0].TerminationSignal)
+	}
 
 	// The uid must be immediately reusable after the canceled run.
 	uid, err := uidPool.Alloc()
@@ -309,6 +314,68 @@ func TestComputeTestStatus(t *testing.T) {
 			got := computeTestStatus(tt.ctx, tt.err, tt.stdout, tt.expected, nil, false, tt.cpu)
 			if got != tt.want {
 				t.Errorf("computeTestStatus = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestHelperProcessExitFacts is not a real test: TestExitFacts re-execs the
+// test binary with GOBOXD_TEST_EXIT_CODE to obtain a real ProcessState for a
+// plain exit. Without the env var it does nothing. Signal deaths use a tiny
+// sh subprocess instead (the Go test framework converts SIGSEGV in its own
+// process into exit 2, which would corrupt the signal shape).
+func TestHelperProcessExitFacts(t *testing.T) {
+	if code := os.Getenv("GOBOXD_TEST_EXIT_CODE"); code != "" {
+		if n, err := strconv.Atoi(code); err == nil {
+			os.Exit(n)
+		}
+		os.Exit(1)
+	}
+}
+
+// TestExitFacts locks the exit fact derivation against real ProcessStates:
+// nil, plain exits, the 129..192 nsjail signal-propagation window with both
+// boundaries, and direct signal deaths.
+func TestExitFacts(t *testing.T) {
+	exitPS := func(code int) *os.ProcessState {
+		cmd := exec.Command(os.Args[0], "-test.run=TestHelperProcessExitFacts")
+		cmd.Env = append(os.Environ(), "GOBOXD_TEST_EXIT_CODE="+strconv.Itoa(code))
+		_ = cmd.Run()
+		return cmd.ProcessState
+	}
+	signalPS := func(sig syscall.Signal) *os.ProcessState {
+		// Full path on purpose: TestSecurityHole2NoShellCommands flags
+		// shell-name literals in exec.Command project-wide.
+		cmd := exec.Command("/bin/sh", "-c", fmt.Sprintf("kill -%d $$", int(sig)))
+		_ = cmd.Run()
+		return cmd.ProcessState
+	}
+
+	cases := []struct {
+		name     string
+		ps       *os.ProcessState
+		wantCode int
+		wantSig  int
+	}{
+		{"nil state means no process", nil, 0, 0},
+		{"clean exit 0", exitPS(0), 0, 0},
+		{"user exit 1", exitPS(1), 1, 0},
+		{"user exit 3", exitPS(3), 3, 0},
+		{"exit 128 is not a signal", exitPS(128), 128, 0},
+		{"exit 129 reads as signal 1", exitPS(129), 129, 1},
+		{"exit 137 reads as signal 9", exitPS(137), 137, 9},
+		{"exit 152 reads as signal 24", exitPS(152), 152, 24},
+		{"exit 192 reads as signal 64", exitPS(192), 192, 64},
+		{"exit 193 is not a signal", exitPS(193), 193, 0},
+		{"exit 255 is not a signal", exitPS(255), 255, 0},
+		{"SIGSEGV death", signalPS(syscall.SIGSEGV), -1, 11},
+		{"SIGKILL death", signalPS(syscall.SIGKILL), -1, 9},
+	}
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			gotCode, gotSig := exitFacts(tt.ps)
+			if gotCode != tt.wantCode || gotSig != tt.wantSig {
+				t.Errorf("exitFacts = (%d, %d), want (%d, %d)", gotCode, gotSig, tt.wantCode, tt.wantSig)
 			}
 		})
 	}
@@ -507,6 +574,145 @@ func TestExecuteRunCPUReported(t *testing.T) {
 	if res.CpuTimeMs >= 9000 {
 		t.Errorf("CpuTimeMs = %d, want < 9000 (wall limit was 9s)", res.CpuTimeMs)
 	}
+}
+
+// TestExecuteRunExitFacts pins the exit fact contract end to end:
+// user exits propagate as-is, nsjail signal deaths read 128+signal,
+// and goboxd kills (cpu poller, wall deadline) read (-1, 9).
+func TestExecuteRunExitFacts(t *testing.T) {
+	if _, err := exec.LookPath("nsjail"); err != nil {
+		t.Skip("nsjail not found in PATH, skipping runner tests (run inside docker-compose)")
+	}
+	if os.Geteuid() != 0 {
+		t.Skip("requires root to run nsjail")
+	}
+
+	py3Config := config.LanguageConfig{
+		ID:             "py3",
+		Name:           "Python 3",
+		RunCmd:         []string{"/usr/bin/python3", "main.py"},
+		SourceFilename: "main.py",
+		DefaultLimits: config.Limits{
+			WallTimeS:    9,
+			MemoryKB:     102400,
+			MaxProcesses: 100,
+			CpuTimeS:     11,
+		},
+		RunLimits: config.Limits{
+			WallTimeS:    9,
+			MemoryKB:     102400,
+			MaxProcesses: 100,
+			CpuTimeS:     11,
+		},
+	}
+
+	run := func(t *testing.T, req models.RunRequest) models.TestResult {
+		t.Helper()
+		_, results, err := ExecuteRun(context.Background(), req, py3Config)
+		if err != nil {
+			t.Fatalf("ExecuteRun dropped a hard error: %v", err)
+		}
+		if len(results) != 1 {
+			t.Fatalf("expected 1 result, got %d", len(results))
+		}
+		return results[0]
+	}
+
+	// Warm up the one-time sandbox setup (cgroup probe, seccomp policy) so
+	// the cases below measure the run, not first-run setup.
+	warmReq := models.RunRequest{
+		Language: "py3",
+		Source:   "print('warm')",
+		Tests:    []models.TestCase{{Stdin: "", ExpectedStdout: "warm\n"}},
+	}
+	if res := run(t, warmReq); res.Status != "accepted" {
+		t.Fatalf("warmup status = %q, want accepted (stderr: %q)", res.Status, res.Stderr)
+	}
+
+	t.Run("accepted is (0,0)", func(t *testing.T) {
+		res := run(t, models.RunRequest{
+			Language: "py3",
+			Source:   "print('ok')",
+			Tests:    []models.TestCase{{Stdin: "", ExpectedStdout: "ok\n"}},
+		})
+		if res.Status != "accepted" {
+			t.Fatalf("status = %q, want accepted (stderr: %q)", res.Status, res.Stderr)
+		}
+		if res.ExitCode != 0 || res.TerminationSignal != 0 {
+			t.Errorf("exit facts = (%d, %d), want (0, 0)", res.ExitCode, res.TerminationSignal)
+		}
+	})
+
+	t.Run("user exit 3 propagates", func(t *testing.T) {
+		res := run(t, models.RunRequest{
+			Language: "py3",
+			Source:   "import sys\nsys.exit(3)",
+			Tests:    []models.TestCase{{Stdin: "", ExpectedStdout: ""}},
+		})
+		if res.Status != "runtime_error" {
+			t.Fatalf("status = %q, want runtime_error (stderr: %q)", res.Status, res.Stderr)
+		}
+		if res.ExitCode != 3 || res.TerminationSignal != 0 {
+			t.Errorf("exit facts = (%d, %d), want (3, 0)", res.ExitCode, res.TerminationSignal)
+		}
+	})
+
+	t.Run("sigsegv reads 128+11", func(t *testing.T) {
+		res := run(t, models.RunRequest{
+			Language: "py3",
+			Source:   "import ctypes\nctypes.string_at(0)",
+			Tests:    []models.TestCase{{Stdin: "", ExpectedStdout: ""}},
+		})
+		if res.ExitCode != 139 || res.TerminationSignal != 11 {
+			t.Errorf("exit facts = (%d, %d), want (139, 11)", res.ExitCode, res.TerminationSignal)
+		}
+	})
+
+	t.Run("wall timeout kills with signal 9", func(t *testing.T) {
+		wall2 := 2
+		res := run(t, models.RunRequest{
+			Language: "py3",
+			Source:   "while True:\n    pass",
+			Run: &models.StageConfig{Limits: &models.Limits{
+				WallTimeS: &wall2,
+			}},
+			Tests: []models.TestCase{{Stdin: "", ExpectedStdout: ""}},
+		})
+		if res.TerminationSignal != 9 {
+			t.Errorf("termination_signal = %d, want 9", res.TerminationSignal)
+		}
+		if res.ExitCode != -1 && res.ExitCode != 137 {
+			t.Errorf("exit_code = %d, want -1 (goboxd kill) or 137 (nsjail propagation)", res.ExitCode)
+		}
+		if res.Status != "time_exceeded" {
+			t.Errorf("status = %q, want time_exceeded (stderr: %q)", res.Status, res.Stderr)
+		}
+	})
+
+	t.Run("cpu kill reports kill facts", func(t *testing.T) {
+		wall9, cpu2 := 9, 2
+		res := run(t, models.RunRequest{
+			Language: "py3",
+			Source:   "while True:\n    pass",
+			Run: &models.StageConfig{Limits: &models.Limits{
+				WallTimeS: &wall9,
+				CpuTimeS:  &cpu2,
+			}},
+			Tests: []models.TestCase{{Stdin: "", ExpectedStdout: ""}},
+		})
+		if res.Status != "cpu_time_exceeded" {
+			t.Fatalf("status = %q, want cpu_time_exceeded (stderr: %q)", res.Status, res.Stderr)
+		}
+		// On the cgroup path the poller kills nsjail directly: (-1, 9).
+		// On the rlimit path the kernel SIGKILLs at the hard cpu limit and
+		// nsjail reads the death as exit 137: (137, 9).
+		if res.TerminationSignal != 9 {
+			t.Errorf("termination_signal = %d, want 9", res.TerminationSignal)
+		}
+		if res.ExitCode != -1 && res.ExitCode != 137 {
+			t.Errorf("exit_code = %d, want -1 or 137", res.ExitCode)
+		}
+	})
 }
 
 // TestComputeTestStatusOOMKilled: a cgroup OOM kill (detected via the leaf's

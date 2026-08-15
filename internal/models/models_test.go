@@ -73,7 +73,7 @@ func TestRunResponseJSONContract(t *testing.T) {
 	resp := RunResponse{
 		Status: "accepted",
 		Build:  BuildResult{Status: "ok", DurationMs: 12, CpuTimeMs: 300},
-		Tests:  []TestResult{{Status: "accepted", MemoryPeakKB: 2048, CpuTimeMs: 25}},
+		Tests:  []TestResult{{Status: "accepted", MemoryPeakKB: 2048, CpuTimeMs: 25, ExitCode: 139, TerminationSignal: 11}},
 	}
 	b, err := json.Marshal(resp)
 	if err != nil {
@@ -97,9 +97,31 @@ func TestRunResponseJSONContract(t *testing.T) {
 	if round.Tests[0].CpuTimeMs != 25 {
 		t.Errorf("test cpu_time_ms not round-tripped: %s", b)
 	}
+	if round.Tests[0].ExitCode != 139 || round.Tests[0].TerminationSignal != 11 {
+		t.Errorf("exit facts not round-tripped: %s", b)
+	}
 	// cpu_time_ms is always present (it is a result fact, not an optional limit).
 	if !strings.Contains(string(b), `"cpu_time_ms"`) {
 		t.Errorf("response must contain cpu_time_ms fields: %s", b)
+	}
+	if !strings.Contains(string(b), `"exit_code"`) || !strings.Contains(string(b), `"termination_signal"`) {
+		t.Errorf("response must contain exit_code and termination_signal fields: %s", b)
+	}
+}
+
+// TestExitFactsAlwaysPresent locks the zero-value contract: exit facts are
+// result facts, not optional limits, so a zero TestResult must still carry
+// both fields in the marshaled JSON (no omitempty).
+func TestExitFactsAlwaysPresent(t *testing.T) {
+	b, err := json.Marshal(TestResult{})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if !strings.Contains(string(b), `"exit_code":0`) {
+		t.Errorf("zero TestResult must carry exit_code:0, got %s", b)
+	}
+	if !strings.Contains(string(b), `"termination_signal":0`) {
+		t.Errorf("zero TestResult must carry termination_signal:0, got %s", b)
 	}
 }
 

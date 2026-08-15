@@ -246,8 +246,8 @@ func isInfraError(err error) bool {
 // rlimit flags are ALWAYS kept as the fallback enforcement path. Docker
 // Desktop does not expose a writable cgroup hierarchy, so it always runs on
 // the rlimit path. The cpu limit follows the same split: the cgroup path
-// polls and kills on cpu usage, the rlimit path gets SIGXCPU from the kernel
-// at --rlimit_cpu seconds.
+// polls and kills on cpu usage, the rlimit path gets a kernel SIGKILL at
+// --rlimit_cpu seconds (nsjail sets the soft and hard limits equal).
 // --max_cpus caps CPU usage; tune via GOBOXD_MAX_CPUS env var.
 func nsjailArgs(appDir string, wallTime, cpuLimit, memKB, procs, uid int, jailCg *cgroupv2.Jail) ([]string, error) {
 	// nsjail's --rlimit_as and --rlimit_fsize take MEGABYTES, not bytes
@@ -733,14 +733,41 @@ func runSingleTest(ctx context.Context, tc models.TestCase, lc config.LanguageCo
 		killed:  cpuKilled,
 	})
 
+	exitCode, termSig := exitFacts(cmd.ProcessState)
 	return models.TestResult{
-		Status:       status,
-		Stdout:       stdoutRaw,
-		Stderr:       stderrRaw,
-		DurationMs:   duration,
-		CpuTimeMs:    int(cpuUs / 1000),
-		MemoryPeakKB: memPeak,
+		Status:            status,
+		Stdout:            stdoutRaw,
+		Stderr:            stderrRaw,
+		DurationMs:        duration,
+		CpuTimeMs:         int(cpuUs / 1000),
+		MemoryPeakKB:      memPeak,
+		ExitCode:          exitCode,
+		TerminationSignal: termSig,
 	}
+}
+
+// exitFacts derives the exit facts for a finished process from its
+// ProcessState. Semantics:
+//   - nil state: no process ever started -> (0, 0)
+//   - signaled (any signal death of nsjail, e.g. a goboxd kill or a host
+//     OOM kill): (-1, signal)
+//   - nsjail signal propagation (128+signal, signals 1..64): (code, code-128)
+//   - anything else: a plain user exit (code, 0)
+//
+// Note the accepted ambiguity: a user program that exits 137 is
+// indistinguishable from a SIGKILL (both read (137, 9)).
+func exitFacts(ps *os.ProcessState) (exitCode, sig int) {
+	if ps == nil {
+		return 0, 0
+	}
+	if status, ok := ps.Sys().(syscall.WaitStatus); ok && status.Signaled() {
+		return -1, int(status.Signal())
+	}
+	code := ps.ExitCode()
+	if code >= 129 && code <= 192 {
+		return code, code - 128
+	}
+	return code, 0
 }
 
 // signalKillReason checks if the process was killed by a signal and determines why.
@@ -810,8 +837,8 @@ func computeTestStatus(ctx context.Context, err error, stdout, expected string, 
 		return "memory_exceeded"
 	}
 	// cpu limit: the poller killed the process when its cgroup usage hit the
-	// limit, or the kernel sent SIGXCPU from RLIMIT_CPU (nsjail reads the
-	// child's signal death as exit 152).
+	// limit, or the kernel SIGKILLed it at the RLIMIT_CPU limit (nsjail reads
+	// the child's signal death as exit 137).
 	if cpu.killed || (err != nil && signalKillReason(ps) == "cpu_time_exceeded") {
 		return "cpu_time_exceeded"
 	}

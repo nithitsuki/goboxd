@@ -211,8 +211,26 @@
           "stderr": { "type": "string" },
           "duration_ms": { "type": "integer" },
           "cpu_time_ms": { "type": "integer" },
-          "memory_peak_kb": { "type": "integer" }
-        }
+          "memory_peak_kb": { "type": "integer" },
+          "exit_code": {
+            "type": "integer",
+            "description": "Exit code of the sandbox process. -1 when the server killed the jail. 128 plus the signal number when a signal killed the program. 0 for a clean exit 0 and for no process. The status field distinguishes the two cases."
+          },
+          "termination_signal": {
+            "type": "integer",
+            "description": "Signal number that killed the program. 0 for a normal exit and for no process. The status field distinguishes the two cases."
+          }
+        },
+        "required": [
+          "status",
+          "stdout",
+          "stderr",
+          "duration_ms",
+          "cpu_time_ms",
+          "memory_peak_kb",
+          "exit_code",
+          "termination_signal"
+        ]
       },
       "RunResponse": {
         "type": "object",

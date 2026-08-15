@@ -45,13 +45,18 @@ type BuildResult struct {
 }
 
 // TestResult represents the outcome of a single test.
+// ExitCode and TerminationSignal are always present (no omitempty):
+// (0, 0) reads for a clean user exit 0 and for no process. The Status
+// field distinguishes the two cases.
 type TestResult struct {
-	Status       string `json:"status"`
-	Stdout       string `json:"stdout"`
-	Stderr       string `json:"stderr"`
-	DurationMs   int    `json:"duration_ms"`
-	CpuTimeMs    int    `json:"cpu_time_ms"`
-	MemoryPeakKB int    `json:"memory_peak_kb"`
+	Status            string `json:"status"`
+	Stdout            string `json:"stdout"`
+	Stderr            string `json:"stderr"`
+	DurationMs        int    `json:"duration_ms"`
+	CpuTimeMs         int    `json:"cpu_time_ms"`
+	MemoryPeakKB      int    `json:"memory_peak_kb"`
+	ExitCode          int    `json:"exit_code"`
+	TerminationSignal int    `json:"termination_signal"`
 }
 
 // RunResponse is the outgoing payload for POST /run (HTTP 200)

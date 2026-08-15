@@ -115,11 +115,31 @@ stop with `time_exceeded` unless the client lowers the cpu limit.
       "stderr": "",
       "duration_ms": 38,
       "cpu_time_ms": 25,
-      "memory_peak_kb": 8192
+      "memory_peak_kb": 8192,
+      "exit_code": 0,
+      "termination_signal": 0
     }
   ]
 }
 ```
+
+### Exit facts
+
+Each test result carries `exit_code` and `termination_signal`. The server
+derives them from the sandbox process state. Both fields are always
+present. Exit_code 0 with termination_signal 0 occurs for a clean user
+exit 0 and for no process. The `status` field shows which case applies.
+
+| Case | exit_code | termination_signal |
+|---|---|---|
+| Normal user exit | The exit code the program returned (0 to 255) | 0 |
+| Program killed by a signal | 128 plus the signal number | The signal number |
+| Server kills the jail | -1 | The signal number |
+| No process started | 0 | 0 |
+
+A wall-time kill reads exit_code -1 or 137. Both values mean SIGKILL. A
+cpu kill on the rlimit path reads (137, 9). The kernel sends SIGKILL at
+the cpu limit. See [security.md](security.md) for the exit-137 ambiguity.
 
 ### Build result statuses
 

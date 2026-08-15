@@ -148,8 +148,12 @@ fails. The server then uses the rlimit path. Limits are never unenforced.
 
 ## Accepted limitations
 
-goboxd accepts two boundary limitations.
+goboxd accepts three boundary limitations.
 
+- Exit code 137. A user program that exits with code 137 gets
+  `time_exceeded`. When the cpu time is at the limit, it gets
+  `cpu_time_exceeded`. The result reads exit_code 137 and
+  termination_signal 9. A SIGKILL death reads the same exit facts.
 - Exit code 152. A user program that exits with code 152 gets
   `cpu_time_exceeded`. goboxd cannot tell user exit 152 from the SIGXCPU
   shape that nsjail reports. The two shapes use the same wait status.
