@@ -17,8 +17,8 @@ func TestRunRequestJSONContract(t *testing.T) {
 		"source": "print(1)",
 		"source_filename": "main.py",
 		"artifact_filename": "main",
-		"build": {"limits": {"wall_time_s": 3, "memory_kb": 65536}, "flags": ["-O2"]},
-		"run": {"limits": {"max_processes": 8}},
+		"build": {"limits": {"wall_time_s": 3, "memory_kb": 65536, "cpu_time_s": 20}, "flags": ["-O2"]},
+		"run": {"limits": {"max_processes": 8, "cpu_time_s": 2}},
 		"tests": [{"stdin": "x", "expected_stdout": "y"}]
 	}`
 	var req RunRequest
@@ -35,12 +35,18 @@ func TestRunRequestJSONContract(t *testing.T) {
 		*req.Build.Limits.WallTimeS != 3 || req.Build.Limits.MemoryKB == nil {
 		t.Errorf("build limits pointer semantics wrong: %+v", req.Build)
 	}
+	if req.Build.Limits.CpuTimeS == nil || *req.Build.Limits.CpuTimeS != 20 {
+		t.Errorf("build cpu_time_s pointer semantics wrong: %+v", req.Build.Limits)
+	}
 	if len(req.Build.Flags) != 1 || req.Build.Flags[0] != "-O2" {
 		t.Errorf("build flags wrong")
 	}
 	if req.Run == nil || req.Run.Limits == nil || req.Run.Limits.MaxProcesses == nil ||
 		*req.Run.Limits.MaxProcesses != 8 {
 		t.Errorf("run limits pointer semantics wrong: %+v", req.Run)
+	}
+	if req.Run.Limits.CpuTimeS == nil || *req.Run.Limits.CpuTimeS != 2 {
+		t.Errorf("run cpu_time_s pointer semantics wrong: %+v", req.Run.Limits)
 	}
 	if req.Run.Limits.WallTimeS != nil || req.Run.Limits.MemoryKB != nil {
 		t.Errorf("absent limits must stay nil (nil means 'use default')")
@@ -66,8 +72,8 @@ func TestLimitsOmitEmpty(t *testing.T) {
 func TestRunResponseJSONContract(t *testing.T) {
 	resp := RunResponse{
 		Status: "accepted",
-		Build:  BuildResult{Status: "ok", DurationMs: 12},
-		Tests:  []TestResult{{Status: "accepted", MemoryPeakKB: 2048}},
+		Build:  BuildResult{Status: "ok", DurationMs: 12, CpuTimeMs: 300},
+		Tests:  []TestResult{{Status: "accepted", MemoryPeakKB: 2048, CpuTimeMs: 25}},
 	}
 	b, err := json.Marshal(resp)
 	if err != nil {
@@ -84,6 +90,16 @@ func TestRunResponseJSONContract(t *testing.T) {
 	if round.Status != "accepted" || round.Build.Status != "ok" ||
 		len(round.Tests) != 1 || round.Tests[0].MemoryPeakKB != 2048 {
 		t.Errorf("response contract broken: %s", b)
+	}
+	if round.Build.CpuTimeMs != 300 {
+		t.Errorf("build cpu_time_ms not round-tripped: %s", b)
+	}
+	if round.Tests[0].CpuTimeMs != 25 {
+		t.Errorf("test cpu_time_ms not round-tripped: %s", b)
+	}
+	// cpu_time_ms is always present (it is a result fact, not an optional limit).
+	if !strings.Contains(string(b), `"cpu_time_ms"`) {
+		t.Errorf("response must contain cpu_time_ms fields: %s", b)
 	}
 }
 

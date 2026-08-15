@@ -111,6 +111,20 @@
                 "schema": { "$ref": "#/components/schemas/APIError" }
               }
             }
+          },
+          "503": {
+            "description": "At capacity (code queue_full)",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before a retry",
+                "schema": { "type": "string" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/APIError" }
+              }
+            }
           }
         }
       }
@@ -142,7 +156,8 @@
         "properties": {
           "wall_time_s": { "type": "integer" },
           "memory_kb": { "type": "integer" },
-          "max_processes": { "type": "integer" }
+          "max_processes": { "type": "integer" },
+          "cpu_time_s": { "type": "integer" }
         }
       },
       "StageConfig": {
@@ -184,7 +199,8 @@
           "status": { "type": "string" },
           "stdout": { "type": "string" },
           "stderr": { "type": "string" },
-          "duration_ms": { "type": "integer" }
+          "duration_ms": { "type": "integer" },
+          "cpu_time_ms": { "type": "integer" }
         }
       },
       "TestResult": {
@@ -194,6 +210,7 @@
           "stdout": { "type": "string" },
           "stderr": { "type": "string" },
           "duration_ms": { "type": "integer" },
+          "cpu_time_ms": { "type": "integer" },
           "memory_peak_kb": { "type": "integer" }
         }
       },

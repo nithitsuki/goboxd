@@ -8,8 +8,8 @@
 //
 // Layout (probe creates the delegation point):
 //
-//	<root>/goboxd/                 -- probe creates this, enables memory+pids
-//	<root>/goboxd/<jailID>/        -- per-jail dir (NewJail), memory+pids enabled
+//	<root>/goboxd/                 -- probe creates this, enables memory+pids (+cpu when delegated)
+//	<root>/goboxd/<jailID>/        -- per-jail dir (NewJail), same controllers enabled
 //	<root>/goboxd/<jailID>/NSJAIL.<pid> -- nsjail's leaf for each exec
 //
 // nsjail only moves the child into its NSJAIL.<pid> leaf when it receives its
@@ -40,6 +40,11 @@ const cgroup2Magic = 0x63677270
 // baseName is the delegation directory created under the cgroup2 root.
 const baseName = "goboxd"
 
+// probeMinCPUUsageUS is the cpu.stat usage_usec threshold for the probe's
+// cpu check. The probe hog spins ~2s of CPU, so a charging controller shows
+// well above 1s; an inert one stays at 0.
+const probeMinCPUUsageUS = 1_000_000
+
 var (
 	defaultOnce sync.Once
 	defaultMgr  *Manager
@@ -63,10 +68,11 @@ func Default() *Manager {
 // Manager probes and owns a cgroup2 hierarchy. A manager over an unusable
 // root is inactive but never errors; callers fall back to rlimits.
 type Manager struct {
-	mu     sync.Mutex
-	root   string // cgroup2 mount root, e.g. /sys/fs/cgroup
-	base   string // <root>/goboxd
-	active bool
+	mu        sync.Mutex
+	root      string // cgroup2 mount root, e.g. /sys/fs/cgroup
+	base      string // <root>/goboxd
+	active    bool
+	cpuActive bool // cpu controller delegated to the base dir (best-effort)
 }
 
 // NewManager probes root and returns a manager. GOBOXD_CGROUPV2=off forces an
@@ -105,9 +111,18 @@ func (m *Manager) probe() error {
 	}
 	// Enable the controllers for children of the delegation point. This is
 	// what makes per-jail dirs usable; requires the controllers to be active
-	// in root's subtree (the host's cgroup delegation).
-	if err := os.WriteFile(filepath.Join(m.base, "cgroup.subtree_control"), []byte("+memory +pids"), 0644); err != nil {
-		return fmt.Errorf("enabling memory+pids in %s: %w", m.base, err)
+	// in root's subtree (the host's cgroup delegation). The cpu controller
+	// is best-effort: when the host does not delegate it (common inside
+	// containers), the probe retries with memory+pids alone and cpu limits
+	// degrade to the rlimit path. The write is atomic, so a failed +cpu
+	// enables nothing.
+	if err := os.WriteFile(filepath.Join(m.base, "cgroup.subtree_control"), []byte("+memory +pids +cpu"), 0644); err != nil {
+		log.Printf("[cgroupv2] enabling memory+pids+cpu failed, retrying without cpu: %v", err)
+		if err := os.WriteFile(filepath.Join(m.base, "cgroup.subtree_control"), []byte("+memory +pids"), 0644); err != nil {
+			return fmt.Errorf("enabling memory+pids in %s: %w", m.base, err)
+		}
+	} else {
+		m.cpuActive = true
 	}
 	// Writability is NOT enforcement: Docker containers commonly expose a
 	// cgroupfs where every write succeeds but the memory controller is never
@@ -119,11 +134,20 @@ func (m *Manager) probe() error {
 	return nil
 }
 
-// verifyEnforcement proves the memory controller actually charges memory by
-// running a ~16MB hog in a probe cgroup and checking memory.peak moved. A
-// working controller shows peak >= 8MB; an inert one shows 0.
+// verifyEnforcement proves the controllers actually charge before the
+// manager trusts the hierarchy. Memory is a hard gate: a ~16MB hog must move
+// the probe leaf's memory.peak to >= 8MB. CPU is best-effort: the same hog
+// spins ~2s of CPU and the leaf's cpu.stat usage_usec must pass the
+// threshold; an inert cpu controller (writes succeed, nothing charged) only
+// disables cpuActive — memory+pids stay enforced and cpu limits degrade to
+// the always-present nsjail rlimit.
 func (m *Manager) verifyEnforcement() error {
 	probeDir := filepath.Join(m.base, "probe")
+	// A crashed earlier run can leave a stale probe dir behind: clear it
+	// (best effort) so the probe starts clean. Removing an active probe
+	// fails with EBUSY, which is the correct refusal.
+	_ = removeJailDir(filepath.Join(probeDir, "leaf"))
+	_ = removeJailDir(probeDir)
 	if err := os.Mkdir(probeDir, 0700); err != nil {
 		return fmt.Errorf("creating probe dir: %w", err)
 	}
@@ -131,7 +155,15 @@ func (m *Manager) verifyEnforcement() error {
 		_ = removeJailDir(filepath.Join(probeDir, "leaf"))
 		_ = removeJailDir(probeDir)
 	}()
-	if err := os.WriteFile(filepath.Join(probeDir, "cgroup.subtree_control"), []byte("+memory +pids"), 0644); err != nil {
+	// The leaf enables memory+pids, plus cpu when the base delegation has it:
+	// a leaf only charges cpu when +cpu is in its own subtree_control. If the
+	// cpu controller is inert, the write succeeds but cpu.stat never moves,
+	// which the cpu check below turns into the correct verdict.
+	subtree := "+memory +pids"
+	if m.cpuActive {
+		subtree += " +cpu"
+	}
+	if err := os.WriteFile(filepath.Join(probeDir, "cgroup.subtree_control"), []byte(subtree), 0644); err != nil {
 		return fmt.Errorf("enabling probe controllers: %w", err)
 	}
 	leaf := filepath.Join(probeDir, "leaf")
@@ -187,16 +219,34 @@ func (m *Manager) verifyEnforcement() error {
 	if peak < 8*1024*1024 {
 		return fmt.Errorf("memory controller inert: hog touched 16MB but peak is %d bytes", peak)
 	}
+	m.verifyCPU(leaf)
 	return nil
 }
 
+// verifyCPU folds the probe leaf's cpu.stat into the manager's cpu verdict.
+// A failed cpu check does NOT fail the probe: memory+pids stay active and
+// the cpu limit degrades to the rlimit path.
+func (m *Manager) verifyCPU(leaf string) {
+	if !m.cpuActive {
+		return
+	}
+	us, err := (&Jail{manager: m, path: leaf}).CPUUsageUS()
+	if err != nil || us < probeMinCPUUsageUS {
+		log.Printf("[cgroupv2] cpu controller inert (usage_usec=%d, err=%v); cpu limits degrade to the rlimit path", us, err)
+		m.cpuActive = false
+		return
+	}
+	log.Printf("[cgroupv2] cpu controller verified (usage_usec=%d)", us)
+}
+
 // ProbeHog waits for a byte on stdin, allocates and touches ~16MB of memory,
-// holds it for two seconds, then exits. main() re-execs this binary with
-// GOBOXD_CGROUP_PROBE_HOG=1 so the enforcement probe can move the child into a
-// probe cgroup BEFORE releasing it: memory is charged to the cgroup the
-// process is in at allocation time, so the stdin handshake is what makes the
-// probe deterministic (a hog that allocates before the cgroup.procs write
-// would show a false "inert" verdict).
+// then spins ~2s of CPU while holding it, then exits. main() re-execs this
+// binary with GOBOXD_CGROUP_PROBE_HOG=1 so the enforcement probe can move the
+// child into a probe cgroup BEFORE releasing it: memory is charged to the
+// cgroup the process is in at allocation time, so the stdin handshake is what
+// makes the probe deterministic (a hog that allocates before the cgroup.procs
+// write would show a false "inert" verdict). The CPU spin is what the probe's
+// cpu check observes in the leaf's cpu.stat usage_usec.
 func ProbeHog() {
 	var one [1]byte
 	if _, err := os.Stdin.Read(one[:]); err != nil {
@@ -206,7 +256,10 @@ func ProbeHog() {
 	for i := 0; i < len(buf); i += 4096 {
 		buf[i] = 1
 	}
-	time.Sleep(2 * time.Second)
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		_ = buf[0]
+	}
 }
 
 // Active reports whether cgroup v2 limits and peak reporting are in use.
@@ -214,6 +267,15 @@ func (m *Manager) Active() bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.active
+}
+
+// CPUActive reports whether the cpu controller is enabled for this hierarchy.
+// When false (cpu not delegated), cpu limits run on the nsjail rlimit path
+// and cpu usage reporting falls back to getrusage.
+func (m *Manager) CPUActive() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.active && m.cpuActive
 }
 
 // Root returns the cgroup2 mount root (for /info and tests).
@@ -226,12 +288,26 @@ func (m *Manager) NewJail(id string) (*Jail, error) {
 		return nil, fmt.Errorf("creating jail cgroup %s: %w", p, err)
 	}
 	// Enable memory+pids for the jail's children (nsjail's NSJAIL.<pid>
-	// leaves). Requires the controllers active in the jail dir, which the
-	// probe enabled in base's subtree_control.
-	if err := os.WriteFile(filepath.Join(p, "cgroup.subtree_control"), []byte("+memory +pids"), 0644); err != nil {
+	// leaves), plus cpu when the base delegation has it (usage polling and
+	// the cpu kill). Requires the controllers active in the jail dir, which
+	// the probe enabled in base's subtree_control. Like the probe, the cpu
+	// part is best-effort: a jail without cpu still enforces it via the
+	// always-present nsjail rlimit.
+	subtree := "+memory +pids"
+	if m.CPUActive() {
+		subtree += " +cpu"
+	}
+	if err := os.WriteFile(filepath.Join(p, "cgroup.subtree_control"), []byte(subtree), 0644); err != nil {
+		if m.CPUActive() {
+			log.Printf("[cgroupv2] enabling +cpu in jail %s failed, cpu degrades to rlimit: %v", id, err)
+			if err2 := os.WriteFile(filepath.Join(p, "cgroup.subtree_control"), []byte("+memory +pids"), 0644); err2 != nil {
+				return nil, fmt.Errorf("enabling controllers in %s: %w", p, err2)
+			}
+			return &Jail{manager: m, path: p}, nil
+		}
 		return nil, fmt.Errorf("enabling controllers in %s: %w", p, err)
 	}
-	return &Jail{manager: m, path: p}, nil
+	return &Jail{manager: m, path: p, cpuActive: m.CPUActive()}, nil
 }
 
 // Sweep removes leftover jail cgroup dirs (crashed runs). Called at probe
@@ -255,19 +331,37 @@ func (m *Manager) Sweep() {
 
 // Jail is one request's cgroup directory.
 type Jail struct {
-	manager *Manager
-	path    string
+	manager   *Manager
+	path      string
+	cpuActive bool // cpu controller enabled for this jail's children
 }
 
 // Path returns the jail cgroup directory (passed as nsjail's --cgroupv2_mount).
 func (j *Jail) Path() string { return j.path }
 
-// removeJailDir removes a jail cgroup dir. On a real cgroup2 filesystem the
-// kernel removes pseudo-files (cgroup.subtree_control, memory.peak) on rmdir;
-// on a regular filesystem (tests) we remove them ourselves first.
+// CPUActive reports whether the cpu controller is enabled for this jail. The
+// runner picks the enforcement authority from this: poll-and-kill when true,
+// nsjail's RLIMIT_CPU when false. Exactly one of the two is armed per exec.
+func (j *Jail) CPUActive() bool { return j.cpuActive }
+
+// removeJailDir removes a jail cgroup dir and any leftover leaf dirs. On a
+// real cgroup2 filesystem the kernel removes pseudo-files
+// (cgroup.subtree_control, memory.peak) on rmdir; on a regular filesystem
+// (tests) we remove them ourselves first. A SIGKILLed nsjail leaves its
+// NSJAIL.<pid> leaf behind (empty of procs), so children are removed
+// recursively before the dir itself.
 func removeJailDir(path string) error {
+	if entries, err := os.ReadDir(path); err == nil {
+		for _, e := range entries {
+			if e.IsDir() {
+				_ = removeJailDir(filepath.Join(path, e.Name()))
+			}
+		}
+	}
 	_ = os.Remove(filepath.Join(path, "cgroup.subtree_control"))
 	_ = os.Remove(filepath.Join(path, "memory.peak"))
+	_ = os.Remove(filepath.Join(path, "cpu.stat"))
+	_ = os.Remove(filepath.Join(path, "memory.events"))
 	return os.Remove(path)
 }
 
@@ -312,6 +406,39 @@ func (j *Jail) ResetPeak() error {
 	return nil
 }
 
+// ResetCPU attempts to reset the jail's cpu.stat usage counters. Kernels
+// before the cpu.stat reset support reject the write (EINVAL), so the error
+// is returned rather than swallowed: callers fall back to delta measurement
+// against a pre-exec baseline, which is exact on every kernel.
+func (j *Jail) ResetCPU() error {
+	if err := os.WriteFile(filepath.Join(j.path, "cpu.stat"), []byte("0"), 0644); err != nil {
+		return fmt.Errorf("resetting cpu.stat: %w", err)
+	}
+	return nil
+}
+
+// CPUUsageUS reads the jail's cpu.stat usage_usec (microseconds). The cpu
+// controller charges every thread of every descendant, so multithreaded
+// programs count all their cores' time. A missing cpu.stat (cpu controller
+// not enabled for this jail) is an error.
+func (j *Jail) CPUUsageUS() (int64, error) {
+	b, err := os.ReadFile(filepath.Join(j.path, "cpu.stat"))
+	if err != nil {
+		return 0, fmt.Errorf("reading cpu.stat: %w", err)
+	}
+	for _, line := range strings.Split(string(b), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) == 2 && fields[0] == "usage_usec" {
+			n, err := strconv.ParseInt(fields[1], 10, 64)
+			if err != nil {
+				return 0, fmt.Errorf("parsing usage_usec: %w", err)
+			}
+			return n, nil
+		}
+	}
+	return 0, fmt.Errorf("usage_usec not found in %s/cpu.stat", j.path)
+}
+
 // OOMKills returns the total oom_kill count across nsjail's leaf cgroups
 // under this jail dir. nsjail names leaves NSJAIL.<clone child pid>, which
 // differs from the parent process pid Go sees, so we scan the directory
@@ -342,4 +469,18 @@ func (j *Jail) OOMKills() (uint64, error) {
 		}
 	}
 	return total, nil
+}
+
+// OOMKillsSince reports whether the total oom_kill count exceeds baseline.
+// The count is cumulative across the jail's lifetime: leaves left behind by
+// earlier execs keep their memory.events, so callers baseline before their
+// own exec and classify on "increased since this exec", never "any kill ever"
+// (a cpu-killed exec's leftover leaf would otherwise bleed into later tests
+// of the same request).
+func (j *Jail) OOMKillsSince(baseline uint64) (bool, error) {
+	n, err := j.OOMKills()
+	if err != nil {
+		return false, err
+	}
+	return n > baseline, nil
 }

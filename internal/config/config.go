@@ -20,6 +20,7 @@ type Limits struct {
 	WallTimeS    int `yaml:"wall_time_s"`
 	MemoryKB     int `yaml:"memory_kb"`
 	MaxProcesses int `yaml:"max_processes"`
+	CpuTimeS     int `yaml:"cpu_time_s"`
 }
 
 // StageCmd describes a build or run command with template variables.

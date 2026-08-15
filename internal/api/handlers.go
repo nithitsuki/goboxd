@@ -309,6 +309,7 @@ func HandleInfo(w http.ResponseWriter, r *http.Request) {
 				"wall_time_s":   lc.DefaultLimits.WallTimeS,
 				"memory_kb":     lc.DefaultLimits.MemoryKB,
 				"max_processes": lc.DefaultLimits.MaxProcesses,
+				"cpu_time_s":    lc.DefaultLimits.CpuTimeS,
 			},
 		})
 	}
@@ -573,6 +574,22 @@ func validateStageLimits(w http.ResponseWriter, stage *models.StageConfig, max c
 	}
 	if l.MaxProcesses != nil && !check("max_processes", *l.MaxProcesses, max.MaxProcesses) {
 		return false
+	}
+	if l.CpuTimeS != nil {
+		if *l.CpuTimeS <= 0 {
+			writeError(w, "invalid_limit", fmt.Sprintf("%s.limits.cpu_time_s must be positive", stageName))
+			return false
+		}
+		// A zero YAML max means the registry declares no cpu cap for this
+		// language: the request may not invent one.
+		if max.CpuTimeS == 0 {
+			writeError(w, "invalid_limit", fmt.Sprintf("%s.limits.cpu_time_s is not allowed: this language has no cpu limit configured", stageName))
+			return false
+		}
+		if *l.CpuTimeS > max.CpuTimeS {
+			writeError(w, "limit_exceeded", fmt.Sprintf("%s.limits.cpu_time_s of %d exceeds maximum of %d", stageName, *l.CpuTimeS, max.CpuTimeS))
+			return false
+		}
 	}
 	return true
 }

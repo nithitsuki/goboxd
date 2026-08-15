@@ -139,6 +139,57 @@ func TestOOMKillsScansAllLeaves(t *testing.T) {
 	if n, err := gone.OOMKills(); err != nil || n != 0 {
 		t.Errorf("missing jail dir: got n=%d err=%v, want 0,nil", n, err)
 	}
+
+	// OOMKillsSince classifies per-exec: a baseline taken after an earlier
+	// kill must not count that kill against a later exec.
+	if since, err := j.OOMKillsSince(0); err != nil || !since {
+		t.Errorf("OOMKillsSince(0) with 1 kill: got %v,%v, want true,nil", since, err)
+	}
+	if since, err := j.OOMKillsSince(1); err != nil || since {
+		t.Errorf("OOMKillsSince(1) with 1 kill: got %v,%v, want false,nil (baseline must absorb old kills)", since, err)
+	}
+}
+
+// TestVerifyCPUInertController locks the cpu verdict seam: a probe leaf whose
+// cpu.stat stays at 0 (or is missing) must flip cpuActive off without failing
+// the probe, so cpu limits degrade to the rlimit path on inert-cpu hosts.
+func TestVerifyCPUInertController(t *testing.T) {
+	base := filepath.Join(t.TempDir(), "goboxd")
+	if err := os.MkdirAll(base, 0700); err != nil {
+		t.Fatalf("mkdir base: %v", err)
+	}
+	leaf := filepath.Join(base, "leaf")
+	if err := os.Mkdir(leaf, 0700); err != nil {
+		t.Fatalf("mkdir leaf: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(leaf, "cpu.stat"), []byte("usage_usec 0\n"), 0644); err != nil {
+		t.Fatalf("writing fake cpu.stat: %v", err)
+	}
+
+	// Inert: the hog would have spun ~2s, but nothing was charged.
+	m := &Manager{root: t.TempDir(), base: base, active: true, cpuActive: true}
+	m.verifyCPU(leaf)
+	if m.cpuActive {
+		t.Error("verifyCPU must set cpuActive=false when usage_usec stays below the threshold")
+	}
+
+	// Charging: usage above the threshold keeps cpu active.
+	m2 := &Manager{root: t.TempDir(), base: base, active: true, cpuActive: true}
+	if err := os.WriteFile(filepath.Join(leaf, "cpu.stat"), []byte("usage_usec 2500000\n"), 0644); err != nil {
+		t.Fatalf("rewriting fake cpu.stat: %v", err)
+	}
+	m2.verifyCPU(leaf)
+	if !m2.cpuActive {
+		t.Error("verifyCPU must keep cpuActive=true when usage_usec passes the threshold")
+	}
+
+	// Missing cpu.stat (no cpu delegation at all) is the inert verdict too.
+	m3 := &Manager{root: t.TempDir(), base: base, active: true, cpuActive: true}
+	_ = os.Remove(filepath.Join(leaf, "cpu.stat"))
+	m3.verifyCPU(leaf)
+	if m3.cpuActive {
+		t.Error("verifyCPU must set cpuActive=false when cpu.stat is missing")
+	}
 }
 
 func TestVerifyEnforcementDetectsInertController(t *testing.T) {
@@ -179,5 +230,85 @@ func TestEnvOffForcesInactiveEvenWithActiveManager(t *testing.T) {
 	m := NewManager("/sys/fs/cgroup")
 	if m.Active() {
 		t.Error("GOBOXD_CGROUPV2=off must disable cgroup v2")
+	}
+}
+
+// TestNewJailCPUController: a jail on a cpu-active manager enables +cpu in
+// its subtree_control (usage polling and the cpu kill); a manager without
+// the cpu delegation enables memory+pids only and the jail reports it.
+func TestNewJailCPUController(t *testing.T) {
+	m := fakeActiveManager(t)
+	m.cpuActive = true
+	j, err := m.NewJail("cpu-jail")
+	if err != nil {
+		t.Fatalf("NewJail: %v", err)
+	}
+	if !j.CPUActive() {
+		t.Error("jail over a cpu-active manager must report CPUActive")
+	}
+	b, err := os.ReadFile(filepath.Join(j.Path(), "cgroup.subtree_control"))
+	if err != nil {
+		t.Fatalf("reading subtree_control: %v", err)
+	}
+	if !strings.Contains(string(b), "+cpu") {
+		t.Errorf("subtree_control = %q, want +cpu enabled", string(b))
+	}
+
+	m2 := fakeActiveManager(t)
+	j2, err := m2.NewJail("nocpu-jail")
+	if err != nil {
+		t.Fatalf("NewJail (no cpu): %v", err)
+	}
+	if j2.CPUActive() {
+		t.Error("jail over a manager without cpu delegation must not report CPUActive")
+	}
+	b2, err := os.ReadFile(filepath.Join(j2.Path(), "cgroup.subtree_control"))
+	if err != nil {
+		t.Fatalf("reading subtree_control: %v", err)
+	}
+	if strings.Contains(string(b2), "+cpu") {
+		t.Errorf("subtree_control = %q, want no +cpu", string(b2))
+	}
+}
+
+// TestCPUUsageReadsUsageUsec: CPUUsageUS parses usage_usec from cpu.stat.
+func TestCPUUsageReadsUsageUsec(t *testing.T) {
+	m := fakeActiveManager(t)
+	j, err := m.NewJail("cpu-stat-jail")
+	if err != nil {
+		t.Fatalf("NewJail: %v", err)
+	}
+	if _, err := j.CPUUsageUS(); err == nil {
+		t.Error("missing cpu.stat must be an error")
+	}
+	stat := "usage_usec 12345678\nuser_usec 100\nsystem_usec 200\n"
+	if err := os.WriteFile(filepath.Join(j.Path(), "cpu.stat"), []byte(stat), 0644); err != nil {
+		t.Fatalf("writing fake cpu.stat: %v", err)
+	}
+	us, err := j.CPUUsageUS()
+	if err != nil {
+		t.Fatalf("CPUUsageUS: %v", err)
+	}
+	if us != 12345678 {
+		t.Errorf("CPUUsageUS = %d, want 12345678", us)
+	}
+}
+
+// TestResetCPUWrite: ResetCPU attempts the reset write (the kernel may
+// reject it: real hosts without cpu.stat reset support return EINVAL and the
+// caller falls back to delta measurement).
+func TestResetCPUWrite(t *testing.T) {
+	m := fakeActiveManager(t)
+	j, err := m.NewJail("cpu-reset-jail")
+	if err != nil {
+		t.Fatalf("NewJail: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(j.Path(), "cpu.stat"), []byte("usage_usec 5\n"), 0644); err != nil {
+		t.Fatalf("writing fake cpu.stat: %v", err)
+	}
+	_ = j.ResetCPU() // regular fs accepts the write; real cgroupfs may EINVAL
+	b, _ := os.ReadFile(filepath.Join(j.Path(), "cpu.stat"))
+	if strings.TrimSpace(string(b)) != "0" {
+		t.Errorf("ResetCPU should zero the usage counter, file contains %q", string(b))
 	}
 }

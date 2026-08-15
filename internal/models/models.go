@@ -9,6 +9,7 @@ type Limits struct {
 	WallTimeS    *int `json:"wall_time_s,omitempty"`
 	MemoryKB     *int `json:"memory_kb,omitempty"`
 	MaxProcesses *int `json:"max_processes,omitempty"`
+	CpuTimeS     *int `json:"cpu_time_s,omitempty"`
 }
 
 // StageConfig represents the configuration for either the build or run stage.
@@ -40,6 +41,7 @@ type BuildResult struct {
 	Stdout     string `json:"stdout"`
 	Stderr     string `json:"stderr"`
 	DurationMs int    `json:"duration_ms"`
+	CpuTimeMs  int    `json:"cpu_time_ms"`
 }
 
 // TestResult represents the outcome of a single test.
@@ -48,6 +50,7 @@ type TestResult struct {
 	Stdout       string `json:"stdout"`
 	Stderr       string `json:"stderr"`
 	DurationMs   int    `json:"duration_ms"`
+	CpuTimeMs    int    `json:"cpu_time_ms"`
 	MemoryPeakKB int    `json:"memory_peak_kb"`
 }
 

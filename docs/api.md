@@ -30,11 +30,11 @@ returns HTTP 500 for infrastructure failures.
   "source_filename": "solution.py",
   "artifact_filename": "",
   "build": {
-    "limits": { "wall_time_s": 5, "memory_kb": 1048576, "max_processes": 100 },
+    "limits": { "wall_time_s": 5, "memory_kb": 1048576, "max_processes": 100, "cpu_time_s": 40 },
     "flags": ["-O2"]
   },
   "run": {
-    "limits": { "wall_time_s": 3, "memory_kb": 524288, "max_processes": 64 },
+    "limits": { "wall_time_s": 3, "memory_kb": 524288, "max_processes": 64, "cpu_time_s": 5 },
     "flags": []
   },
   "tests": [
@@ -62,6 +62,25 @@ returns HTTP 500 for infrastructure failures.
 | `stdin` | Input to pipe to the program's stdin. Max 64 KiB. |
 | `expected_stdout` | The expected stdout output. Max 64 KiB. An empty string means that the service accepts any output. |
 
+#### Limit fields
+
+| Field | Description |
+|---|---|
+| `wall_time_s` | Wall-clock time limit in seconds |
+| `cpu_time_s` | CPU time limit in seconds. Counts every thread of the program. Must be positive and at most the configured per-language maximum. |
+| `memory_kb` | Memory limit in KiB |
+| `max_processes` | Maximum process count |
+
+A client may lower any limit but never raise it above the configured
+per-language maximum. The server rejects limits above the maximum with
+`limit_exceeded` and non-positive limits with `invalid_limit`. A client may
+not set `cpu_time_s` for a language with no cpu limit configured.
+
+A run that exceeds `cpu_time_s` stops with `cpu_time_exceeded`. The kill
+happens at the limit, usually well before `wall_time_s` fires. The default
+per-language `cpu_time_s` is above the wall limit, so plain busy loops still
+stop with `time_exceeded` unless the client lowers the cpu limit.
+
 ### Status vocabulary
 
 | Status | Description |
@@ -71,7 +90,8 @@ returns HTTP 500 for infrastructure failures.
 | `internal_error` | Server-side infrastructure failure (nsjail, filesystem, or similar) |
 | `runtime_error` | User code exited with non-zero status (crash, error) |
 | `time_exceeded` | Wall-clock time limit exceeded |
-| `memory_exceeded` | Memory limit exceeded (SIGSEGV/SIGABRT) |
+| `cpu_time_exceeded` | CPU time limit exceeded. The kill happened at `cpu_time_s`. |
+| `memory_exceeded` | The cgroup OOM kill event fired, or the process died from SIGSEGV or SIGABRT |
 | `wrong_output` | Program output did not match `expected_stdout` |
 | `output_whitespace_mismatch` | Output matches `expected_stdout` after trimming whitespace |
 | `not_executed` | The service skips the test because the build failed |
@@ -85,7 +105,8 @@ returns HTTP 500 for infrastructure failures.
     "status": "ok",
     "stdout": "",
     "stderr": "",
-    "duration_ms": 412
+    "duration_ms": 412,
+    "cpu_time_ms": 310
   },
   "tests": [
     {
@@ -93,6 +114,7 @@ returns HTTP 500 for infrastructure failures.
       "stdout": "hello",
       "stderr": "",
       "duration_ms": 38,
+      "cpu_time_ms": 25,
       "memory_peak_kb": 8192
     }
   ]
@@ -147,7 +169,8 @@ returns HTTP 503 with `Retry-After: 1` and code `queue_full`:
 ```
 
 The queue length is `GOBOXD_MAX_QUEUED`. It defaults to `GOBOXD_MAX_JOBS`. A
-value of `0` disables queueing, so over-capacity requests are rejected at once.
+value of `0` disables the queue. The server then rejects over-capacity
+requests at once.
 
 ---
 
@@ -212,7 +235,8 @@ HTTP 200.
       "default_run_limits": {
         "wall_time_s": 9,
         "memory_kb": 102400,
-        "max_processes": 100
+        "max_processes": 100,
+        "cpu_time_s": 11
       }
     }
   ],

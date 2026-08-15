@@ -7,6 +7,7 @@ languages:
       args: ["{{source}}"]
       limits:
         wall_time_s: 9
+        cpu_time_s: 11
         memory_kb: 1048576
         max_processes: 100
 
@@ -18,6 +19,7 @@ languages:
       args: ["-f", "{{source}}"]
       limits:
         wall_time_s: 5
+        cpu_time_s: 7
         memory_kb: 262144
         max_processes: 64
 
@@ -30,6 +32,7 @@ languages:
       args: ["-x", "c", "{{flags}}", "-o", "{{artifact}}", "{{source}}"]
       limits:
         wall_time_s: 5
+        cpu_time_s: 40
         memory_kb: 1048576
         max_processes: 100
       flag_allowlist: ["-O0", "-O1", "-O2", "-O3", "-Wall", "-Wextra", "-std=*"]
@@ -37,6 +40,7 @@ languages:
       cmd: ./{{artifact}}
       limits:
         wall_time_s: 5
+        cpu_time_s: 20
         memory_kb: 524288
         max_processes: 64
 
@@ -49,6 +53,7 @@ languages:
       args: ["-x", "c++", "{{flags}}", "-o", "{{artifact}}", "{{source}}"]
       limits:
         wall_time_s: 5
+        cpu_time_s: 40
         memory_kb: 1048576
         max_processes: 100
       flag_allowlist: ["-O0", "-O1", "-O2", "-O3", "-Wall", "-Wextra", "-std=*"]
@@ -56,6 +61,7 @@ languages:
       cmd: ./{{artifact}}
       limits:
         wall_time_s: 5
+        cpu_time_s: 20
         memory_kb: 524288
         max_processes: 64
 
@@ -69,6 +75,7 @@ languages:
       args: ["{{source}}"]
       limits:
         wall_time_s: 6
+        cpu_time_s: 48
         memory_kb: 4194304
         max_processes: 100
     run:
@@ -76,6 +83,7 @@ languages:
       args: ["-cp", ".", "{{artifact}}"]
       limits:
         wall_time_s: 6
+        cpu_time_s: 24
         memory_kb: 4194304
         max_processes: 100
 
@@ -87,6 +95,7 @@ languages:
       args: ["{{source}}"]
       limits:
         wall_time_s: 9
+        cpu_time_s: 11
         memory_kb: 102400
         max_processes: 100
 
@@ -98,6 +107,7 @@ languages:
       args: ["{{source}}"]
       limits:
         wall_time_s: 9
+        cpu_time_s: 11
         memory_kb: 2097152
         max_processes: 100
 
@@ -110,6 +120,7 @@ languages:
       args: ["-o", "{{artifact}}", "{{source}}"]
       limits:
         wall_time_s: 6
+        cpu_time_s: 48
         memory_kb: 102400
         max_processes: 100
     run:
@@ -117,6 +128,7 @@ languages:
       args: ["{{artifact}}"]
       limits:
         wall_time_s: 6
+        cpu_time_s: 8
         memory_kb: 102400
         max_processes: 100
 
@@ -129,6 +141,7 @@ languages:
       args: ["{{flags}}", "-o", "{{artifact}}", "{{source}}"]
       limits:
         wall_time_s: 10
+        cpu_time_s: 80
         memory_kb: 4194304
         max_processes: 100
       flag_allowlist: ["-O*"]
@@ -136,6 +149,7 @@ languages:
       cmd: ./{{artifact}}
       limits:
         wall_time_s: 5
+        cpu_time_s: 20
         memory_kb: 524288
         max_processes: 64
 
@@ -148,6 +162,7 @@ languages:
       args: ["build", "{{flags}}", "-p", "4", "-o", "{{artifact}}", "{{source}}"]
       limits:
         wall_time_s: 15
+        cpu_time_s: 120
         memory_kb: 4194304
         max_processes: 100
       flag_allowlist: ["-ldflags*", "-tags*"]
@@ -155,6 +170,7 @@ languages:
       cmd: ./{{artifact}}
       limits:
         wall_time_s: 5
+        cpu_time_s: 20
         memory_kb: 1048576
         max_processes: 64
 
@@ -167,12 +183,14 @@ languages:
       args: ["-O2", "-dynamic", "-o", "{{artifact}}", "{{source}}"]
       limits:
         wall_time_s: 15
+        cpu_time_s: 120
         memory_kb: 1048576
         max_processes: 100
     run:
       cmd: ./{{artifact}}
       limits:
         wall_time_s: 5
+        cpu_time_s: 20
         memory_kb: 524288
         max_processes: 64
 
@@ -185,12 +203,14 @@ languages:
       args: ["-o", "{{artifact}}", "{{source}}"]
       limits:
         wall_time_s: 10
+        cpu_time_s: 80
         memory_kb: 1048576
         max_processes: 100
     run:
       cmd: ./{{artifact}}
       limits:
         wall_time_s: 5
+        cpu_time_s: 20
         memory_kb: 524288
         max_processes: 64
 
@@ -202,6 +222,7 @@ languages:
       args: ["{{source}}"]
       limits:
         wall_time_s: 9
+        cpu_time_s: 11
         memory_kb: 4194304
         max_processes: 100
 
@@ -214,12 +235,14 @@ languages:
       args: ["-o", "{{artifact}}", "{{source}}"]
       limits:
         wall_time_s: 10
+        cpu_time_s: 80
         memory_kb: 1048576
         max_processes: 100
     run:
       cmd: ./{{artifact}}
       limits:
         wall_time_s: 5
+        cpu_time_s: 20
         memory_kb: 524288
         max_processes: 64
 
@@ -231,6 +254,7 @@ languages:
       args: ["{{source}}"]
       limits:
         wall_time_s: 9
+        cpu_time_s: 11
         memory_kb: 102400
         max_processes: 100
 
@@ -242,6 +266,7 @@ languages:
       args: ["{{source}}"]
       limits:
         wall_time_s: 9
+        cpu_time_s: 11
         memory_kb: 102400
         max_processes: 100
 
@@ -253,6 +278,7 @@ languages:
       args: ["-o", "/app", "/app/{{source}}"]
       limits:
         wall_time_s: 15
+        cpu_time_s: 120
         memory_kb: 2097152
         max_processes: 100
     run:
@@ -260,6 +286,7 @@ languages:
       args: ["-noshell", "+S", "2:2", "-pa", "/app", "-s", "solution", "start", "-s", "init", "stop"]
       limits:
         wall_time_s: 5
+        cpu_time_s: 20
         memory_kb: 2097152
         max_processes: 64
 
@@ -271,6 +298,7 @@ languages:
       args: ["--dynamic-space-size", "512", "--script", "{{source}}"]
       limits:
         wall_time_s: 9
+        cpu_time_s: 11
         memory_kb: 1048576
         max_processes: 100
 
@@ -282,6 +310,7 @@ languages:
       args: ["{{source}}"]
       limits:
         wall_time_s: 9
+        cpu_time_s: 11
         memory_kb: 102400
         max_processes: 100
 
@@ -293,6 +322,7 @@ languages:
       args: ["{{source}}"]
       limits:
         wall_time_s: 9
+        cpu_time_s: 11
         memory_kb: 102400
         max_processes: 100
 
@@ -304,6 +334,7 @@ languages:
       args: ["{{source}}"]
       limits:
         wall_time_s: 9
+        cpu_time_s: 11
         memory_kb: 102400
         max_processes: 100
 
@@ -315,6 +346,7 @@ languages:
       args: ["{{source}}"]
       limits:
         wall_time_s: 9
+        cpu_time_s: 11
         memory_kb: 524288
         max_processes: 100
 
@@ -326,6 +358,7 @@ languages:
       args: ["--erl", "+S 2:2", "{{source}}"]
       limits:
         wall_time_s: 9
+        cpu_time_s: 36
         memory_kb: 8388608
         max_processes: 100
 
@@ -338,6 +371,7 @@ languages:
       args: ["{{source}}", "--target", "ES2024", "--module", "commonjs", "--strict", "--skipLibCheck", "--typeRoots", "/usr/local/lib/node_modules/@types"]
       limits:
         wall_time_s: 15
+        cpu_time_s: 120
         memory_kb: 1048576
         max_processes: 100
     run:
@@ -345,6 +379,7 @@ languages:
       args: ["{{artifact}}"]
       limits:
         wall_time_s: 9
+        cpu_time_s: 11
         memory_kb: 524288
         max_processes: 64
 
@@ -357,6 +392,7 @@ languages:
       args: ["{{source}}"]
       limits:
         wall_time_s: 20
+        cpu_time_s: 160
         memory_kb: 4194304
         max_processes: 100
       smoke_cmd: /usr/local/dotnet/dotnet
@@ -366,6 +402,7 @@ languages:
       args: ["{{artifact}}"]
       limits:
         wall_time_s: 9
+        cpu_time_s: 36
         memory_kb: 4194304
         max_processes: 64
 
@@ -378,12 +415,14 @@ languages:
       args: ["-o", "{{artifact}}", "{{source}}", "-Xlinker", "-rpath", "-Xlinker", "/usr/local/swift/usr/lib"]
       limits:
         wall_time_s: 30
+        cpu_time_s: 240
         memory_kb: 2097152
         max_processes: 100
     run:
       cmd: ./{{artifact}}
       limits:
         wall_time_s: 9
+        cpu_time_s: 36
         memory_kb: 524288
         max_processes: 64
 
@@ -396,6 +435,7 @@ languages:
       args: ["-d", ".", "{{source}}"]
       limits:
         wall_time_s: 20
+        cpu_time_s: 160
         memory_kb: 4194304
         max_processes: 100
     run:
@@ -403,6 +443,7 @@ languages:
       args: ["{{artifact}}"]
       limits:
         wall_time_s: 9
+        cpu_time_s: 36
         memory_kb: 4194304
         max_processes: 64
 
@@ -415,6 +456,7 @@ languages:
       args: ["{{source}}", "-include-runtime", "-d", "{{artifact}}"]
       limits:
         wall_time_s: 20
+        cpu_time_s: 160
         memory_kb: 4194304
         max_processes: 100
     run:
@@ -422,6 +464,7 @@ languages:
       args: ["-jar", "{{artifact}}"]
       limits:
         wall_time_s: 9
+        cpu_time_s: 36
         memory_kb: 4194304
         max_processes: 64
 
@@ -434,12 +477,14 @@ languages:
       args: ["compile", "exe", "{{source}}", "-o", "{{artifact}}"]
       limits:
         wall_time_s: 20
+        cpu_time_s: 160
         memory_kb: 1048576
         max_processes: 100
     run:
       cmd: ./{{artifact}}
       limits:
         wall_time_s: 9
+        cpu_time_s: 36
         memory_kb: 524288
         max_processes: 64
 
@@ -452,11 +497,13 @@ languages:
       args: ["-o{{artifact}}", "{{source}}"]
       limits:
         wall_time_s: 10
+        cpu_time_s: 80
         memory_kb: 1048576
         max_processes: 100
     run:
       cmd: ./{{artifact}}
       limits:
         wall_time_s: 9
+        cpu_time_s: 36
         memory_kb: 524288
         max_processes: 64
