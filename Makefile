@@ -28,8 +28,7 @@ lint:
 	golangci-lint run ./... && $(MAKE) vulncheck
 
 vulncheck:
-	@which govulncheck > /dev/null 2>&1 || go install golang.org/x/vuln/cmd/govulncheck@latest
-	govulncheck ./...
+	go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
 fmt:
 	go fmt ./...

@@ -20,8 +20,7 @@ jobs:
           version: latest
       - name: govulncheck
         run: |
-          go install golang.org/x/vuln/cmd/govulncheck@latest
-          govulncheck ./...
+          go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
   test:
     runs-on: ubuntu-latest
