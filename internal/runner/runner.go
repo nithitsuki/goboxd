@@ -238,6 +238,25 @@ func isInfraError(err error) bool {
 	return false
 }
 
+// jailEnv builds the -E argument pairs for nsjail from the environment
+// allowlist. nsjail clears the child env by default, so these pairs are the
+// complete jail environment. PATH is copied from the server env with a
+// fallback to the hardcoded value; the other four vars are fixed. The values
+// are read at call time (no cached global) so tests can use t.Setenv.
+func jailEnv() []string {
+	path := os.Getenv("PATH")
+	if path == "" {
+		path = "/usr/local/bin:/usr/bin:/bin"
+	}
+	return []string{
+		"-E", "PATH=" + path,
+		"-E", "HOME=/tmp",
+		"-E", "GOCACHE=/tmp/go-cache",
+		"-E", "LANG=C.UTF-8",
+		"-E", "LC_ALL=C.UTF-8",
+	}
+}
+
 // nsjailArgs builds the common nsjail arguments for both build and run steps.
 // Each jail runs as its own unprivileged uid via -u/-g (inside:outside:count
 // mapping U:U:1, keeping the user namespace): the jailed process is host-uid U
@@ -339,9 +358,13 @@ func nsjailArgs(appDir string, wallTime, cpuLimit, memKB, procs, uid int, jailCg
 	}
 	args = append(args,
 		"-B", "/etc",
-		"-E", "PATH=/usr/local/bin:/usr/bin:/bin",
-		"-E", "HOME=/tmp",
-		"-E", "GOCACHE=/tmp/go-cache",
+	)
+	// The jail environment is an explicit allowlist. nsjail clears the child
+	// env by default, so these -E flags are the complete jail environment:
+	// nothing from the server env (credentials, GOBOXD_*, proxy vars) can
+	// reach the jail.
+	args = append(args, jailEnv()...)
+	args = append(args,
 		"-B", "/usr",
 		"-B", "/lib",
 		"-B", "/lib64",

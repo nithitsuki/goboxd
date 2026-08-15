@@ -31,6 +31,7 @@ The goal is to prevent the attacker from:
 | 12 | Memory limits not enforced | nsjail's `--rlimit_as` takes MB. The runner passed bytes. Limits were about 1024x too large. The guard is now tight and equal to the memory limit. | `internal/runner/runner.go` |
 | 13 | Symlink race on the source write | `writeSource` opens the source path with `O_EXCL` and `O_NOFOLLOW`. A planted symlink fails the open instead of being followed. | `internal/runner/runner.go` |
 | 14 | Memory and pids limits without cgroup v2 | Per-jail cgroup v2 dirs enforce `memory.max` and `pids.max`. Peak memory and OOM events come from the cgroup. The rlimit fallback stays active when cgroup v2 is not available. | `internal/cgroupv2/` |
+| 15 | Server env leak into jail | `jailEnv` builds the `-E` flags from an allowlist of PATH, HOME, GOCACHE, LANG, LC_ALL. nsjail clears every other variable. | `internal/runner/runner.go` |
 
 ## What each fix does
 
@@ -145,6 +146,12 @@ OOM kills as `memory_exceeded`.
 The startup probe proves that the memory controller really charges memory.
 It runs a small hog in a probe cgroup. If the peak does not move, the probe
 fails. The server then uses the rlimit path. Limits are never unenforced.
+
+### Hole 15 — Environment allowlist
+The jail gets five environment variables. They are PATH, HOME, GOCACHE,
+LANG, and LC_ALL. `jailEnv` builds the `-E` flags. nsjail clears every
+other variable. No server credential or proxy variable reaches the jail.
+PATH comes from the server environment. The other four values are fixed.
 
 ## Accepted limitations
 

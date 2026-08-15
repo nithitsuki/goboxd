@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"syscall"
@@ -895,4 +896,152 @@ func TestResolveSourceName(t *testing.T) {
 	if got := resolveSourceName(req2, lc2); got != "solution.py" {
 		t.Errorf("default strategy must fall back to config: got %q", got)
 	}
+}
+
+// TestJailEnv locks the environment allowlist: exactly five vars, in a
+// stable order, with PATH copied from the server env at call time and a
+// hardcoded fallback when PATH is unset or empty.
+func TestJailEnv(t *testing.T) {
+	t.Setenv("PATH", "/custom/bin")
+	got := jailEnv()
+	want := []string{
+		"-E", "PATH=/custom/bin",
+		"-E", "HOME=/tmp",
+		"-E", "GOCACHE=/tmp/go-cache",
+		"-E", "LANG=C.UTF-8",
+		"-E", "LC_ALL=C.UTF-8",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("jailEnv = %q, want %q", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("jailEnv[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+
+	// os.Getenv returns "" for both unset and empty PATH. The helper must
+	// treat both as the fallback.
+	t.Setenv("PATH", "")
+	got = jailEnv()
+	wantPath := []string{
+		"-E", "PATH=/usr/local/bin:/usr/bin:/bin",
+		"-E", "HOME=/tmp",
+		"-E", "GOCACHE=/tmp/go-cache",
+		"-E", "LANG=C.UTF-8",
+		"-E", "LC_ALL=C.UTF-8",
+	}
+	if len(got) != len(wantPath) {
+		t.Fatalf("jailEnv (empty PATH) = %q, want %q", got, wantPath)
+	}
+	for i := range wantPath {
+		if got[i] != wantPath[i] {
+			t.Errorf("jailEnv[%d] (empty PATH) = %q, want %q", i, got[i], wantPath[i])
+		}
+	}
+}
+
+// TestJailEnvContract pins the jail environment end to end: a python jail
+// prints its full environment and the test asserts the exact allowlist key
+// set and the absence of secret markers. nsjail clears the child env by
+// default; this test guards that behavior so a future nsjail change cannot
+// silently leak the server env into the jail.
+func TestJailEnvContract(t *testing.T) {
+	if _, err := exec.LookPath("nsjail"); err != nil {
+		t.Skip("nsjail not found in PATH, skipping runner tests (run inside docker-compose)")
+	}
+	if os.Geteuid() != 0 {
+		t.Skip("requires root to run nsjail")
+	}
+
+	// Plant secrets in the server env. The jail must not see any of them.
+	t.Setenv("GOBOXD_TEST_TOKEN", "topsecret")
+	t.Setenv("HTTP_PROXY", "http://evil-proxy:3128")
+	t.Setenv("HTTPS_PROXY", "http://evil-proxy:3128")
+	t.Setenv("ALL_PROXY", "socks5://evil-proxy:1080")
+	t.Setenv("AWS_ACCESS_KEY_ID", "AKIAFAKEFAKEFAKEFAKE")
+	t.Setenv("SECRET_TEST", "1")
+	t.Setenv("PASSWORD", "hunter2")
+
+	py3Config := config.LanguageConfig{
+		ID:             "py3",
+		Name:           "Python 3",
+		RunCmd:         []string{"/usr/bin/python3", "main.py"},
+		SourceFilename: "main.py",
+		DefaultLimits: config.Limits{
+			WallTimeS:    2,
+			MemoryKB:     102400,
+			MaxProcesses: 100,
+		},
+		RunLimits: config.Limits{
+			WallTimeS:    2,
+			MemoryKB:     102400,
+			MaxProcesses: 100,
+		},
+	}
+
+	req := models.RunRequest{
+		Language: "py3",
+		Source:   "import os\nfor k in sorted(os.environ):\n    print(k + '=' + os.environ[k])",
+		Tests:    []models.TestCase{{Stdin: "", ExpectedStdout: ""}},
+	}
+
+	_, results, err := ExecuteRun(context.Background(), req, py3Config)
+	if err != nil {
+		t.Fatalf("ExecuteRun dropped a hard error: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	res := results[0]
+	if res.Status != "accepted" {
+		t.Fatalf("status = %q, want accepted (stderr: %q)", res.Status, res.Stderr)
+	}
+
+	keys := map[string]string{}
+	for _, line := range strings.Split(strings.TrimSpace(res.Stdout), "\n") {
+		if line == "" {
+			continue
+		}
+		k, v, ok := strings.Cut(line, "=")
+		if !ok {
+			t.Fatalf("unparsable env line %q in jail output", line)
+		}
+		keys[k] = v
+	}
+
+	allowed := []string{"PATH", "HOME", "GOCACHE", "LANG", "LC_ALL"}
+	allowedSet := map[string]bool{}
+	for _, k := range allowed {
+		allowedSet[k] = true
+	}
+	if len(keys) != len(allowed) {
+		t.Errorf("jail env keys = %v, want exactly %v", sortedKeys(keys), allowed)
+	}
+	for k := range keys {
+		if !allowedSet[k] {
+			t.Errorf("unexpected env key %q in jail", k)
+		}
+	}
+	for _, k := range allowed {
+		if _, ok := keys[k]; !ok {
+			t.Errorf("missing allowlisted env key %q in jail", k)
+		}
+	}
+
+	for _, marker := range []string{"GOBOXD_", "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "AWS_"} {
+		if strings.Contains(res.Stdout, marker) {
+			t.Errorf("secret marker %q leaked into the jail env", marker)
+		}
+	}
+}
+
+// sortedKeys returns the keys of m in sorted order for stable error messages.
+func sortedKeys(m map[string]string) []string {
+	ks := make([]string, 0, len(m))
+	for k := range m {
+		ks = append(ks, k)
+	}
+	sort.Strings(ks)
+	return ks
 }
