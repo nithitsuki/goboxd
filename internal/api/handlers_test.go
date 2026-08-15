@@ -903,6 +903,9 @@ func TestHandleDashboard(t *testing.T) {
 // language), not just {"status":"ok"}. Operators need the breakdown to see
 // which components are healthy without a failure.
 func TestReadyzFullBreakdownOnSuccess(t *testing.T) {
+	if _, err := exec.LookPath("nsjail"); err != nil {
+		t.Skip("nsjail not installed: the success contract needs the nsjail probe to pass")
+	}
 	// Pin the registry to one reachable binary so the probe succeeds
 	// deterministically in any environment (the real registry includes
 	// languages that may not be installed on the test host).
