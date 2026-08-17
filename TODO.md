@@ -37,9 +37,8 @@ Batch endpoints, callbacks, checkers, submission history, tokens — all of it l
 
 Missing languages:
 
-- **Mainstream**: clojure, cobol, coffeescript, crystal, dash, deno, dotnet, dragon, emacs (elisp), freebasic, groovy, julia, nasm, nim, octave, ponylang, prolog, pure, pwsh, raku, smalltalk, sqlite3, vlang, zig
-- **deno**: present on the dev host (2.9.5) but SIGTRAPs under ANY finite RLIMIT_AS (V8 traps when the limit is not infinite, even at 32GB). Deferred: needs an image-side version test or an rlimit-optional mechanism. Same for **julia**: the host has only a juliaup launcher with no installed channel (half-install).
-- **Misc**: file (arbitrary binary execution), llvm_ir
+- **Mainstream**: clojure, cobol, coffeescript, crystal, dash, dotnet, dragon, emacs (elisp), freebasic, groovy, julia, nasm, nim, octave, odin, ponylang, prolog, pure, pwsh, raku, smalltalk, vlang, zig
+- **julia**: the host has only a juliaup launcher with no installed channel (half-install).
 
 Notes:
 
