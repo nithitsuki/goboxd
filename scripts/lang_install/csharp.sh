@@ -1,13 +1,12 @@
 #!/bin/bash
 set -e
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/helpers.sh"
+
 echo "Installing .NET SDK..."
-# Pin the SDK to an exact version for reproducible builds. The --channel
-# form floats to the newest SDK. To bump the SDK, read the release index at
-# https://dotnetcli.blob.core.windows.net/dotnet/release-metadata/releases-index.json
-# and update the version below. Old SDK versions can disappear from the CDN,
-# so keep the pin current.
-apt-get install -y --no-install-recommends curl=7.88.1-10+deb12u15 libicu72=72.1-3+deb12u1 libssl3=3.0.20-1~deb12u2 zlib1g=1:1.2.13.dfsg-1
+# Pre-requisites for the .NET SDK installer.
+pkg_install curl icu openssl zlib
 
 DL=/var/cache/goboxd-dl
 TC=/var/cache/goboxd-toolchains

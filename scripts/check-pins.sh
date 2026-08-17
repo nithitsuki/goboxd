@@ -67,6 +67,8 @@ lint_statement() {
       # Strip trailing shell punctuation (e.g. "nginx;" from "install nginx;").
       stripped="$tok"
       while [[ "$stripped" == *[';&|'] ]]; do stripped="${stripped%?}"; done
+      # "$@" is a shell parameter expansion, not a package name.
+      [[ "$stripped" == '"$@"' ]] && continue
       case "$stripped" in
         *=*) ;;
         *) violations="${violations}${file}: unpinned apt package '${stripped}' (use pkg=VERSION)\n" ;;

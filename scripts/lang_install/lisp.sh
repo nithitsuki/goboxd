@@ -1,15 +1,12 @@
 #!/bin/bash
 set -e
 
-# Ensure apt package lists are present. The /var/lib/apt/lists cache mount
-# can be cold after a Dockerfile change; a warm mount skips the network update.
-[ -n "$(ls -A /var/lib/apt/lists 2>/dev/null)" ] || apt-get update
-echo "Installing Lisp (SBCL)..."
-apt-get install -y --no-install-recommends sbcl=2:2.2.9-1 curl=7.88.1-10+deb12u15 make=4.3-4.1 git=1:2.39.5-0+deb12u3
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/helpers.sh"
 
-# Install Quicklisp
-# Note: quicklisp.lisp has no stable versioning, so it is intentionally
-# unpinned. Its installer pulls the current dist snapshot.
+echo "Installing Lisp (SBCL)..."
+pkg_install sbcl curl make git
+
 curl -O https://beta.quicklisp.org/quicklisp.lisp
 sbcl --no-sysinit --no-userinit \
      --load quicklisp.lisp \
@@ -17,11 +14,9 @@ sbcl --no-sysinit --no-userinit \
      --eval '(ql:add-to-init-file)' \
      --quit
 
-# Verify SBCL is working
-if command -v sbcl &> /dev/null; then
+if command -v sbcl &>/dev/null; then
     echo "SBCL installation verified successfully."
     sbcl --version
-    # Run a simple verification
     sbcl --no-sysinit --no-userinit \
          --eval '(format t "Lisp is working correctly!~%")' \
          --eval '(quit)'

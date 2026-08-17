@@ -1,10 +1,8 @@
 #!/usr/bin/env bash
-# Install and verify gawk (GNU AWK).
 set -euo pipefail
 
-GAWK_VERSION="1:5.2.1-2"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/helpers.sh"
 
-apt-get install -y "gawk=${GAWK_VERSION}"
-
-# Verify: run a real script through the interpreter.
+pkg_install gawk
 gawk 'BEGIN { print "gawk OK" }' | grep -q "gawk OK"
