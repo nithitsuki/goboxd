@@ -171,6 +171,12 @@ func ExecuteRun(ctx context.Context, req models.RunRequest, lc config.LanguageCo
 
 	var results []models.TestResult
 
+	// Per-request output cap.
+	outputCap := maxOutputBytes
+	if req.MaxOutputBytes != nil && *req.MaxOutputBytes > 0 {
+		outputCap = *req.MaxOutputBytes
+	}
+
 	// Check if parallel execution is requested.
 	// effectiveParallel <= 1 means sequential.
 	effectiveParallel := 1
@@ -269,7 +275,7 @@ func ExecuteRun(ctx context.Context, req models.RunRequest, lc config.LanguageCo
 					}
 				}
 
-				results[idx] = runSingleTest(ctx, tc, lc, parJailDir, req.Run, parUid, parCg)
+				results[idx] = runSingleTest(ctx, tc, lc, parJailDir, req.Run, parUid, parCg, outputCap)
 			}(i, tc)
 		}
 		wg.Wait()
@@ -279,7 +285,7 @@ func ExecuteRun(ctx context.Context, req models.RunRequest, lc config.LanguageCo
 			if ctx.Err() != nil {
 				break
 			}
-			res := runSingleTest(ctx, tc, lc, jailDir, req.Run, uid, jailCg)
+			res := runSingleTest(ctx, tc, lc, jailDir, req.Run, uid, jailCg, outputCap)
 			results = append(results, res)
 		}
 	}
@@ -292,6 +298,10 @@ func runBuild(ctx context.Context, jailDir string, req models.RunRequest, lc con
 	wallTime := lc.BuildLimits.WallTimeS
 	memKB := lc.BuildLimits.MemoryKB
 	procs := lc.BuildLimits.MaxProcesses
+	outputCap := maxOutputBytes
+	if req.MaxOutputBytes != nil && *req.MaxOutputBytes > 0 {
+		outputCap = *req.MaxOutputBytes
+	}
 	cpuLimit := lc.BuildLimits.CpuTimeS
 	if req.Build != nil && req.Build.Limits != nil {
 		if req.Build.Limits.WallTimeS != nil {
@@ -316,7 +326,7 @@ func runBuild(ctx context.Context, jailDir string, req models.RunRequest, lc con
 	}
 	cmdArgs = expandFlags(cmdArgs, flags)
 
-	stdout, stderr, _, cpuKilled, cpuUs, err := execInJail(ctx, jailDir, cmdArgs, wallTime, cpuLimit, memKB, procs, uid, jailCg)
+	stdout, stderr, _, cpuKilled, cpuUs, err := execInJail(ctx, jailDir, cmdArgs, wallTime, cpuLimit, memKB, procs, uid, jailCg, outputCap)
 	if cpuKilled {
 		log.Printf("[runner] build for %s hit its cpu limit (%ds)", req.Language, cpuLimit)
 	}
@@ -522,7 +532,7 @@ func nsjailArgs(appDir string, wallTime, cpuLimit, memKB, procs, uid int, jailCg
 	return args, nil
 }
 
-func execInJail(ctx context.Context, jailDir string, cmdArgs []string, wallTime, cpuLimit, memKB, procs, uid int, jailCg *cgroupv2.Jail) (stdout, stderr string, oomKilled, cpuKilled bool, cpuTimeUs int64, err error) {
+func execInJail(ctx context.Context, jailDir string, cmdArgs []string, wallTime, cpuLimit, memKB, procs, uid int, jailCg *cgroupv2.Jail, outputCap int) (stdout, stderr string, oomKilled, cpuKilled bool, cpuTimeUs int64, err error) {
 	appDir := filepath.Join(jailDir, "app")
 	if err := os.MkdirAll(appDir, 0755); err != nil {
 		return "", "", false, false, 0, fmt.Errorf("app dir: %w", err)
@@ -582,11 +592,11 @@ func execInJail(ctx context.Context, jailDir string, cmdArgs []string, wallTime,
 	errChan := make(chan string, 1)
 	go func() {
 		defer func() { _ = recover() }()
-		outChan <- readCapped(stdoutPipe)
+		outChan <- readCapped(stdoutPipe, outputCap)
 	}()
 	go func() {
 		defer func() { _ = recover() }()
-		errChan <- readCapped(stderrPipe)
+		errChan <- readCapped(stderrPipe, outputCap)
 	}()
 
 	stdout = <-outChan
@@ -739,7 +749,7 @@ func cpuTimeUS(jailCg *cgroupv2.Jail, baselineUS int64, baselineOK bool, before,
 
 func timevalUS(tv syscall.Timeval) int64 { return tv.Sec*1000000 + tv.Usec }
 
-func runSingleTest(ctx context.Context, tc models.TestCase, lc config.LanguageConfig, jailDir string, runOpts *models.StageConfig, uid int, jailCg *cgroupv2.Jail) models.TestResult {
+func runSingleTest(ctx context.Context, tc models.TestCase, lc config.LanguageConfig, jailDir string, runOpts *models.StageConfig, uid int, jailCg *cgroupv2.Jail, outputCap int) models.TestResult {
 	start := time.Now()
 
 	if ctx.Err() != nil {
@@ -836,11 +846,11 @@ func runSingleTest(ctx context.Context, tc models.TestCase, lc config.LanguageCo
 
 	go func() {
 		defer func() { _ = recover() }()
-		outChan <- readCapped(stdoutPipe)
+		outChan <- readCapped(stdoutPipe, outputCap)
 	}()
 	go func() {
 		defer func() { _ = recover() }()
-		errChan <- readCapped(stderrPipe)
+		errChan <- readCapped(stderrPipe, outputCap)
 	}()
 
 	stdoutRaw := <-outChan
@@ -1141,11 +1151,11 @@ func sweepJails(minAge time.Duration) {
 	}
 }
 
-// readCapped reads from r up to maxOutputBytes+1, truncates with a marker if capped.
-func readCapped(r io.Reader) string {
-	raw, _ := io.ReadAll(io.LimitReader(r, maxOutputBytes+1))
-	if len(raw) > maxOutputBytes {
-		raw = raw[:maxOutputBytes]
+// readCapped reads from r up to limit+1, truncates with a marker if capped.
+func readCapped(r io.Reader, limit int) string {
+	raw, _ := io.ReadAll(io.LimitReader(r, int64(limit)+1))
+	if len(raw) > limit {
+		raw = raw[:limit]
 		raw = append(raw, []byte("\n... [output truncated]")...)
 	}
 	return string(raw)

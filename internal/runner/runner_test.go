@@ -255,21 +255,21 @@ func TestExecuteRunContextCancel(t *testing.T) {
 func TestReadCapped(t *testing.T) {
 	// Short string passes through unchanged
 	input := "hello world"
-	got := readCapped(bytes.NewBufferString(input))
+	got := readCapped(bytes.NewBufferString(input), 1024)
 	if got != input {
 		t.Errorf("readCapped = %q, want %q", got, input)
 	}
 
 	// Empty input
-	got = readCapped(bytes.NewBufferString(""))
+	got = readCapped(bytes.NewBufferString(""), 1024)
 	if got != "" {
 		t.Errorf("readCapped(empty) = %q, want ''", got)
 	}
 
-	// Input larger than maxOutputBytes triggers truncation with marker
+	// Input larger than limit triggers truncation with marker
 	truncationMarker := "\n... [output truncated]"
 	big := strings.Repeat("A", int(maxOutputBytes)+1)
-	got = readCapped(bytes.NewBufferString(big))
+	got = readCapped(bytes.NewBufferString(big), int(maxOutputBytes))
 	if !strings.HasSuffix(got, truncationMarker) {
 		t.Errorf("expected output to end with %q, got suffix %q", truncationMarker, got[len(got)-40:])
 	}
@@ -1319,6 +1319,64 @@ func TestBuildCacheIsolation(t *testing.T) {
 		t.Skip("need at least 2 uid cache dirs to test isolation")
 	}
 	t.Logf("found %d uid cache dirs", uidDirs)
+}
+
+// TestOutputCapCustom proves that a per-request max_output_bytes truncates
+// stdout to the requested cap. The source prints 2 KiB of "A"; the request
+// sets max_output_bytes=1024; the result must be exactly 1024 bytes plus
+// the truncation marker.
+func TestOutputCapCustom(t *testing.T) {
+	if _, err := exec.LookPath("nsjail"); err != nil {
+		t.Skip("nsjail not found in PATH, skipping runner tests (run inside docker-compose)")
+	}
+	if os.Geteuid() != 0 {
+		t.Skip("requires root to run nsjail")
+	}
+
+	py3Config := config.LanguageConfig{
+		ID:             "py3",
+		Name:           "Python 3",
+		RunCmd:         []string{"/usr/bin/python3", "main.py"},
+		SourceFilename: "main.py",
+		DefaultLimits: config.Limits{
+			WallTimeS:    5,
+			MemoryKB:     102400,
+			MaxProcesses: 100,
+		},
+		RunLimits: config.Limits{
+			WallTimeS:    5,
+			MemoryKB:     102400,
+			MaxProcesses: 100,
+		},
+	}
+
+	cap := 1024
+	req := models.RunRequest{
+		Language:       "py3",
+		Source:         "print('A' * 2048)",
+		MaxOutputBytes: &cap,
+		Tests:          []models.TestCase{{Stdin: "", ExpectedStdout: ""}},
+	}
+
+	_, results, err := ExecuteRun(context.Background(), req, py3Config)
+	if err != nil {
+		t.Fatalf("ExecuteRun dropped a hard error: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	res := results[0]
+	if res.Status != "accepted" {
+		t.Fatalf("status = %q, want accepted (stderr: %q)", res.Status, res.Stderr)
+	}
+
+	truncMarker := "\n... [output truncated]"
+	if !strings.HasSuffix(res.Stdout, truncMarker) {
+		t.Errorf("expected stdout to end with truncation marker, got suffix %q", res.Stdout[max(0, len(res.Stdout)-40):])
+	}
+	if len(res.Stdout) != cap+len(truncMarker) {
+		t.Errorf("stdout length = %d, want %d (cap + marker)", len(res.Stdout), cap+len(truncMarker))
+	}
 }
 
 func intPtr(v int) *int { return &v }

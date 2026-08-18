@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"os/exec"
 	"runtime"
 	"runtime/debug"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -472,6 +474,21 @@ func HandleRun(w http.ResponseWriter, r *http.Request) {
 	if req.Run != nil && len(req.Run.Flags) > 0 {
 		if ok, bad := validateFlags(req.Run.Flags, lc.FlagAllowlist); !ok {
 			writeError(w, "invalid_flags", fmt.Sprintf("disallowed run flag: %s", bad))
+			return
+		}
+	}
+
+	// Output cap validation: per-request cap must not exceed the hard ceiling.
+	if req.MaxOutputBytes != nil && *req.MaxOutputBytes > 0 {
+		ceiling := 1048576 // 1 MB default
+		if e := os.Getenv("GOBOXD_MAX_OUTPUT_BYTES"); e != "" {
+			if v, err := strconv.Atoi(e); err == nil && v > 0 {
+				ceiling = v
+			}
+		}
+		if *req.MaxOutputBytes > ceiling {
+			writeError(w, "limit_exceeded",
+				fmt.Sprintf("max_output_bytes of %d exceeds ceiling of %d", *req.MaxOutputBytes, ceiling))
 			return
 		}
 	}
