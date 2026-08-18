@@ -26,8 +26,46 @@ The bundled package (the judge layer) wraps /run and owns everything that needs 
 12. [ ] **Per-language seccomp profiles** — the deny-list is global (seccomp.policy). nsjail supports --seccomp_string per invocation. Python does not need ptrace. Add optional per-language profiles in the registry. Genuine differentiator — Judge0/isolate has no seccomp at all.
 13. [ ] **Mask /proc and /etc/hosts** — --proc_path /proc exposes /proc/sys, mounts, and host kernel details to every jail. The container's /etc/hosts leaks hostname. Synthetic minimal /proc is effort, but reading the current exposure in docs/security.md and deciding is mandatory before public deployment.
 14. [ ] **Leak/soak tests** — fd, goroutine, /tmp growth, and cgroup-leaf leaks over N×1000 runs, in CI. Executors die slowly. This is the test that catches it. The fixture corpus is the moat — extend it (add a fuzz target for POST /run parsing while you are at it).
-15. [ ] **/readyz fixups** — cache per-language probes with a TTL (a watchdog polling /readyz every 5s currently spawns 30 subprocesses each time) and stop hardcoding nsjail version "3.6" (internal/api/handlers.go:266).
+15. [ ] **/readyz fixups + probe module (C4)** — cache per-language probes with a TTL (a watchdog polling /readyz every 5s currently spawns 30 subprocesses each time), stop hardcoding nsjail version "3.6" (internal/api/handlers.go:266), and give both /readyz and /info one shared probe module behind a TTL cache. Subsumes arch review C4.
 16. [ ] **Measurable SLOs + benchmark regression in CI** — publish per-language baselines (docs/benchmarks.md exists. Add go test -bench regression gates) with targets like "jail setup p50 < X ms", "N runs/min/core", "0 leaks over 24h soak". "Fast" needs numbers you can defend.
+
+## Architecture review — 2026-08-18 (from /tmp/architecture-review-20260818-2119.html)
+
+Source of truth: the review HTML for full diagrams and rationale. All items
+are L-tier (architecture): full gates plus a second security/architecture
+review pass and a rollback plan per item. Order per the review's top
+recommendation: C1 first (its outcome struct forces C2 and C5 along).
+
+C1. [ ] **One Jail module — collapse the execution lifecycle** — the jail
+    lifecycle (uid, dir+chown, cgroup leaf, source+artifact, teardown) is
+    forked across the sequential and parallel paths of ExecuteRun. The fork
+    hides three live defects: compiled parallel tests never see the build
+    artifact (fresh dirs get no copy), parallel tests oversubscribe the uid
+    pool (pool sized to requests, parallel holds up to NumCPU per request),
+    and parallel cgroup names par-<pid>-<idx> collide across concurrent
+    requests (pid is constant). Solution: one Jail type owns the full
+    lifecycle; sequential = one jail reused, parallel = N jails materialized
+    from one build template.
+C2. [ ] **One exec primitive under the jail** — build exec (execInJail) and
+    test exec (runSingleTest) are two forks of the same pipe/baseline/poller/
+    capped-read/Wait/post-check sequence. Only the final interpretation
+    differs. Collapse into one primitive returning a structured
+    ExecOutcome{Stdout, Stderr, OOMKilled, CPUKilled, CPUTimeUS, ExitCode,
+    TermSignal, Infra, Err}; runBuild and computeTestStatus become thin
+    interpreters; isInfraError stops matching error text and becomes a typed
+    field.
+C3. [ ] **Stop buffering run responses in the access log** — LoggingMiddleware
+    bodyRecorder buffers the whole response body (up to 50 tests × 2 streams
+    × 1 MB cap ≈ 100 MB per request), quietly defeating the output cap.
+    Capture only status code and run_status; stream the body to the client
+    unbuffered.
+C5. [ ] **Typed result-status vocabulary** — TestResult.Status and BuildResult
+    statuses are string literals compared across models/runner/handlers; the
+    zero value "" is a real unhandled state the parallel path emits on
+    cancellation, and a typo compiles. Introduce ResultStatus (and
+    BuildStatus) types with constants; the zero value becomes meaningful
+    (NotExecuted); computeTestStatus and computeTopLevelStatus return the
+    typed values.
 
 ## What the executor must not build
 
