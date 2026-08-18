@@ -37,14 +37,7 @@ review pass and a rollback plan per item. Order per the review's top
 recommendation: C1 first (its outcome struct forces C2 and C5 along).
 
 C1. [x] **One Jail module — collapse the execution lifecycle** — shipped 2026-08-18. New internal/runner/jail.go: one Jail type owns uid, dir+chown, cgroup leaf, source, artifact, and teardown (sync.Once, idempotent). Sequential reuses one jail; parallel materializes N jails from one build template (seedFrom copies source + artifact). Fixes three live defects: parallel compiled tests now find the artifact, the uid pool is sized to maxJobs x (NumCPU + 1) (template + parallel jails, exhaustion impossible), and cgroup names are unique by construction (filepath.Base(dir)). Verified: TestParallelCompiled, TestJailTeardown, TestUidPoolParallel, TestConcurrentParallelRequests, all graded by breaking each fix; two review passes (correctness + security/architecture) SHIP; rollback = revert (sequential byte-identical).
-C2. [ ] **One exec primitive under the jail** — build exec (execInJail) and
-    test exec (runSingleTest) are two forks of the same pipe/baseline/poller/
-    capped-read/Wait/post-check sequence. Only the final interpretation
-    differs. Collapse into one primitive returning a structured
-    ExecOutcome{Stdout, Stderr, OOMKilled, CPUKilled, CPUTimeUS, ExitCode,
-    TermSignal, Infra, Err}; runBuild and computeTestStatus become thin
-    interpreters; isInfraError stops matching error text and becomes a typed
-    field.
+C2. [x] **One exec primitive under the jail** — shipped 2026-08-18. New internal/runner/exec.go: execJail returns ExecOutcome{Stdout, Stderr, OOMKilled, CPUKilled, CPUTimeUS, ExitCode, TermSignal, Infra, Err}; runBuild and runSingleTest are thin interpreters. isInfraError text-matching gone (typed Infra at pipe/start sites). Verified: exec-sequence byte-identical on reachable paths, fixture corpus parity (zero new failures), TestExecOutcome{InfraTyped,Fields,InfraStartFailure}, graded by breaking the cpu-kill path. Note: missing binary inside the jail reads exit 255 (user-error shape, nsjail propagates); classifying 255 as infra regressed 10 fixtures, so it stays a user error (fail-closed is a one-line option).
 C3. [ ] **Stop buffering run responses in the access log** — LoggingMiddleware
     bodyRecorder buffers the whole response body (up to 50 tests × 2 streams
     × 1 MB cap ≈ 100 MB per request), quietly defeating the output cap.

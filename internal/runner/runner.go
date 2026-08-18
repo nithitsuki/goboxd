@@ -17,7 +17,6 @@
 package runner
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -100,7 +99,7 @@ func ExecuteRun(ctx context.Context, req models.RunRequest, lc config.LanguageCo
 	// Build step for compiled languages
 	buildStart := time.Now()
 	if len(lc.BuildCmd) > 0 {
-		buildRes, err = runBuild(ctx, tmpl.dir, req, lc, tmpl.uid, tmpl.cg)
+		buildRes, err = runBuild(ctx, tmpl, req, lc)
 		buildRes.DurationMs = int(time.Since(buildStart).Milliseconds())
 		if err != nil {
 			return buildRes, nil, err
@@ -167,7 +166,7 @@ func ExecuteRun(ctx context.Context, req models.RunRequest, lc config.LanguageCo
 					return
 				}
 
-				results[idx] = runSingleTest(ctx, tc, lc, parJail.dir, req.Run, parJail.uid, parJail.cg, outputCap)
+				results[idx] = runSingleTest(ctx, tc, lc, parJail, req.Run, outputCap)
 			}(i, tc)
 		}
 		wg.Wait()
@@ -177,7 +176,7 @@ func ExecuteRun(ctx context.Context, req models.RunRequest, lc config.LanguageCo
 			if ctx.Err() != nil {
 				break
 			}
-			res := runSingleTest(ctx, tc, lc, tmpl.dir, req.Run, tmpl.uid, tmpl.cg, outputCap)
+			res := runSingleTest(ctx, tc, lc, tmpl, req.Run, outputCap)
 			results = append(results, res)
 		}
 	}
@@ -185,8 +184,10 @@ func ExecuteRun(ctx context.Context, req models.RunRequest, lc config.LanguageCo
 	return buildRes, results, nil
 }
 
-// runBuild compiles the source inside nsjail using lc.BuildCmd.
-func runBuild(ctx context.Context, jailDir string, req models.RunRequest, lc config.LanguageConfig, uid int, jailCg *cgroupv2.Jail) (models.BuildResult, error) {
+// runBuild compiles the source inside nsjail using lc.BuildCmd. It is a thin
+// interpreter over the execJail primitive: the outcome facts (cpu time, exit
+// status, typed Infra) become a BuildResult (ok/failed/internal_error).
+func runBuild(ctx context.Context, j *jail, req models.RunRequest, lc config.LanguageConfig) (models.BuildResult, error) {
 	wallTime := lc.BuildLimits.WallTimeS
 	memKB := lc.BuildLimits.MemoryKB
 	procs := lc.BuildLimits.MaxProcesses
@@ -218,42 +219,41 @@ func runBuild(ctx context.Context, jailDir string, req models.RunRequest, lc con
 	}
 	cmdArgs = expandFlags(cmdArgs, flags)
 
-	stdout, stderr, _, cpuKilled, cpuUs, err := execInJail(ctx, jailDir, cmdArgs, wallTime, cpuLimit, memKB, procs, uid, jailCg, outputCap)
-	if cpuKilled {
+	// The Go context deadline matches nsjail's time_limit so both fire
+	// together; execJail wraps it again with the same deadline internally.
+	ctx, cancel := context.WithTimeout(ctx, time.Duration(wallTime)*time.Second)
+	defer cancel()
+
+	outcome := execJail(ctx, j, cmdArgs, execLimits{wallTime: wallTime, cpuLimit: cpuLimit, memKB: memKB, procs: procs}, "", outputCap)
+	if outcome.CPUKilled {
 		log.Printf("[runner] build for %s hit its cpu limit (%ds)", req.Language, cpuLimit)
 	}
 	res := models.BuildResult{
 		Status:    "ok",
-		Stdout:    stdout,
-		Stderr:    stderr,
-		CpuTimeMs: int(cpuUs / 1000),
+		Stdout:    outcome.Stdout,
+		Stderr:    outcome.Stderr,
+		CpuTimeMs: int(outcome.CPUTimeUS / 1000),
 	}
-	if err != nil {
-		log.Printf("[runner] build error for %s: %v | stdout: %s | stderr: %s", req.Language, err, stdout, stderr)
-		if isInfraError(err) {
+	if outcome.Err != nil {
+		log.Printf("[runner] build error for %s: %v | stdout: %s | stderr: %s", req.Language, outcome.Err, outcome.Stdout, outcome.Stderr)
+		if ctx.Err() == context.DeadlineExceeded {
+			// Wall timeout: execInJail appended this marker and classified the
+			// build as failed (never infra); keep that behavior byte-identical.
+			res.Stderr += "\n... [build timed out]"
+			res.Status = "failed"
+		} else if outcome.Infra {
 			res.Status = "internal_error"
-			return res, err
+			return res, outcome.Err
+		} else {
+			res.Status = "failed"
 		}
+	} else if ctx.Err() == context.DeadlineExceeded {
+		// The process exited cleanly as the deadline fired. Today's execInJail
+		// still read this as a failed, timed-out build.
+		res.Stderr += "\n... [build timed out]"
 		res.Status = "failed"
 	}
 	return res, nil
-}
-
-// isInfraError checks if the error is from infrastructure (pipe, start, nsjail) vs user code.
-// We only flag explicit pipe/start failures and nsjail crashing with a signal.
-// Exit codes (including 255) are NOT infrastructure — they come from the user's program
-// (nsjail propagates the inner exit code). Flagging them as infra would turn legitimate
-// runtime/build errors into internal_error.
-func isInfraError(err error) bool {
-	if err == nil {
-		return false
-	}
-	msg := err.Error()
-	log.Printf("[runner] isInfraError check: %s", msg)
-	if strings.Contains(msg, "pipe:") || strings.Contains(msg, "start:") {
-		return true
-	}
-	return false
 }
 
 // jailEnv builds the -E argument pairs for nsjail from the environment
@@ -424,109 +424,6 @@ func nsjailArgs(appDir string, wallTime, cpuLimit, memKB, procs, uid int, jailCg
 	return args, nil
 }
 
-func execInJail(ctx context.Context, jailDir string, cmdArgs []string, wallTime, cpuLimit, memKB, procs, uid int, jailCg *cgroupv2.Jail, outputCap int) (stdout, stderr string, oomKilled, cpuKilled bool, cpuTimeUs int64, err error) {
-	appDir := filepath.Join(jailDir, "app")
-	if err := os.MkdirAll(appDir, 0755); err != nil {
-		return "", "", false, false, 0, fmt.Errorf("app dir: %w", err)
-	}
-
-	args, err := nsjailArgs(appDir, wallTime, cpuLimit, memKB, procs, uid, jailCg)
-	if err != nil {
-		return "", "", false, false, 0, fmt.Errorf("start: %w", err)
-	}
-	args = append(args, cmdArgs...)
-
-	ctx, cancel := context.WithTimeout(ctx, time.Duration(wallTime)*time.Second)
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, "nsjail", args...)
-
-	stdoutPipe, err := cmd.StdoutPipe()
-	if err != nil {
-		return "", "", false, false, 0, fmt.Errorf("stdout pipe: %w", err)
-	}
-	stderrPipe, err := cmd.StderrPipe()
-	if err != nil {
-		return "", "", false, false, 0, fmt.Errorf("stderr pipe: %w", err)
-	}
-
-	// Baseline the cpu counters before Start: the cgroup usage is
-	// hierarchical and cumulative across the jail (build + tests), so this
-	// exec's cpu time is the post-Wait delta. The rusage snapshot is the
-	// fallback measurement when the cpu controller is unavailable.
-	baselineUS, baselineOK, rusageBefore := cpuBaseline(jailCg)
-	// Same for the OOM counter: classification must be "oom_kill increased
-	// since this exec", not "any oom_kill ever" (a leftover leaf from an
-	// earlier exec of this jail carries its own kill count).
-	oomBase := oomBaseline(jailCg)
-
-	if err := cmd.Start(); err != nil {
-		return "", "", false, false, 0, fmt.Errorf("start: %w", err)
-	}
-
-	// One poll goroutine covers both cgroup checks while the job runs:
-	// an OOM kill in a leaf reads as memory_exceeded, and cpu usage at or
-	// above the limit kills the process once and reads as cpu_time_exceeded.
-	// Both would otherwise be indistinguishable from a wall-time SIGKILL.
-	var (
-		oomMu     sync.Mutex
-		isOOMKill bool
-		cpuMu     sync.Mutex
-		isCPUKill bool
-	)
-	if jailCg != nil {
-		stopPoller := startJailPoller(cmd, jailCg, oomBase, int64(cpuLimit)*1e6, baselineUS, baselineOK, &oomMu, &cpuMu, &isOOMKill, &isCPUKill)
-		defer stopPoller()
-	}
-
-	// Read stdout/stderr concurrently to avoid pipe buffer deadlocks
-	outChan := make(chan string, 1)
-	errChan := make(chan string, 1)
-	go func() {
-		defer func() { _ = recover() }()
-		outChan <- readCapped(stdoutPipe, outputCap)
-	}()
-	go func() {
-		defer func() { _ = recover() }()
-		errChan <- readCapped(stderrPipe, outputCap)
-	}()
-
-	stdout = <-outChan
-	stderr = <-errChan
-
-	err = cmd.Wait()
-	oomMu.Lock()
-	oomKilled = isOOMKill
-	oomMu.Unlock()
-	// Final OOM check after Wait: an OOM kill landing after the last poller
-	// tick is already recorded in the leaf's memory.events.
-	if !oomKilled && jailCg != nil {
-		if since, e := jailCg.OOMKillsSince(oomBase); e == nil && since {
-			oomKilled = true
-		}
-	}
-	cpuMu.Lock()
-	cpuKilled = isCPUKill
-	cpuMu.Unlock()
-
-	var rusageAfter syscall.Rusage
-	if err := syscall.Getrusage(syscall.RUSAGE_CHILDREN, &rusageAfter); err != nil {
-		log.Printf("[runner] getrusage after exec: %v", err)
-	}
-	cpuTimeUs = cpuTimeUS(jailCg, baselineUS, baselineOK, &rusageBefore, &rusageAfter)
-
-	if ctx.Err() == context.DeadlineExceeded {
-		stderr += "\n... [build timed out]"
-		log.Printf("[runner] build timed out (wall=%ds) stdout=%d stderr=%d", wallTime, len(stdout), len(stderr))
-		return stdout, stderr, oomKilled, cpuKilled, cpuTimeUs, fmt.Errorf("build timed out")
-	}
-	if err != nil {
-		log.Printf("[runner] nsjail build error: %v | stderr: %s", err, stderr)
-		return stdout, stderr, oomKilled, cpuKilled, cpuTimeUs, err
-	}
-	return stdout, stderr, oomKilled, cpuKilled, cpuTimeUs, nil
-}
-
 // startJailPoller starts the merged OOM/CPU poll goroutine for one exec and
 // returns a stop function (close the stop channel, then drain the done
 // channel). The 50ms interval bounds cpu-kill latency. The cpu kill fires
@@ -641,7 +538,7 @@ func cpuTimeUS(jailCg *cgroupv2.Jail, baselineUS int64, baselineOK bool, before,
 
 func timevalUS(tv syscall.Timeval) int64 { return tv.Sec*1000000 + tv.Usec }
 
-func runSingleTest(ctx context.Context, tc models.TestCase, lc config.LanguageConfig, jailDir string, runOpts *models.StageConfig, uid int, jailCg *cgroupv2.Jail, outputCap int) models.TestResult {
+func runSingleTest(ctx context.Context, tc models.TestCase, lc config.LanguageConfig, j *jail, runOpts *models.StageConfig, outputCap int) models.TestResult {
 	start := time.Now()
 
 	if ctx.Err() != nil {
@@ -667,17 +564,12 @@ func runSingleTest(ctx context.Context, tc models.TestCase, lc config.LanguageCo
 		cpuLimit = *runOpts.Limits.CpuTimeS
 	}
 
-	appDir := filepath.Join(jailDir, "app")
-	args, err := nsjailArgs(appDir, wallTime, cpuLimit, memKB, procs, uid, jailCg)
-	if err != nil {
-		return failResult("internal_error", err.Error(), start)
-	}
 	// Measure this test's peak in isolation: memory.peak accumulates across
 	// build + tests, so reset it before each exec. The cpu.stat usage is
-	// handled the same way via a pre-Start baseline (the reset write is
-	// best-effort; the delta is exact either way).
-	if jailCg != nil {
-		if err := jailCg.ResetPeak(); err != nil {
+	// handled the same way via a pre-Start baseline inside execJail (the
+	// reset write is best-effort; the delta is exact either way).
+	if j.cg != nil {
+		if err := j.cg.ResetPeak(); err != nil {
 			log.Printf("[runner] resetting cgroup peak: %v", err)
 		}
 	}
@@ -685,103 +577,33 @@ func runSingleTest(ctx context.Context, tc models.TestCase, lc config.LanguageCo
 	if runOpts != nil && len(runOpts.Flags) > 0 {
 		runFlags = runOpts.Flags
 	}
-	args = append(args, expandFlags(lc.RunCmd, runFlags)...)
+	cmdArgs := expandFlags(lc.RunCmd, runFlags)
 
-	// Go context deadline matches nsjail's time_limit so both fire together
+	// Go context deadline matches nsjail's time_limit so both fire together;
+	// execJail wraps it again with the same deadline internally.
 	ctx, cancel := context.WithTimeout(ctx, time.Duration(wallTime)*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "nsjail", args...)
-
-	if tc.Stdin != "" {
-		cmd.Stdin = bytes.NewBufferString(tc.Stdin)
-	}
-
-	stdoutPipe, err := cmd.StdoutPipe()
-	if err != nil {
-		return failResult("internal_error", err.Error(), start)
-	}
-	stderrPipe, err := cmd.StderrPipe()
-	if err != nil {
-		return failResult("internal_error", err.Error(), start)
-	}
-
-	// Baseline the cpu counters before Start (same contract as execInJail):
-	// the jail's cpu.stat is cumulative, so this exec's cpu time is the
-	// post-Wait delta.
-	baselineUS, baselineOK, rusageBefore := cpuBaseline(jailCg)
-	// OOM baseline: a kill in a leftover leaf from an earlier exec of this
-	// jail must not count against THIS exec.
-	oomBase := oomBaseline(jailCg)
-
-	if err := cmd.Start(); err != nil {
-		log.Printf("[runner] nsjail start failed: %v", err)
-		return failResult("internal_error", err.Error(), start)
-	}
-
-	// Merged OOM/CPU poller: a cgroup OOM kill is memory_exceeded, cpu usage
-	// at or above the limit kills the process once and is cpu_time_exceeded.
-	// Both are SIGKILL-shaped without these checks.
-	var (
-		oomMu     sync.Mutex
-		isOOMKill bool
-		cpuMu     sync.Mutex
-		isCPUKill bool
-	)
-	if jailCg != nil {
-		stopPoller := startJailPoller(cmd, jailCg, oomBase, int64(cpuLimit)*1e6, baselineUS, baselineOK, &oomMu, &cpuMu, &isOOMKill, &isCPUKill)
-		defer stopPoller()
-	}
-
-	outChan := make(chan string)
-	errChan := make(chan string)
-
-	go func() {
-		defer func() { _ = recover() }()
-		outChan <- readCapped(stdoutPipe, outputCap)
-	}()
-	go func() {
-		defer func() { _ = recover() }()
-		errChan <- readCapped(stderrPipe, outputCap)
-	}()
-
-	stdoutRaw := <-outChan
-	stderrRaw := <-errChan
-
-	err = cmd.Wait()
+	outcome := execJail(ctx, j, cmdArgs, execLimits{wallTime: wallTime, cpuLimit: cpuLimit, memKB: memKB, procs: procs}, tc.Stdin, outputCap)
 	duration := int(time.Since(start).Milliseconds())
 
-	oomMu.Lock()
-	oomKilled := isOOMKill
-	oomMu.Unlock()
-	// Final OOM check after Wait: a kill landing after the last poller tick
-	// is already in the leaf's memory.events.
-	if !oomKilled && jailCg != nil {
-		if since, e := jailCg.OOMKillsSince(oomBase); e == nil && since {
-			oomKilled = true
-		}
-	}
-	cpuMu.Lock()
-	cpuKilled := isCPUKill
-	cpuMu.Unlock()
-
-	var rusageAfter syscall.Rusage
-	if err := syscall.Getrusage(syscall.RUSAGE_CHILDREN, &rusageAfter); err != nil {
-		log.Printf("[runner] getrusage after exec: %v", err)
-	}
-	cpuUs := cpuTimeUS(jailCg, baselineUS, baselineOK, &rusageBefore, &rusageAfter)
-
 	log.Printf("[runner] nsjail exited: err=%v | stdout_len=%d stderr_len=%d | lang=%s",
-		err, len(stdoutRaw), len(stderrRaw), lc.ID)
+		outcome.Err, len(outcome.Stdout), len(outcome.Stderr), lc.ID)
 
-	// Check for nsjail infrastructure failures first (nsjail itself crashed,
-	// not the user code). Treat these as internal errors.
-	if err != nil && isInfraError(err) {
-		log.Printf("[runner] nsjail infra error: %v | stderr: %s", err, stderrRaw)
+	// Infrastructure failures (typed: nsjail could not start, or ran its
+	// internal-failure exit) are internal errors, checked before any user-code
+	// classification. Pre-start failures surface the error text in Stderr,
+	// exactly as failResult did; post-start infra keeps the captured output.
+	if outcome.Infra {
+		stderr := outcome.Stderr
+		if stderr == "" && outcome.Err != nil {
+			stderr = outcome.Err.Error()
+		}
+		log.Printf("[runner] nsjail infra error: %v | stderr: %s", outcome.Err, stderr)
 		return models.TestResult{
 			Status:       "internal_error",
-			Stdout:       stdoutRaw,
-			Stderr:       stderrRaw,
+			Stdout:       outcome.Stdout,
+			Stderr:       stderr,
 			DurationMs:   duration,
 			MemoryPeakKB: 0,
 		}
@@ -790,27 +612,26 @@ func runSingleTest(ctx context.Context, tc models.TestCase, lc config.LanguageCo
 	// Per-jail peak from the cgroup when active (includes the nsjail leaf's
 	// usage); global RUSAGE_CHILDREN fallback otherwise.
 	memPeak := 0
-	if jailCg != nil {
-		memPeak = jailCg.PeakKB()
+	if j.cg != nil {
+		memPeak = j.cg.PeakKB()
 	} else {
-		memPeak = readMemoryPeakKB(cmd.ProcessState)
+		memPeak = readMemoryPeakKB(outcome.ps)
 	}
-	status := computeTestStatus(ctx, err, stdoutRaw, tc.ExpectedStdout, cmd.ProcessState, oomKilled, cpuOutcome{
+	status := computeTestStatus(ctx, outcome.Err, outcome.Stdout, tc.ExpectedStdout, outcome.ps, outcome.OOMKilled, cpuOutcome{
 		limitUS: int64(cpuLimit) * 1e6,
-		timeUS:  cpuUs,
-		killed:  cpuKilled,
+		timeUS:  outcome.CPUTimeUS,
+		killed:  outcome.CPUKilled,
 	})
 
-	exitCode, termSig := exitFacts(cmd.ProcessState)
 	return models.TestResult{
 		Status:            status,
-		Stdout:            stdoutRaw,
-		Stderr:            stderrRaw,
+		Stdout:            outcome.Stdout,
+		Stderr:            outcome.Stderr,
 		DurationMs:        duration,
-		CpuTimeMs:         int(cpuUs / 1000),
+		CpuTimeMs:         int(outcome.CPUTimeUS / 1000),
 		MemoryPeakKB:      memPeak,
-		ExitCode:          exitCode,
-		TerminationSignal: termSig,
+		ExitCode:          outcome.ExitCode,
+		TerminationSignal: outcome.TermSignal,
 	}
 }
 

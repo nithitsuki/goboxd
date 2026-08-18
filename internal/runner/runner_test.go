@@ -1503,12 +1503,12 @@ func TestBuildCacheFirstRun(t *testing.T) {
 	}
 
 	goConfig := config.LanguageConfig{
-		ID:             "go",
-		Name:           "Go",
-		SourceFilename: "main.go",
+		ID:               "go",
+		Name:             "Go",
+		SourceFilename:   "main.go",
 		ArtifactFilename: "main",
-		BuildCmd:       []string{"/usr/bin/go", "build", "-p", "4", "-o", "main", "main.go"},
-		RunCmd:         []string{"./main"},
+		BuildCmd:         []string{"/usr/bin/go", "build", "-p", "4", "-o", "main", "main.go"},
+		RunCmd:           []string{"./main"},
 		DefaultLimits: config.Limits{
 			WallTimeS:    15,
 			MemoryKB:     4194304,
@@ -1709,6 +1709,146 @@ func TestOutputCapCustom(t *testing.T) {
 	}
 	if len(res.Stdout) != cap+len(truncMarker) {
 		t.Errorf("stdout length = %d, want %d (cap + marker)", len(res.Stdout), cap+len(truncMarker))
+	}
+}
+
+// TestExecOutcomeInfraTyped locks the exec primitive's infra classification
+// contract for the missing-binary case: a jail whose commanded binary does not
+// exist inside the jail must yield Err != nil with exit code 255 — nsjail's
+// propagated exit code for both an unexecutable command AND a user program
+// that exits 255. The two are byte-indistinguishable (probed in this repo:
+// "MISSING BIN: err=exit status 255 isInfra=false" vs "USER 255: err=exit
+// status 255 isInfra=false"), so Infra MUST stay false: flagging 255 as infra
+// turns legitimate runtime/build errors (compilers and runtimes commonly exit
+// 255) into internal_error. The Infra field is typed — no caller matches
+// "pipe:"/"start:" text — and is set only for nsjailArgs/pipe/Start failures.
+func TestExecOutcomeInfraTyped(t *testing.T) {
+	if _, err := exec.LookPath("nsjail"); err != nil {
+		t.Skip("nsjail not found in PATH, skipping runner tests (run inside docker-compose)")
+	}
+	if os.Geteuid() != 0 {
+		t.Skip("requires root to run nsjail")
+	}
+
+	py3Config := config.LanguageConfig{
+		ID:             "py3",
+		Name:           "Python 3",
+		RunCmd:         []string{"/usr/bin/python3", "main.py"},
+		SourceFilename: "main.py",
+		RunLimits: config.Limits{
+			WallTimeS:    5,
+			MemoryKB:     102400,
+			MaxProcesses: 100,
+		},
+	}
+	req := models.RunRequest{Language: "py3", Source: "print('hi')"}
+	j, err := newJail(req, py3Config, "main.py")
+	if err != nil {
+		t.Fatalf("newJail: %v", err)
+	}
+	defer j.teardown()
+
+	outcome := execJail(context.Background(), j, []string{"/nonexistent", "main.py"},
+		execLimits{wallTime: 5, cpuLimit: 0, memKB: 102400, procs: 100}, "", maxOutputBytes)
+	if outcome.Err == nil {
+		t.Fatal("Err = nil, want non-nil for a missing binary inside the jail")
+	}
+	// The missing binary surfaces as nsjail's propagated exit code 255.
+	if outcome.ExitCode != 255 || outcome.TermSignal != 0 {
+		t.Errorf("exit facts = (%d, %d), want (255, 0) for a missing binary inside the jail", outcome.ExitCode, outcome.TermSignal)
+	}
+	// 255 is byte-indistinguishable from a user program exiting 255, so it
+	// must NOT be classified as infra (flagging it would turn user exit 255,
+	// compiler failures, and runtime errors into internal_error).
+	if outcome.Infra {
+		t.Errorf("Infra = true for exit 255, want false: a missing binary is indistinguishable from a user exit 255")
+	}
+}
+
+// TestExecOutcomeFields locks the exec primitive's outcome facts for a normal
+// run: clean exit (0, 0), no kill flags, and a positive cpu measurement.
+func TestExecOutcomeFields(t *testing.T) {
+	if _, err := exec.LookPath("nsjail"); err != nil {
+		t.Skip("nsjail not found in PATH, skipping runner tests (run inside docker-compose)")
+	}
+	if os.Geteuid() != 0 {
+		t.Skip("requires root to run nsjail")
+	}
+
+	py3Config := config.LanguageConfig{
+		ID:             "py3",
+		Name:           "Python 3",
+		RunCmd:         []string{"/usr/bin/python3", "main.py"},
+		SourceFilename: "main.py",
+		RunLimits: config.Limits{
+			WallTimeS:    5,
+			MemoryKB:     102400,
+			MaxProcesses: 100,
+		},
+	}
+	req := models.RunRequest{Language: "py3", Source: "print('fields')"}
+	j, err := newJail(req, py3Config, "main.py")
+	if err != nil {
+		t.Fatalf("newJail: %v", err)
+	}
+	defer j.teardown()
+
+	outcome := execJail(context.Background(), j, []string{"/usr/bin/python3", "main.py"},
+		execLimits{wallTime: 5, cpuLimit: 0, memKB: 102400, procs: 100}, "", maxOutputBytes)
+	if outcome.Err != nil {
+		t.Fatalf("Err = %v, want nil", outcome.Err)
+	}
+	if outcome.ExitCode != 0 || outcome.TermSignal != 0 {
+		t.Errorf("exit facts = (%d, %d), want (0, 0)", outcome.ExitCode, outcome.TermSignal)
+	}
+	if outcome.OOMKilled {
+		t.Error("OOMKilled = true, want false")
+	}
+	if outcome.CPUKilled {
+		t.Error("CPUKilled = true, want false")
+	}
+	if outcome.CPUTimeUS <= 0 {
+		t.Errorf("CPUTimeUS = %d, want > 0 (python startup burns cpu)", outcome.CPUTimeUS)
+	}
+}
+
+// TestExecOutcomeInfraStartFailure pins the positive Infra classification:
+// a cmd.Start failure (nsjail not resolvable) yields Infra=true with a
+// non-nil Err. This distinguishes the typed Infra flag from the old
+// text-matching classification, which TestExecOutcomeInfraTyped cannot.
+func TestExecOutcomeInfraStartFailure(t *testing.T) {
+	if os.Geteuid() != 0 {
+		t.Skip("requires root to run nsjail")
+	}
+
+	py3Config := config.LanguageConfig{
+		ID:             "py3",
+		Name:           "Python 3",
+		RunCmd:         []string{"/usr/bin/python3", "main.py"},
+		SourceFilename: "main.py",
+		RunLimits: config.Limits{
+			WallTimeS:    5,
+			MemoryKB:     102400,
+			MaxProcesses: 100,
+		},
+	}
+	req := models.RunRequest{Language: "py3", Source: "print('x')"}
+	j, err := newJail(req, py3Config, "main.py")
+	if err != nil {
+		t.Fatalf("newJail: %v", err)
+	}
+	defer j.teardown()
+
+	// Empty PATH makes exec.CommandContext fail to resolve "nsjail" at
+	// Start time, which is an infrastructure failure, not user code.
+	t.Setenv("PATH", "")
+	outcome := execJail(context.Background(), j, []string{"/usr/bin/python3", "main.py"},
+		execLimits{wallTime: 5, cpuLimit: 0, memKB: 102400, procs: 100}, "", maxOutputBytes)
+	if !outcome.Infra {
+		t.Errorf("Infra = false, want true (cmd.Start failed: %v)", outcome.Err)
+	}
+	if outcome.Err == nil {
+		t.Error("Err = nil, want non-nil")
 	}
 }
 
