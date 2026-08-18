@@ -1,13 +1,14 @@
 #!/bin/bash
 set -e
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/helpers.sh"
-
+# Ensure apt package lists are present. The /var/lib/apt/lists cache mount
+# can be cold after a Dockerfile change; a warm mount skips the network update.
+[ -n "$(ls -A /var/lib/apt/lists 2>/dev/null)" ] || apt-get update
 echo "Installing Haskell (GHC)..."
-pkg_install ghc
+apt-get install -y --no-install-recommends ghc=9.0.2-4
 
-if command -v ghc &>/dev/null; then
+# Verify Haskell is working
+if command -v ghc &> /dev/null; then
     echo "Haskell installation verified successfully."
     ghc --version
 else

@@ -1,17 +1,19 @@
 #!/bin/bash
-set -e
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/helpers.sh"
+set -e 
 
-if ! command -v gcc &>/dev/null; then
+# Ensure apt package lists are present. The /var/lib/apt/lists cache mount
+# can be cold after a Dockerfile change; a warm mount skips the network update.
+[ -n "$(ls -A /var/lib/apt/lists 2>/dev/null)" ] || apt-get update
+if ! command -v /usr/bin/gcc &> /dev/null; then
     echo "GCC is not installed. Installing GCC..."
-    pkg_install gcc
+    apt-get install -y gcc=4:12.2.0-3
 fi
 
 TEMP_C_FILE=$(mktemp /tmp/test_c_program.XXXX.c)
 cat <<EOF > "$TEMP_C_FILE"
 #include <stdio.h>
+
 int main() {
     printf("C compiler is working correctly\\n");
     return 0;
@@ -19,7 +21,7 @@ int main() {
 EOF
 
 TEMP_EXEC_FILE=$(mktemp /tmp/test_c_program.XXXX)
-gcc "$TEMP_C_FILE" -o "$TEMP_EXEC_FILE"
+/usr/bin/gcc "$TEMP_C_FILE" -o "$TEMP_EXEC_FILE"
 
 "$TEMP_EXEC_FILE"
 if [ $? -eq 0 ]; then

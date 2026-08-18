@@ -1,12 +1,13 @@
 #!/bin/bash
-set -e
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/helpers.sh"
+set -e 
 
-if ! command -v g++ &>/dev/null; then
-    echo "g++ is not installed. Installing g++..."
-    pkg_install g++
+# Ensure apt package lists are present. The /var/lib/apt/lists cache mount
+# can be cold after a Dockerfile change; a warm mount skips the network update.
+[ -n "$(ls -A /var/lib/apt/lists 2>/dev/null)" ] || apt-get update
+if ! command -v /usr/bin/g++ &> /dev/null; then
+    echo "g++ is not installed. Installing g++ using apt-get..."
+    apt-get install -y g++=4:12.2.0-3
 fi
 
 temp_file=$(mktemp /tmp/test_cpp.XXXXXX.cpp)
@@ -19,7 +20,7 @@ int main() {
 EOF
 
 output_file=$(mktemp /tmp/test_cpp.XXXXXX.out)
-g++ "$temp_file" -o "$output_file"
+/usr/bin/g++ "$temp_file" -o "$output_file"
 
 if "$output_file"; then
     echo "C++ installation verified successfully."

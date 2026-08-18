@@ -1,13 +1,14 @@
 #!/bin/bash
 set -e
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/helpers.sh"
-
+# Ensure apt package lists are present. The /var/lib/apt/lists cache mount
+# can be cold after a Dockerfile change; a warm mount skips the network update.
+[ -n "$(ls -A /var/lib/apt/lists 2>/dev/null)" ] || apt-get update
 echo "Installing Verilog (Icarus)..."
-pkg_install iverilog
+apt-get install -y --no-install-recommends iverilog=11.0-1.1+b1
 
-if command -v iverilog &>/dev/null; then
+# Verify Icarus Verilog is working
+if command -v iverilog &> /dev/null; then
     echo "Verilog installation verified successfully."
     iverilog -V 2>&1 | head -1
 else

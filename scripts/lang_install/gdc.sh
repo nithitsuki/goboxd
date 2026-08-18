@@ -1,21 +1,14 @@
 #!/bin/bash
 set -e
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/helpers.sh"
-
+# Ensure apt package lists are present. The /var/lib/apt/lists cache mount
+# can be cold after a Dockerfile change; a warm mount skips the network update.
+[ -n "$(ls -A /var/lib/apt/lists 2>/dev/null)" ] || apt-get update
 echo "Installing D / GDC..."
-# gdc is the GCC-based D compiler. On arch it may not be available;
-# install ldc (LLVM-based D compiler) as a fallback.
-if ! pkg_install gdc 2>/dev/null; then
-    echo "gdc not available, installing ldc as fallback..."
-    pkg_install ldc
-    if command -v ldc2 &>/dev/null; then
-        ln -sf "$(which ldc2)" /usr/local/bin/gdc
-    fi
-fi
+apt-get install -y --no-install-recommends gdc=4:12.2.0-3
 
-if command -v gdc &>/dev/null; then
+# Verify GDC is working
+if command -v gdc &> /dev/null; then
     echo "GDC installation verified successfully."
     gdc --version | head -1
 else

@@ -1,15 +1,16 @@
 #!/bin/bash
 set -e
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/helpers.sh"
-
+# Ensure apt package lists are present. The /var/lib/apt/lists cache mount
+# can be cold after a Dockerfile change; a warm mount skips the network update.
+[ -n "$(ls -A /var/lib/apt/lists 2>/dev/null)" ] || apt-get update
 echo "Installing Free Pascal..."
-pkg_install fpc
+apt-get install -y --no-install-recommends fp-compiler=3.2.2+dfsg-20 fp-units-net=3.2.2+dfsg-20
 
-if command -v fpc &>/dev/null; then
+if command -v fpc &> /dev/null; then
     echo "Free Pascal installation verified successfully."
     fpc -iV
+    # Smoke test: compile and run.
     mkdir -p /tmp/pascaltest
     cat > /tmp/pascaltest/solution.pas <<'PAS'
 program P;
