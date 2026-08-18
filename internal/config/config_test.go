@@ -8,6 +8,11 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// testInitialRegistry is the TestMain snapshot of the real YAML registry.
+// Tests that swap the registry (reload tests) restore this in a defer so
+// shuffle-safe ordering cannot poison later tests.
+var testInitialRegistry map[string]LanguageConfig
+
 func TestMain(m *testing.M) {
 	// Load the YAML config from the project root
 	pwd, _ := os.Getwd()
@@ -24,26 +29,28 @@ func TestMain(m *testing.M) {
 	if err := LoadRegistry(); err != nil {
 		panic("failed to load YAML registry: " + err.Error())
 	}
+	// Snapshot for tests that swap the registry (reload tests restore it).
+	testInitialRegistry = Registry()
 	os.Exit(m.Run())
 }
 
-func TestDefaultRegistryHasExpectedLanguages(t *testing.T) {
+func TestRegistryHasExpectedLanguages(t *testing.T) {
 	expected := []string{"py3", "c", "cpp", "rust", "go"}
 	for _, id := range expected {
-		if _, ok := DefaultRegistry[id]; !ok {
-			t.Errorf("DefaultRegistry missing expected language: %s", id)
+		if _, ok := Registry()[id]; !ok {
+			t.Errorf("Registry missing expected language: %s", id)
 		}
 	}
 }
 
-func TestDefaultRegistryNoExtras(t *testing.T) {
-	if len(DefaultRegistry) < 3 {
-		t.Errorf("DefaultRegistry has only %d entries, expected at least 3", len(DefaultRegistry))
+func TestRegistryNoExtras(t *testing.T) {
+	if len(Registry()) < 3 {
+		t.Errorf("Registry has only %d entries, expected at least 3", len(Registry()))
 	}
 }
 
 func TestPy3Config(t *testing.T) {
-	lc, ok := DefaultRegistry["py3"]
+	lc, ok := Registry()["py3"]
 	if !ok {
 		t.Fatal("py3 not in registry")
 	}
@@ -65,7 +72,7 @@ func TestPy3Config(t *testing.T) {
 }
 
 func TestCConfig(t *testing.T) {
-	lc, ok := DefaultRegistry["c"]
+	lc, ok := Registry()["c"]
 	if !ok {
 		t.Fatal("c not in registry")
 	}
@@ -87,7 +94,7 @@ func TestCConfig(t *testing.T) {
 }
 
 func TestCppConfig(t *testing.T) {
-	lc, ok := DefaultRegistry["cpp"]
+	lc, ok := Registry()["cpp"]
 	if !ok {
 		t.Fatal("cpp not in registry")
 	}
@@ -103,14 +110,14 @@ func TestCppConfig(t *testing.T) {
 }
 
 func TestInterpretedHasNoBuildCmd(t *testing.T) {
-	lc := DefaultRegistry["py3"]
+	lc := Registry()["py3"]
 	if len(lc.BuildCmd) > 0 {
 		t.Error("py3 should not have a BuildCmd (interpreted language)")
 	}
 }
 
 func TestAllLimitsPositive(t *testing.T) {
-	for id, lc := range DefaultRegistry {
+	for id, lc := range Registry() {
 		if lc.DefaultLimits.WallTimeS <= 0 {
 			t.Errorf("%s WallTimeS = %d, want positive", id, lc.DefaultLimits.WallTimeS)
 		}
@@ -124,53 +131,57 @@ func TestAllLimitsPositive(t *testing.T) {
 }
 
 func TestLoadRegistryFiltersByEnv(t *testing.T) {
+	defer SetRegistryForTest(testInitialRegistry)
 	t.Setenv("GOBOXD_LANGS", "py3,c,doesnotexist")
 	if err := LoadRegistry(); err != nil {
 		t.Fatalf("LoadRegistry: %v", err)
 	}
 	for _, id := range []string{"py3", "c"} {
-		if _, ok := DefaultRegistry[id]; !ok {
+		if _, ok := Registry()[id]; !ok {
 			t.Errorf("GOBOXD_LANGS=py3,c: expected %q in registry", id)
 		}
 	}
-	if len(DefaultRegistry) != 2 {
-		t.Errorf("GOBOXD_LANGS=py3,c: got %d languages, want 2", len(DefaultRegistry))
+	if len(Registry()) != 2 {
+		t.Errorf("GOBOXD_LANGS=py3,c: got %d languages, want 2", len(Registry()))
 	}
 }
 
 func TestLoadRegistryAllWhenEnvUnset(t *testing.T) {
+	defer SetRegistryForTest(testInitialRegistry)
 	t.Setenv("GOBOXD_LANGS", "")
 	if err := LoadRegistry(); err != nil {
 		t.Fatalf("LoadRegistry: %v", err)
 	}
-	if len(DefaultRegistry) < 28 {
-		t.Errorf("no filter: got %d languages, want >= 28", len(DefaultRegistry))
+	if len(Registry()) < 28 {
+		t.Errorf("no filter: got %d languages, want >= 28", len(Registry()))
 	}
 }
 
 func TestLoadRegistryAllKeyword(t *testing.T) {
+	defer SetRegistryForTest(testInitialRegistry)
 	t.Setenv("GOBOXD_LANGS", "all")
 	if err := LoadRegistry(); err != nil {
 		t.Fatalf("LoadRegistry: %v", err)
 	}
-	if len(DefaultRegistry) < 28 {
-		t.Errorf("GOBOXD_LANGS=all: got %d languages, want >= 28", len(DefaultRegistry))
+	if len(Registry()) < 28 {
+		t.Errorf("GOBOXD_LANGS=all: got %d languages, want >= 28", len(Registry()))
 	}
 }
 
 func TestLoadRegistryExcludesByEnv(t *testing.T) {
+	defer SetRegistryForTest(testInitialRegistry)
 	t.Setenv("GOBOXD_LANGS", "")
 	t.Setenv("GOBOXD_EXCLUDE_LANGS", "csharp,elixir")
 	if err := LoadRegistry(); err != nil {
 		t.Fatalf("LoadRegistry: %v", err)
 	}
-	if _, ok := DefaultRegistry["csharp"]; ok {
+	if _, ok := Registry()["csharp"]; ok {
 		t.Error("GOBOXD_EXCLUDE_LANGS=csharp,elixir: csharp should be excluded")
 	}
-	if _, ok := DefaultRegistry["elixir"]; ok {
+	if _, ok := Registry()["elixir"]; ok {
 		t.Error("GOBOXD_EXCLUDE_LANGS=csharp,elixir: elixir should be excluded")
 	}
-	if _, ok := DefaultRegistry["py3"]; !ok {
+	if _, ok := Registry()["py3"]; !ok {
 		t.Error("GOBOXD_EXCLUDE_LANGS must not remove py3")
 	}
 }
@@ -197,10 +208,11 @@ func TestSmokeCmdParsedFromYAML(t *testing.T) {
 	orig := RegistryPath
 	RegistryPath = tmp
 	defer func() { RegistryPath = orig }()
+	defer SetRegistryForTest(testInitialRegistry)
 	if err := LoadRegistry(); err != nil {
 		t.Fatalf("LoadRegistry: %v", err)
 	}
-	lc, ok := DefaultRegistry["fake"]
+	lc, ok := Registry()["fake"]
 	if !ok {
 		t.Fatal("fake language not loaded")
 	}
@@ -213,7 +225,7 @@ func TestSmokeCmdParsedFromYAML(t *testing.T) {
 // Java: javac needs the public class name to match the file name, so the
 // registry pins Main.java regardless of the client's filename.
 func TestJavaFilenameStrategyParsed(t *testing.T) {
-	lc, ok := DefaultRegistry["java"]
+	lc, ok := Registry()["java"]
 	if !ok {
 		t.Skip("java not in registry")
 	}
@@ -257,7 +269,7 @@ func TestCeilingsParsedFromYAML(t *testing.T) {
 	if err := LoadRegistry(); err != nil {
 		t.Fatalf("LoadRegistry: %v", err)
 	}
-	goLang, ok := DefaultRegistry["go"]
+	goLang, ok := Registry()["go"]
 	if !ok {
 		t.Fatal("go not in registry")
 	}
@@ -279,7 +291,7 @@ func TestCeilingsParsedFromYAML(t *testing.T) {
 	}
 
 	// Ceiling absent: the resolved ceiling equals the stage limits.
-	py, ok := DefaultRegistry["py3"]
+	py, ok := Registry()["py3"]
 	if !ok {
 		t.Fatal("py3 not in registry")
 	}
@@ -291,7 +303,7 @@ func TestCeilingsParsedFromYAML(t *testing.T) {
 	}
 
 	// Elixir run ceiling: only memory raised.
-	ex, ok := DefaultRegistry["elixir"]
+	ex, ok := Registry()["elixir"]
 	if !ok {
 		t.Fatal("elixir not in registry")
 	}
@@ -300,5 +312,102 @@ func TestCeilingsParsedFromYAML(t *testing.T) {
 	}
 	if ex.RunCeiling.WallTimeS != ex.RunLimits.WallTimeS {
 		t.Errorf("elixir run ceiling wall_time_s = %d, want %d (fallback to max)", ex.RunCeiling.WallTimeS, ex.RunLimits.WallTimeS)
+	}
+}
+
+// TestReloadRegistry locks the hot-reload swap: a second LoadRegistry with a
+// different YAML file replaces the whole registry. The old languages vanish
+// and the new ones appear (the swap is atomic, so readers never see a mix).
+func TestReloadRegistry(t *testing.T) {
+	t.Setenv("GOBOXD_LANGS", "")
+	t.Setenv("GOBOXD_EXCLUDE_LANGS", "")
+
+	tmp := filepath.Join(t.TempDir(), "languages.yml")
+	writeYAML := func(t *testing.T, langID, name string) {
+		t.Helper()
+		content := `languages:
+  - id: ` + langID + `
+    name: ` + name + `
+    source_filename: ` + langID + `.fk
+    run:
+      cmd: /bin/echo
+      args: ["{{source}}"]
+      limits: {wall_time_s: 1, memory_kb: 1024, max_processes: 1}
+`
+		if err := os.WriteFile(tmp, []byte(content), 0644); err != nil {
+			t.Fatalf("writing yaml: %v", err)
+		}
+	}
+
+	orig := RegistryPath
+	RegistryPath = tmp
+	defer func() { RegistryPath = orig }()
+	defer SetRegistryForTest(testInitialRegistry)
+
+	writeYAML(t, "first", "First")
+	if err := LoadRegistry(); err != nil {
+		t.Fatalf("first LoadRegistry: %v", err)
+	}
+	if _, ok := Registry()["first"]; !ok {
+		t.Fatal("first language missing after initial load")
+	}
+
+	writeYAML(t, "second", "Second")
+	if err := LoadRegistry(); err != nil {
+		t.Fatalf("second LoadRegistry: %v", err)
+	}
+	reg := Registry()
+	if _, ok := reg["second"]; !ok {
+		t.Error("second language missing after reload")
+	}
+	if _, ok := reg["first"]; ok {
+		t.Error("first language still present after reload (stale snapshot)")
+	}
+}
+
+// TestReloadErrorKeepsOld locks the never-swap-on-failure rule: a failed
+// LoadRegistry (here: invalid YAML) must leave the previous registry active.
+func TestReloadErrorKeepsOld(t *testing.T) {
+	t.Setenv("GOBOXD_LANGS", "")
+	t.Setenv("GOBOXD_EXCLUDE_LANGS", "")
+
+	tmp := filepath.Join(t.TempDir(), "languages.yml")
+	good := `languages:
+  - id: good
+    name: Good
+    source_filename: good.fk
+    run:
+      cmd: /bin/echo
+      args: ["{{source}}"]
+      limits: {wall_time_s: 1, memory_kb: 1024, max_processes: 1}
+`
+	if err := os.WriteFile(tmp, []byte(good), 0644); err != nil {
+		t.Fatalf("writing yaml: %v", err)
+	}
+
+	orig := RegistryPath
+	RegistryPath = tmp
+	defer func() { RegistryPath = orig }()
+	defer SetRegistryForTest(testInitialRegistry)
+
+	if err := LoadRegistry(); err != nil {
+		t.Fatalf("initial LoadRegistry: %v", err)
+	}
+	if _, ok := Registry()["good"]; !ok {
+		t.Fatal("good language missing after initial load")
+	}
+
+	if err := os.WriteFile(tmp, []byte("languages: [this is: not valid yaml"), 0644); err != nil {
+		t.Fatalf("writing invalid yaml: %v", err)
+	}
+	if err := LoadRegistry(); err == nil {
+		t.Fatal("LoadRegistry with invalid YAML: expected error, got nil")
+	}
+	reg := Registry()
+	if _, ok := reg["good"]; !ok {
+		t.Error("failed reload dropped the previous registry")
+	}
+	if len(reg) != 1 {
+		t.Errorf("failed reload changed the registry: got %d languages, want 1", len(reg))
 	}
 }

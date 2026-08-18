@@ -1,7 +1,8 @@
 // Package config loads and exposes the language registry from a YAML
 // configuration file. Each language has a source filename, optional build
-// command, run command, and resource limits. The registry is populated once
-// at startup by LoadRegistry and is read-only thereafter.
+// command, run command, and resource limits. LoadRegistry builds the
+// registry at startup and swaps it atomically on SIGHUP reloads: readers
+// always see a complete snapshot, never a half-built map.
 //
 // Template variables ({{source}}, {{artifact}}, {{flags}}) are expanded in
 // command arguments at request time.
@@ -11,6 +12,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync/atomic"
 
 	"gopkg.in/yaml.v3"
 )
@@ -98,13 +100,41 @@ type LanguageConfig struct {
 	SourceFilenameStrategy string
 }
 
-// DefaultRegistry is populated at startup from YAML, with hardcoded fallback.
-var DefaultRegistry = map[string]LanguageConfig{}
+// registry holds the current language registry as an immutable snapshot.
+// LoadRegistry builds a fresh map and swaps it in with one atomic store;
+// readers take the pointer once and see a complete map. The map is never
+// mutated after Store.
+var registry atomic.Pointer[map[string]LanguageConfig]
+
+// Registry returns the current language registry. The returned map is a
+// snapshot of the moment of the call: a concurrent reload swaps the whole
+// map, so readers never see a partially updated registry. Do not modify the
+// returned map; it is shared with other readers.
+func Registry() map[string]LanguageConfig {
+	if m := registry.Load(); m != nil {
+		return *m
+	}
+	// LoadRegistry has not run yet (or failed at startup). Return an empty
+	// map so callers never dereference nil.
+	return map[string]LanguageConfig{}
+}
+
+// SetRegistryForTest replaces the registry snapshot. It exists only as a
+// test seam: tests pin the registry to a deterministic set without touching
+// the YAML file. Production code must use LoadRegistry. Do not call it from
+// non-test code.
+func SetRegistryForTest(m map[string]LanguageConfig) {
+	registry.Store(&m)
+}
 
 // RegistryPath is the path to the YAML config file. Override for testing.
 var RegistryPath = "config/languages.yml"
 
-// LoadRegistry reads the YAML config and populates DefaultRegistry.
+// LoadRegistry reads the YAML config and swaps the registry atomically.
+// The new map is built and validated in full (parse, duplicate IDs,
+// GOBOXD_LANGS/GOBOXD_EXCLUDE_LANGS filters) before the swap. On any error
+// the function returns without touching the registry, so the previous
+// registry stays active for every reader.
 func LoadRegistry() error {
 	data, err := os.ReadFile(RegistryPath)
 	if err != nil {
@@ -120,7 +150,7 @@ func LoadRegistry() error {
 		return fmt.Errorf("no languages defined in %s", RegistryPath)
 	}
 
-	DefaultRegistry = make(map[string]LanguageConfig, len(cfg.Languages))
+	newRegistry := make(map[string]LanguageConfig, len(cfg.Languages))
 	for _, lang := range cfg.Languages {
 		if lang.ID == "" {
 			return fmt.Errorf("language with empty id in %s", RegistryPath)
@@ -166,10 +196,10 @@ func LoadRegistry() error {
 			lc.DefaultCeiling = lc.BuildCeiling
 		}
 
-		if _, exists := DefaultRegistry[lang.ID]; exists {
+		if _, exists := newRegistry[lang.ID]; exists {
 			return fmt.Errorf("duplicate language id %q in %s", lang.ID, RegistryPath)
 		}
-		DefaultRegistry[lang.ID] = lc
+		newRegistry[lang.ID] = lc
 	}
 
 	// GOBOXD_LANGS optionally restricts the registry to a comma-separated
@@ -183,9 +213,9 @@ func LoadRegistry() error {
 				keep[id] = true
 			}
 		}
-		for id := range DefaultRegistry {
+		for id := range newRegistry {
 			if !keep[id] {
-				delete(DefaultRegistry, id)
+				delete(newRegistry, id)
 			}
 		}
 	}
@@ -197,11 +227,12 @@ func LoadRegistry() error {
 	if exclude := os.Getenv("GOBOXD_EXCLUDE_LANGS"); exclude != "" {
 		for _, id := range strings.Split(exclude, ",") {
 			if id = strings.TrimSpace(id); id != "" {
-				delete(DefaultRegistry, id)
+				delete(newRegistry, id)
 			}
 		}
 	}
 
+	registry.Store(&newRegistry)
 	return nil
 }
 

@@ -222,7 +222,8 @@ func probeReadiness() readyState {
 		state.AllOK = false
 	}
 
-	for lid, lc := range config.DefaultRegistry {
+	reg := config.Registry()
+	for lid, lc := range reg {
 		var p *readyProbe
 		if len(lc.SmokeCmd) > 0 {
 			// Explicit smoke command from the YAML (languages whose build/run
@@ -314,8 +315,9 @@ func HandleInfo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Probe each language for its real version
-	langs := make([]map[string]interface{}, 0, len(config.DefaultRegistry))
-	for _, lc := range config.DefaultRegistry {
+	reg := config.Registry()
+	langs := make([]map[string]interface{}, 0, len(reg))
+	for _, lc := range reg {
 		ver := lc.Name
 		probeCmd := lc.RunCmd[0]
 		if len(lc.BuildCmd) > 0 {
@@ -456,7 +458,7 @@ func HandleRun(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Language lookup
-	lc, ok := config.DefaultRegistry[req.Language]
+	lc, ok := config.Registry()[req.Language]
 	if !ok {
 		writeError(w, "unknown_language", fmt.Sprintf("language '%s' is not in the registry", req.Language))
 		return

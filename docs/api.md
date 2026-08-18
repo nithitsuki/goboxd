@@ -339,3 +339,13 @@ GET /playground serves a browser-based code editor for interactive testing.
 It works only when the server embeds the playground web UI. Go `embed.FS`
 embeds the UI from `internal/api/playground-dist/`. The server redirects
 from `/playground` to `/playground/`.
+
+---
+
+## Registry reload
+
+The server reloads the language registry on SIGHUP. Operators edit the YAML
+file and send SIGHUP to add or disable languages mid-contest. The swap is
+atomic. Requests see the old or the new registry, never a partial one.
+Invalid YAML keeps the previous registry. The server logs the outcome and
+keeps serving.

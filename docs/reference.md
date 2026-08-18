@@ -149,8 +149,9 @@ TestcaseEntry is one testcase reference. The list endpoint returns this type.
 
 Package config loads the language registry from a YAML configuration file.
 Each language has a source filename, an optional build command, a run
-command, and resource limits. The service populates the registry once at
-startup with LoadRegistry. The registry is read-only after startup.
+command, and resource limits. The service loads the registry at startup
+with LoadRegistry. LoadRegistry swaps the registry atomically, so a reload
+never exposes a partial map. The registry is read-only after each swap.
 
 The service expands template variables in command arguments at request time.
 The variables are `{{source}}`, `{{artifact}}`, and `{{flags}}`.
@@ -158,11 +159,19 @@ The variables are `{{source}}`, `{{artifact}}`, and `{{flags}}`.
 ### Variables
 
 ```go
-var DefaultRegistry = map[string]LanguageConfig{}
+func Registry() map[string]LanguageConfig
 ```
 
-DefaultRegistry stores the language configuration. The service populates it
-at startup from YAML. It has a hardcoded fallback.
+Registry returns the current language registry snapshot. The returned map
+is immutable. Do not modify it. The accessor never returns nil. It returns
+an empty map when LoadRegistry has not run.
+
+```go
+func SetRegistryForTest(m map[string]LanguageConfig)
+```
+
+SetRegistryForTest replaces the registry snapshot. It exists only for
+tests. Production code must use LoadRegistry.
 
 ```go
 var RegistryPath = "config/languages.yml"
@@ -176,8 +185,10 @@ RegistryPath is the path to the YAML config file. Override it for testing.
 func LoadRegistry() error
 ```
 
-LoadRegistry reads the YAML config and populates DefaultRegistry. It returns
-an error when the file is missing or invalid.
+LoadRegistry reads the YAML config, applies the GOBOXD_LANGS and
+GOBOXD_EXCLUDE_LANGS filters, and swaps the registry snapshot. It returns
+an error when the file is missing or invalid. On error the previous
+registry stays active.
 
 ### Types
 

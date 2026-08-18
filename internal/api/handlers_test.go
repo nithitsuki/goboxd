@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -593,9 +594,9 @@ func TestSecurityHole2NoShellCommands(t *testing.T) {
 // YAML maxima up to the ceiling (200, P1-10), and interpreted languages
 // reject build limits (no build stage).
 func TestHandleRunLimitValidation(t *testing.T) {
-	c := config.DefaultRegistry["c"]
-	py := config.DefaultRegistry["py3"]
-	goLimits := config.DefaultRegistry["go"]
+	c := config.Registry()["c"]
+	py := config.Registry()["py3"]
+	goLimits := config.Registry()["go"]
 	if c.BuildLimits.MemoryKB == 0 || py.RunLimits.MemoryKB == 0 || py.RunLimits.CpuTimeS == 0 {
 		t.Fatal("test requires c build limits and py3 run limits (incl. cpu_time_s) in the registry")
 	}
@@ -947,11 +948,11 @@ func TestReadyzFullBreakdownOnSuccess(t *testing.T) {
 	// Pin the registry to one reachable binary so the probe succeeds
 	// deterministically in any environment (the real registry includes
 	// languages that may not be installed on the test host).
-	orig := config.DefaultRegistry
-	config.DefaultRegistry = map[string]config.LanguageConfig{
+	orig := config.Registry()
+	config.SetRegistryForTest(map[string]config.LanguageConfig{
 		"sh": {ID: "sh", RunCmd: []string{"/bin/sh"}},
-	}
-	defer func() { config.DefaultRegistry = orig }()
+	})
+	defer func() { config.SetRegistryForTest(orig) }()
 
 	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
 	w := httptest.NewRecorder()
@@ -982,12 +983,12 @@ func TestReadyzFullBreakdownOnSuccess(t *testing.T) {
 // TestProbeReadinessSmokeOverride locks the smoke-probe behavior: a language
 // with SmokeCmd set is probed with that command, not its run/build binary.
 func TestProbeReadinessSmokeOverride(t *testing.T) {
-	orig := config.DefaultRegistry
-	config.DefaultRegistry = map[string]config.LanguageConfig{
+	orig := config.Registry()
+	config.SetRegistryForTest(map[string]config.LanguageConfig{
 		"smoked": {ID: "smoked", RunCmd: []string{"/bin/false"}, SmokeCmd: []string{"/bin/echo", "smoke-version-42"}},
 		"plain":  {ID: "plain", RunCmd: []string{"/bin/echo"}},
-	}
-	defer func() { config.DefaultRegistry = orig }()
+	})
+	defer func() { config.SetRegistryForTest(orig) }()
 
 	state := probeReadiness()
 	smoked := state.Languages["smoked"]
@@ -1099,4 +1100,95 @@ func TestReadyzShuttingDown(t *testing.T) {
 	if hw.Code != http.StatusOK {
 		t.Errorf("healthz during shutdown = %d, want 200", hw.Code)
 	}
+}
+
+// TestConcurrentRegistryReadsAndReload exercises the atomic swap under
+// -race: readers (HandleRun lookup, HandleInfo map iteration) run while a
+// reloader goroutine swaps the registry repeatedly. Readers must see either
+// the old or the new snapshot, never a torn map, and the detector must stay
+// clean.
+func TestConcurrentRegistryReadsAndReload(t *testing.T) {
+	writeYAML := func(t *testing.T, path string, langIDs ...string) {
+		t.Helper()
+		var b strings.Builder
+		b.WriteString("languages:\n")
+		for _, id := range langIDs {
+			fmt.Fprintf(&b, `  - id: %s
+    name: %s
+    source_filename: %s.fk
+    run:
+      cmd: /bin/echo
+      args: ["{{source}}"]
+      limits: {wall_time_s: 1, memory_kb: 1024, max_processes: 1}
+`, id, id, id)
+		}
+		if err := os.WriteFile(path, []byte(b.String()), 0644); err != nil {
+			t.Errorf("writing yaml: %v", err)
+			return
+		}
+	}
+
+	tmp := filepath.Join(t.TempDir(), "languages.yml")
+	writeYAML(t, tmp, "alpha")
+
+	origPath := config.RegistryPath
+	config.RegistryPath = tmp
+	defer func() { config.RegistryPath = origPath }()
+	origReg := config.Registry()
+	defer func() { config.SetRegistryForTest(origReg) }()
+
+	stop := make(chan struct{})
+	var wg sync.WaitGroup
+
+	// Reloader: alternate the YAML between two language sets and swap.
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for i := 0; ; i++ {
+			select {
+			case <-stop:
+				return
+			default:
+			}
+			if i%2 == 0 {
+				writeYAML(t, tmp, "alpha", "beta")
+			} else {
+				writeYAML(t, tmp, "alpha")
+			}
+			if err := config.LoadRegistry(); err != nil {
+				t.Errorf("concurrent LoadRegistry: %v", err)
+				return
+			}
+		}
+	}()
+
+	// Readers: HandleRun does the registry lookup (unknown language 400s at
+	// the lookup, no execution), HandleInfo iterates the whole map.
+	for g := 0; g < 4; g++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				select {
+				case <-stop:
+					return
+				default:
+				}
+				runReq := httptest.NewRequest(http.MethodPost, "/run",
+					bytes.NewBufferString(`{"language":"zzz","source":"x","tests":[{"stdin":"","expected_stdout":""}]}`))
+				runW := httptest.NewRecorder()
+				HandleRun(runW, runReq)
+				_ = runW.Result().Body.Close()
+
+				infoReq := httptest.NewRequest(http.MethodGet, "/info", nil)
+				infoW := httptest.NewRecorder()
+				HandleInfo(infoW, infoReq)
+				_ = infoW.Result().Body.Close()
+			}
+		}()
+	}
+
+	time.Sleep(300 * time.Millisecond)
+	close(stop)
+	wg.Wait()
 }

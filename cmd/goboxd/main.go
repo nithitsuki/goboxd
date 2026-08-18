@@ -65,6 +65,22 @@ func main() {
 		serveErr <- srv.ListenAndServe()
 	}()
 
+	// SIGHUP reloads the language registry: operators add or disable
+	// languages mid-contest by editing the YAML and signalling. LoadRegistry
+	// swaps the registry atomically, so concurrent requests always see a
+	// complete snapshot. An invalid YAML keeps the previous registry active.
+	sighupCh := make(chan os.Signal, 1)
+	signal.Notify(sighupCh, syscall.SIGHUP)
+	go func() {
+		for range sighupCh {
+			if err := config.LoadRegistry(); err != nil {
+				log.Printf("registry reload failed, keeping previous registry: %v", err)
+				continue
+			}
+			log.Printf("registry reloaded: %d languages", len(config.Registry()))
+		}
+	}()
+
 	select {
 	case err := <-serveErr:
 		// A real listen/serve failure (e.g. port in use) stays fatal.
