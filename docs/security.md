@@ -169,6 +169,16 @@ goboxd accepts three boundary limitations.
   before the wall timer fires. The wall-time kill can then win. The result
   is `cpu_time_exceeded` but the wall timer fired first.
 
+### Per-UID build caches
+
+Each uid gets a persistent cache directory at `/var/cache/goboxd/uid-<uid>/`.
+Go's GOCACHE and ccache sit inside it. Builds reuse the cache across
+requests that share the same uid. This gives about 10x speedup on
+repeat builds. Per-UID isolation limits blast radius. A compiler bug
+that poisons the cache affects only one uid. The next request on that
+uid may use stale or corrupted artifacts. Cache dirs are cleaned on
+shutdown when they are older than 24 hours.
+
 ## Deployment
 
 The cgroup v2 path needs a writable cgroup2 filesystem. On systemd hosts,

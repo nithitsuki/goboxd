@@ -39,6 +39,9 @@ import (
 	"github.com/nithitsuki/goboxd/internal/uidpool"
 )
 
+// cacheBaseDir is the root directory for per-UID build caches.
+const cacheBaseDir = "/var/cache/goboxd"
+
 // expandFlags replaces {{flags}} in cmdArgs with the provided flags.
 // If no flags are given and {{flags}} is present, it is removed entirely.
 func expandFlags(cmdArgs []string, flags []string) []string {
@@ -80,6 +83,12 @@ func ExecuteRun(ctx context.Context, req models.RunRequest, lc config.LanguageCo
 		return buildRes, nil, fmt.Errorf("allocating jail uid: %w", err)
 	}
 	defer uidPool.Release(uid)
+
+	// Ensure per-UID cache directories exist and are chowned to the jail uid.
+	// Failure here is non-fatal: builds work without cache, just slower.
+	if err := ensureCacheDirs(uid); err != nil {
+		log.Printf("[runner] cache dir setup failed (builds will run without cache): %v", err)
+	}
 
 	// Security Hole #5: UID collisions. os.MkdirTemp guarantees unique, non-colliding directories.
 	jailDir, err := os.MkdirTemp("", "goboxd-jail-*")
@@ -348,8 +357,9 @@ func isInfraError(err error) bool {
 // jailEnv builds the -E argument pairs for nsjail from the environment
 // allowlist. nsjail clears the child env by default, so these pairs are the
 // complete jail environment. PATH is copied from the server env with a
-// fallback to the hardcoded value; the other four vars are fixed. The values
-// are read at call time (no cached global) so tests can use t.Setenv.
+// fallback to the hardcoded value; the other vars are fixed. GOCACHE and
+// CCACHE_DIR are added by nsjailArgs after the cache bind-mounts. The
+// values are read at call time (no cached global) so tests can use t.Setenv.
 func jailEnv() []string {
 	path := os.Getenv("PATH")
 	if path == "" {
@@ -358,7 +368,6 @@ func jailEnv() []string {
 	return []string{
 		"-E", "PATH=" + path,
 		"-E", "HOME=/tmp",
-		"-E", "GOCACHE=/tmp/go-cache",
 		"-E", "LANG=C.UTF-8",
 		"-E", "LC_ALL=C.UTF-8",
 	}
@@ -471,6 +480,33 @@ func nsjailArgs(appDir string, wallTime, cpuLimit, memKB, procs, uid int, jailCg
 	// nothing from the server env (credentials, GOBOXD_*, proxy vars) can
 	// reach the jail.
 	args = append(args, jailEnv()...)
+
+	// Per-UID build cache bind-mounts. The cache dirs live under
+	// /var/cache/goboxd/uid-<uid>/ and are bind-mounted into the jail
+	// at /app/.gocache (inside the app dir, which is writable by the
+	// jailed uid). GOCACHE points to the go-build subdir; CCACHE_DIR
+	// points to the ccache subdir. If ccache is not installed on the
+	// host, only GOCACHE is set.
+	uidCacheDir := filepath.Join(cacheBaseDir, fmt.Sprintf("uid-%d", uid))
+	gocacheDir := filepath.Join(uidCacheDir, "go-build")
+	if info, err := os.Stat(gocacheDir); err == nil && info.IsDir() {
+		args = append(args,
+			"--bindmount", gocacheDir+":/app/.gocache:rw",
+		)
+	}
+	args = append(args, "-E", "GOCACHE=/app/.gocache")
+
+	// ccache: only bind-mount if the ccache binary exists on the host.
+	if _, err := exec.LookPath("ccache"); err == nil {
+		ccacheDir := filepath.Join(uidCacheDir, "ccache")
+		if info, err := os.Stat(ccacheDir); err == nil && info.IsDir() {
+			args = append(args,
+				"--bindmount", ccacheDir+":/app/.ccache:rw",
+			)
+		}
+		args = append(args, "-E", "CCACHE_DIR=/app/.ccache")
+	}
+
 	args = append(args,
 		"-B", "/usr",
 		"-B", "/lib",
@@ -1008,6 +1044,69 @@ func computeTestStatus(ctx context.Context, err error, stdout, expected string, 
 		return "output_whitespace_mismatch"
 	}
 	return "wrong_output"
+}
+
+// ensureCacheDirs creates the per-UID cache directories under /var/cache/goboxd/uid-<uid>/
+// and chowns them to the jail uid. The dirs persist across requests so that
+// repeated builds reuse the Go build cache and ccache.
+// The subdirs are named to match Go's convention (go-build) so that the
+// jail can mount uid-<uid>/ as /root/.cache and Go finds go-build inside.
+func ensureCacheDirs(uid int) error {
+	uidDir := filepath.Join(cacheBaseDir, fmt.Sprintf("uid-%d", uid))
+	gocache := filepath.Join(uidDir, "go-build")
+	ccache := filepath.Join(uidDir, "ccache")
+
+	if err := os.MkdirAll(gocache, 0755); err != nil {
+		if os.IsPermission(err) || os.IsNotExist(err) {
+			log.Printf("[runner] /var/cache not writable, builds will run without cache: %v", err)
+			return nil
+		}
+		return fmt.Errorf("creating gocache dir: %w", err)
+	}
+	if err := os.Chown(gocache, uid, uid); err != nil {
+		return fmt.Errorf("chown gocache dir: %w", err)
+	}
+
+	if err := os.MkdirAll(ccache, 0755); err != nil {
+		if os.IsPermission(err) || os.IsNotExist(err) {
+			log.Printf("[runner] /var/cache not writable, builds will run without ccache: %v", err)
+			return nil
+		}
+		return fmt.Errorf("creating ccache dir: %w", err)
+	}
+	if err := os.Chown(ccache, uid, uid); err != nil {
+		return fmt.Errorf("chown ccache dir: %w", err)
+	}
+
+	return nil
+}
+
+// SweepCaches removes /var/cache/goboxd/uid-* dirs older than maxAge.
+// Use maxAge=0 to remove all cache dirs (force sweep at shutdown).
+func SweepCaches(maxAge time.Duration) {
+	entries, err := os.ReadDir(cacheBaseDir)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			fmt.Fprintf(os.Stderr, "cache sweep: reading %s: %v\n", cacheBaseDir, err)
+		}
+		return
+	}
+	now := time.Now()
+	for _, e := range entries {
+		if !strings.HasPrefix(e.Name(), "uid-") {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		if maxAge == 0 || now.Sub(info.ModTime()) > maxAge {
+			path := filepath.Join(cacheBaseDir, e.Name())
+			if err := os.RemoveAll(path); err != nil {
+				fmt.Fprintf(os.Stderr, "cache sweep: removing %s: %v\n", path, err)
+			}
+		}
+	}
 }
 
 // SweepOrphans removes jail dirs older than 30 minutes. Call at startup.

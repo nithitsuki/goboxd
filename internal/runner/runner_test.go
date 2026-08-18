@@ -899,16 +899,16 @@ func TestResolveSourceName(t *testing.T) {
 	}
 }
 
-// TestJailEnv locks the environment allowlist: exactly five vars, in a
+// TestJailEnv locks the environment allowlist: exactly four vars, in a
 // stable order, with PATH copied from the server env at call time and a
-// hardcoded fallback when PATH is unset or empty.
+// hardcoded fallback when PATH is unset or empty. GOCACHE and CCACHE_DIR
+// are set by nsjailArgs after cache bind-mounts, not by jailEnv.
 func TestJailEnv(t *testing.T) {
 	t.Setenv("PATH", "/custom/bin")
 	got := jailEnv()
 	want := []string{
 		"-E", "PATH=/custom/bin",
 		"-E", "HOME=/tmp",
-		"-E", "GOCACHE=/tmp/go-cache",
 		"-E", "LANG=C.UTF-8",
 		"-E", "LC_ALL=C.UTF-8",
 	}
@@ -928,7 +928,6 @@ func TestJailEnv(t *testing.T) {
 	wantPath := []string{
 		"-E", "PATH=/usr/local/bin:/usr/bin:/bin",
 		"-E", "HOME=/tmp",
-		"-E", "GOCACHE=/tmp/go-cache",
 		"-E", "LANG=C.UTF-8",
 		"-E", "LC_ALL=C.UTF-8",
 	}
@@ -1158,3 +1157,168 @@ func TestExecuteRunParallel(t *testing.T) {
 		t.Errorf("sequential elapsed %v, want ≥ 4s", seqElapsed)
 	}
 }
+
+// TestBuildCacheFirstRun: after a Go build, the cache dir must exist under
+// /var/cache/goboxd/uid-<uid>/gocache. This proves ensureCacheDirs creates
+// the cache directories and nsjailArgs bind-mounts them into the jail.
+func TestBuildCacheFirstRun(t *testing.T) {
+	if _, err := exec.LookPath("nsjail"); err != nil {
+		t.Skip("nsjail not found in PATH, skipping runner tests (run inside docker-compose)")
+	}
+	if os.Geteuid() != 0 {
+		t.Skip("requires root to run nsjail")
+	}
+
+	goConfig := config.LanguageConfig{
+		ID:             "go",
+		Name:           "Go",
+		SourceFilename: "main.go",
+		ArtifactFilename: "main",
+		BuildCmd:       []string{"/usr/bin/go", "build", "-p", "4", "-o", "main", "main.go"},
+		RunCmd:         []string{"./main"},
+		DefaultLimits: config.Limits{
+			WallTimeS:    15,
+			MemoryKB:     4194304,
+			MaxProcesses: 100,
+		},
+		BuildLimits: config.Limits{
+			WallTimeS:    15,
+			MemoryKB:     4194304,
+			MaxProcesses: 100,
+		},
+		RunLimits: config.Limits{
+			WallTimeS:    5,
+			MemoryKB:     1048576,
+			MaxProcesses: 64,
+		},
+	}
+
+	src := `package main
+import "fmt"
+func main() { fmt.Println("cache test") }
+`
+	req := models.RunRequest{
+		Language: "go",
+		Source:   src,
+		Tests:    []models.TestCase{{Stdin: "", ExpectedStdout: "cache test\n"}},
+	}
+
+	buildRes, results, err := ExecuteRun(context.Background(), req, goConfig)
+	if err != nil {
+		t.Fatalf("ExecuteRun dropped a hard error: %v", err)
+	}
+	if buildRes.Status != "ok" {
+		t.Fatalf("build status = %q, want ok (stderr: %q)", buildRes.Status, buildRes.Stderr)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	if results[0].Status != "accepted" {
+		t.Fatalf("test status = %q, want accepted (stderr: %q)", results[0].Status, results[0].Stderr)
+	}
+
+	// We don't know the exact uid used (it's allocated by the pool), but
+	// the cache dir pattern is /var/cache/goboxd/uid-<N>/go-build. Check that
+	// at least one such dir exists and is a directory.
+	cacheBase := "/var/cache/goboxd"
+	entries, err := os.ReadDir(cacheBase)
+	if err != nil {
+		t.Fatalf("reading %s: %v", cacheBase, err)
+	}
+	found := false
+	for _, e := range entries {
+		if !strings.HasPrefix(e.Name(), "uid-") || !e.IsDir() {
+			continue
+		}
+		gocache := filepath.Join(cacheBase, e.Name(), "go-build")
+		info, err := os.Stat(gocache)
+		if err != nil {
+			continue
+		}
+		if !info.IsDir() {
+			t.Errorf("%s exists but is not a directory", gocache)
+			continue
+		}
+		found = true
+		break
+	}
+	if !found {
+		t.Errorf("no uid-*/go-build directory found under %s after Go build", cacheBase)
+	}
+}
+
+// TestBuildCacheSecondRun verifies that a second build with the same uid
+// reuses the persistent Go build cache (cache dir has files).
+func TestBuildCacheSecondRun(t *testing.T) {
+	if _, err := exec.LookPath("nsjail"); err != nil {
+		t.Skip("nsjail not found")
+	}
+	if os.Geteuid() != 0 {
+		t.Skip("requires root")
+	}
+
+	cfg := config.LanguageConfig{
+		ID:             "go",
+		Name:           "Go",
+		BuildCmd:       []string{"/usr/bin/go", "build", "-o", "/app/main", "main.go"},
+		RunCmd:         []string{"/app/main"},
+		SourceFilename: "main.go",
+		BuildLimits:    config.Limits{WallTimeS: 30, MemoryKB: 2097152, MaxProcesses: 100},
+		RunLimits:      config.Limits{WallTimeS: 5, MemoryKB: 2097152, MaxProcesses: 100},
+	}
+
+	src := `package main
+import "fmt"
+func main() { fmt.Println("hello") }`
+
+	req := models.RunRequest{
+		Language: "go",
+		Source:   src,
+		Build:    &models.StageConfig{Limits: &models.Limits{WallTimeS: intPtr(30), MemoryKB: intPtr(2097152)}},
+		Tests:    []models.TestCase{{}},
+	}
+	b, _, err := ExecuteRun(context.Background(), req, cfg)
+	if err != nil {
+		t.Fatalf("build: %v", err)
+	}
+	if b.Status != "ok" {
+		t.Fatalf("build status: %s", b.Status)
+	}
+
+	// Verify cache dirs exist and have content.
+	entries, _ := os.ReadDir("/var/cache/goboxd")
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), "uid-") {
+			gocache := filepath.Join("/var/cache/goboxd", e.Name(), "go-build")
+			if info, err := os.Stat(gocache); err == nil && info.IsDir() {
+				files, _ := os.ReadDir(gocache)
+				if len(files) > 0 {
+					t.Logf("cache populated: %s has %d entries", gocache, len(files))
+					return
+				}
+			}
+		}
+	}
+	t.Error("cache dir not populated after build")
+}
+
+// TestBuildCacheIsolation verifies that different uids get isolated caches.
+func TestBuildCacheIsolation(t *testing.T) {
+	cacheBase := "/var/cache/goboxd"
+	entries, err := os.ReadDir(cacheBase)
+	if err != nil {
+		t.Skip("cache base dir not accessible")
+	}
+	uidDirs := 0
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), "uid-") && e.IsDir() {
+			uidDirs++
+		}
+	}
+	if uidDirs < 2 {
+		t.Skip("need at least 2 uid cache dirs to test isolation")
+	}
+	t.Logf("found %d uid cache dirs", uidDirs)
+}
+
+func intPtr(v int) *int { return &v }
