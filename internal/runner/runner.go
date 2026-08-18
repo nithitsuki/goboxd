@@ -25,6 +25,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -160,12 +161,118 @@ func ExecuteRun(ctx context.Context, req models.RunRequest, lc config.LanguageCo
 	}
 
 	var results []models.TestResult
-	for _, tc := range req.Tests {
-		if ctx.Err() != nil {
-			break
+
+	// Check if parallel execution is requested.
+	// effectiveParallel <= 1 means sequential.
+	effectiveParallel := 1
+	if req.MaxParallel != nil && *req.MaxParallel > 1 {
+		effectiveParallel = *req.MaxParallel
+		// Cap at runtime.NumCPU() to avoid oversubscription.
+		if numCPU := runtime.NumCPU(); numCPU > 0 && effectiveParallel > numCPU {
+			effectiveParallel = numCPU
 		}
-		res := runSingleTest(ctx, tc, lc, jailDir, req.Run, uid, jailCg)
-		results = append(results, res)
+	}
+
+	if effectiveParallel > 1 {
+		// Parallel execution: bounded concurrency via semaphore channel.
+		// Each test gets its own jailDir (nsjail cannot share a bind-mount
+		// across concurrent processes).
+		results = make([]models.TestResult, len(req.Tests))
+		var wg sync.WaitGroup
+		sem := make(chan struct{}, effectiveParallel)
+		for i, tc := range req.Tests {
+			if ctx.Err() != nil {
+				break
+			}
+			wg.Add(1)
+			sem <- struct{}{} // acquire semaphore
+			go func(idx int, tc models.TestCase) {
+				defer wg.Done()
+				defer func() { <-sem }() // release semaphore
+
+				// Create a per-test jail directory.
+				parJailDir, err := os.MkdirTemp("", "goboxd-jail-*")
+				if err != nil {
+					results[idx] = models.TestResult{
+						Status: "internal_error",
+						Stderr: fmt.Sprintf("creating jail dir: %v", err),
+					}
+					return
+				}
+				defer func() { _ = os.RemoveAll(parJailDir) }()
+
+				// Chown for the jail uid.
+				parUid, err := uidPool.Alloc()
+				if err != nil {
+					results[idx] = models.TestResult{
+						Status: "internal_error",
+						Stderr: err.Error(),
+					}
+					return
+				}
+				defer uidPool.Release(parUid)
+				if err := os.Chown(parJailDir, parUid, parUid); err != nil {
+					results[idx] = models.TestResult{
+						Status: "internal_error",
+						Stderr: fmt.Sprintf("chown jail dir: %v", err),
+					}
+					return
+				}
+
+				// Write source into the per-test jail.
+				parSrcDir := filepath.Join(parJailDir, "app")
+				if err := os.MkdirAll(parSrcDir, 0755); err != nil {
+					results[idx] = models.TestResult{
+						Status: "internal_error",
+						Stderr: fmt.Sprintf("creating app dir: %v", err),
+					}
+					return
+				}
+				if err := os.Chown(parSrcDir, parUid, parUid); err != nil {
+					results[idx] = models.TestResult{
+						Status: "internal_error",
+						Stderr: fmt.Sprintf("chown app dir: %v", err),
+					}
+					return
+				}
+				parSrcPath := filepath.Join(parSrcDir, srcName)
+				if err := writeSource(parSrcPath, []byte(req.Source)); err != nil {
+					results[idx] = models.TestResult{
+						Status: "internal_error",
+						Stderr: fmt.Sprintf("writing source: %v", err),
+					}
+					return
+				}
+				if err := os.Chown(parSrcPath, parUid, parUid); err != nil {
+					results[idx] = models.TestResult{
+						Status: "internal_error",
+						Stderr: fmt.Sprintf("chown source: %v", err),
+					}
+					return
+				}
+
+				// Per-test cgroup leaf.
+				var parCg *cgroupv2.Jail
+				if cgroupv2.Default().Active() {
+					parCg, _ = cgroupv2.Default().NewJail(fmt.Sprintf("par-%d-%d", os.Getpid(), idx))
+					if parCg != nil {
+						defer parCg.Teardown()
+					}
+				}
+
+				results[idx] = runSingleTest(ctx, tc, lc, parJailDir, req.Run, parUid, parCg)
+			}(i, tc)
+		}
+		wg.Wait()
+	} else {
+		// Sequential execution (default).
+		for _, tc := range req.Tests {
+			if ctx.Err() != nil {
+				break
+			}
+			res := runSingleTest(ctx, tc, lc, jailDir, req.Run, uid, jailCg)
+			results = append(results, res)
+		}
 	}
 
 	return buildRes, results, nil

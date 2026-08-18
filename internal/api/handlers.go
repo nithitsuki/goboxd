@@ -422,6 +422,12 @@ func HandleRun(w http.ResponseWriter, r *http.Request) {
 		writeError(w, "too_many_tests", fmt.Sprintf("test count exceeds maximum of %d", maxTests))
 		return
 	}
+	if req.MaxParallel != nil && *req.MaxParallel > 0 {
+		if *req.MaxParallel > maxTests {
+			writeError(w, "invalid_max_parallel", fmt.Sprintf("max_parallel of %d exceeds maximum of %d", *req.MaxParallel, maxTests))
+			return
+		}
+	}
 	for i, tc := range req.Tests {
 		if len(tc.Stdin) > maxFieldBytes {
 			writeError(w, "test_too_large", fmt.Sprintf("tests[%d].stdin exceeds %d bytes", i, maxFieldBytes))

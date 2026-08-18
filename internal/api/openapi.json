@@ -190,6 +190,12 @@
           "tests": {
             "type": "array",
             "items": { "$ref": "#/components/schemas/TestCase" }
+          },
+          "max_parallel": {
+            "type": "integer",
+            "description": "Maximum number of test cases to run concurrently within this request. 0 or omitted means sequential execution. Positive values enable parallel execution, bounded by min(max_parallel, CPU count).",
+            "minimum": 0,
+            "maximum": 50
           }
         }
       },

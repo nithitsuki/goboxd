@@ -33,6 +33,7 @@ type RunRequest struct {
 	Build            *StageConfig `json:"build,omitempty"`
 	Run              *StageConfig `json:"run,omitempty"`
 	Tests            []TestCase   `json:"tests"`
+	MaxParallel      *int         `json:"max_parallel,omitempty"`
 }
 
 // BuildResult represents the outcome of the build phase.

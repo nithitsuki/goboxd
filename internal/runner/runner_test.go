@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -1044,4 +1045,116 @@ func sortedKeys(m map[string]string) []string {
 	}
 	sort.Strings(ks)
 	return ks
+}
+
+// TestExecuteRunParallel proves that parallel execution is faster than
+// sequential when max_parallel > 1. It creates 3 test cases that each
+// take ~2s (via sleep), runs them with max_parallel=2, and asserts the
+// total elapsed time is less than sequential (~6s).
+// The test also verifies that max_parallel=nil behaves like sequential.
+func TestExecuteRunParallel(t *testing.T) {
+	if _, err := exec.LookPath("nsjail"); err != nil {
+		t.Skip("nsjail not found in PATH, skipping runner tests (run inside docker-compose)")
+	}
+	if os.Geteuid() != 0 {
+		t.Skip("requires root to run nsjail")
+	}
+	if runtime.NumCPU() < 2 {
+		t.Skip("requires at least 2 CPUs for parallel test")
+	}
+
+	py3Config := config.LanguageConfig{
+		ID:             "py3",
+		Name:           "Python 3",
+		RunCmd:         []string{"/usr/bin/python3", "main.py"},
+		SourceFilename: "main.py",
+		DefaultLimits: config.Limits{
+			WallTimeS:    9,
+			MemoryKB:     102400,
+			MaxProcesses: 100,
+		},
+		RunLimits: config.Limits{
+			WallTimeS:    9,
+			MemoryKB:     102400,
+			MaxProcesses: 100,
+		},
+	}
+
+	// Warm up the one-time sandbox setup (cgroup probe, seccomp policy).
+	warmReq := models.RunRequest{
+		Language: "py3",
+		Source:   "print('warm')",
+		Tests:    []models.TestCase{{Stdin: "", ExpectedStdout: "warm\n"}},
+	}
+	if _, _, err := ExecuteRun(context.Background(), warmReq, py3Config); err != nil {
+		t.Fatalf("warmup ExecuteRun: %v", err)
+	}
+
+	// 3 test cases, each sleeps 2s then prints "done\n".
+	sleepSrc := "import time\ntime.sleep(2)\nprint('done')"
+	threeTests := []models.TestCase{
+		{Stdin: "", ExpectedStdout: "done\n"},
+		{Stdin: "", ExpectedStdout: "done\n"},
+		{Stdin: "", ExpectedStdout: "done\n"},
+	}
+
+	// --- Parallel run ---
+	parReq := models.RunRequest{
+		Language: "py3",
+		Source:   sleepSrc,
+		Tests:    threeTests,
+	}
+	par2 := 2
+	parReq.MaxParallel = &par2
+
+	start := time.Now()
+	_, parResults, err := ExecuteRun(context.Background(), parReq, py3Config)
+	parElapsed := time.Since(start)
+	if err != nil {
+		t.Fatalf("parallel ExecuteRun dropped a hard error: %v", err)
+	}
+	if len(parResults) != 3 {
+		t.Fatalf("parallel: expected 3 results, got %d", len(parResults))
+	}
+	for i, r := range parResults {
+		if r.Status != "accepted" {
+			t.Errorf("parallel result[%d].Status = %q, want accepted (stderr: %q)", i, r.Status, r.Stderr)
+		}
+		if r.Stdout != "done\n" {
+			t.Errorf("parallel result[%d].Stdout = %q, want %q", i, r.Stdout, "done\n")
+		}
+	}
+	// Sequential would be ~6s (3 × 2s). Parallel with 2 slots should be < 5s.
+	if parElapsed >= 5*time.Second {
+		t.Errorf("parallel elapsed %v, want < 5s (sequential would be ~6s)", parElapsed)
+	}
+
+	// --- Sequential run (max_parallel=nil) ---
+	seqReq := models.RunRequest{
+		Language: "py3",
+		Source:   sleepSrc,
+		Tests:    threeTests,
+	}
+
+	start = time.Now()
+	_, seqResults, err := ExecuteRun(context.Background(), seqReq, py3Config)
+	seqElapsed := time.Since(start)
+	if err != nil {
+		t.Fatalf("sequential ExecuteRun dropped a hard error: %v", err)
+	}
+	if len(seqResults) != 3 {
+		t.Fatalf("sequential: expected 3 results, got %d", len(seqResults))
+	}
+	for i, r := range seqResults {
+		if r.Status != "accepted" {
+			t.Errorf("sequential result[%d].Status = %q, want accepted (stderr: %q)", i, r.Status, r.Stderr)
+		}
+		if r.Stdout != "done\n" {
+			t.Errorf("sequential result[%d].Stdout = %q, want %q", i, r.Stdout, "done\n")
+		}
+	}
+	// Sequential must be ≥ 4s (3 × 2s).
+	if seqElapsed < 4*time.Second {
+		t.Errorf("sequential elapsed %v, want ≥ 4s", seqElapsed)
+	}
 }

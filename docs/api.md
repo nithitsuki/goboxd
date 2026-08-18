@@ -54,6 +54,7 @@ returns HTTP 500 for infrastructure failures.
 | `build` | no | Build-stage configuration (limits + flags). Missing fields fall back to language defaults. Ignored for interpreted languages. |
 | `run` | no | Run-stage configuration (limits + flags). Missing fields fall back to language defaults. |
 | `tests` | yes | Array of test cases, min 1, max 50. |
+| `max_parallel` | no | Maximum test cases to run concurrently. 0 or omitted means sequential. Positive values enable parallel execution bounded by min(max_parallel, CPU count). Results are returned in test order regardless of completion order. |
 
 #### Test case fields
 
@@ -80,6 +81,16 @@ A run that exceeds `cpu_time_s` stops with `cpu_time_exceeded`. The kill
 happens at the limit, usually well before `wall_time_s` fires. The default
 per-language `cpu_time_s` is above the wall limit, so plain busy loops still
 stop with `time_exceeded` unless the client lowers the cpu limit.
+
+### Parallel test execution
+
+When `max_parallel` is set to a value greater than 1, the server runs test
+cases concurrently within the request. The effective parallelism is bounded
+by `min(max_parallel, CPU count)`. Each parallel test
+gets its own uid, jail directory, and cgroup leaf. The build step runs
+once before any tests start. Results are returned in test-case order
+regardless of completion order. When `max_parallel` is 0 or omitted, the
+server runs tests sequentially.
 
 ### Status vocabulary
 
@@ -176,6 +187,7 @@ The server computes the top-level status with this procedure:
 | `test_too_large` | stdin or expected_stdout exceeds 64 KiB |
 | `invalid_filename` | Filename contains path traversal chars |
 | `invalid_flags` | Compiler flag not in allow-list |
+| `invalid_max_parallel` | max_parallel exceeds maximum of 50 |
 
 Internal errors (500) return the same shape with code `internal_error`.
 
