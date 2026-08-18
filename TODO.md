@@ -36,16 +36,7 @@ are L-tier (architecture): full gates plus a second security/architecture
 review pass and a rollback plan per item. Order per the review's top
 recommendation: C1 first (its outcome struct forces C2 and C5 along).
 
-C1. [ ] **One Jail module — collapse the execution lifecycle** — the jail
-    lifecycle (uid, dir+chown, cgroup leaf, source+artifact, teardown) is
-    forked across the sequential and parallel paths of ExecuteRun. The fork
-    hides three live defects: compiled parallel tests never see the build
-    artifact (fresh dirs get no copy), parallel tests oversubscribe the uid
-    pool (pool sized to requests, parallel holds up to NumCPU per request),
-    and parallel cgroup names par-<pid>-<idx> collide across concurrent
-    requests (pid is constant). Solution: one Jail type owns the full
-    lifecycle; sequential = one jail reused, parallel = N jails materialized
-    from one build template.
+C1. [x] **One Jail module — collapse the execution lifecycle** — shipped 2026-08-18. New internal/runner/jail.go: one Jail type owns uid, dir+chown, cgroup leaf, source, artifact, and teardown (sync.Once, idempotent). Sequential reuses one jail; parallel materializes N jails from one build template (seedFrom copies source + artifact). Fixes three live defects: parallel compiled tests now find the artifact, the uid pool is sized to maxJobs x (NumCPU + 1) (template + parallel jails, exhaustion impossible), and cgroup names are unique by construction (filepath.Base(dir)). Verified: TestParallelCompiled, TestJailTeardown, TestUidPoolParallel, TestConcurrentParallelRequests, all graded by breaking each fix; two review passes (correctness + security/architecture) SHIP; rollback = revert (sequential byte-identical).
 C2. [ ] **One exec primitive under the jail** — build exec (execInJail) and
     test exec (runSingleTest) are two forks of the same pipe/baseline/poller/
     capped-read/Wait/post-check sequence. Only the final interpretation

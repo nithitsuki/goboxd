@@ -11,12 +11,15 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
 
+	"github.com/nithitsuki/goboxd/internal/cgroupv2"
 	"github.com/nithitsuki/goboxd/internal/config"
 	"github.com/nithitsuki/goboxd/internal/models"
+	"github.com/nithitsuki/goboxd/internal/uidpool"
 )
 
 // TestMain lets the cgroup probe's re-exec work under go test. The real
@@ -250,6 +253,73 @@ func TestExecuteRunContextCancel(t *testing.T) {
 			t.Errorf("leftover jail dir after cancel: %s", e.Name())
 		}
 	}
+}
+
+// TestJailTeardown locks the jail teardown contract: teardown returns the uid
+// to the pool, removes the jail dir from the temp dir, removes the cgroup
+// leaf, and is idempotent (a second call is a no-op). A jail that cannot be
+// torn down leaks uids, jail dirs, and cgroup dirs under load.
+func TestJailTeardown(t *testing.T) {
+	if os.Geteuid() != 0 {
+		t.Skip("requires root: newJail chowns the jail dir and may create a cgroup leaf")
+	}
+
+	req := models.RunRequest{Language: "py3", Source: "print('x')"}
+	lc := config.LanguageConfig{ID: "py3", SourceFilename: "main.py"}
+
+	j, err := newJail(req, lc, "main.py")
+	if err != nil {
+		t.Fatalf("newJail: %v", err)
+	}
+	uid := j.uid
+	dir := j.dir
+	cgPath := ""
+	if j.cg != nil {
+		cgPath = j.cg.Path()
+	}
+
+	if _, err := os.Stat(dir); err != nil {
+		t.Fatalf("jail dir %s missing before teardown: %v", dir, err)
+	}
+
+	j.teardown()
+
+	// The uid must no longer be held: scanning the whole pool finds it again.
+	// If teardown leaked the uid, the scan exhausts the pool first.
+	found := false
+	var held []int
+	for i := 0; i < uidPool.Size(); i++ {
+		a, err := uidPool.Alloc()
+		if err != nil {
+			break // pool exhausted before finding uid: teardown never released it
+		}
+		held = append(held, a)
+		if a == uid {
+			found = true
+			break
+		}
+	}
+	for _, a := range held {
+		uidPool.Release(a)
+	}
+	if !found {
+		t.Errorf("uid %d not released by teardown (pool exhausted before it was found)", uid)
+	}
+
+	// The jail dir must be gone from the temp dir.
+	if _, err := os.Stat(dir); !os.IsNotExist(err) {
+		t.Errorf("jail dir %s still exists after teardown (err=%v)", dir, err)
+	}
+
+	// The cgroup leaf must be gone.
+	if cgPath != "" {
+		if _, err := os.Stat(cgPath); !os.IsNotExist(err) {
+			t.Errorf("cgroup dir %s still exists after teardown (err=%v)", cgPath, err)
+		}
+	}
+
+	// Idempotent: a second teardown is a no-op and must not panic.
+	j.teardown()
 }
 
 func TestReadCapped(t *testing.T) {
@@ -1123,7 +1193,7 @@ func TestExecuteRunParallel(t *testing.T) {
 			t.Errorf("parallel result[%d].Stdout = %q, want %q", i, r.Stdout, "done\n")
 		}
 	}
-	// Sequential would be ~6s (3 × 2s). Parallel with 2 slots should be < 5s.
+	// Sequential would be ~6s (3 x 2s). Parallel with 2 slots should be < 5s.
 	if parElapsed >= 5*time.Second {
 		t.Errorf("parallel elapsed %v, want < 5s (sequential would be ~6s)", parElapsed)
 	}
@@ -1152,9 +1222,272 @@ func TestExecuteRunParallel(t *testing.T) {
 			t.Errorf("sequential result[%d].Stdout = %q, want %q", i, r.Stdout, "done\n")
 		}
 	}
-	// Sequential must be ≥ 4s (3 × 2s).
+	// Sequential must be >= 4s (3 x 2s).
 	if seqElapsed < 4*time.Second {
-		t.Errorf("sequential elapsed %v, want ≥ 4s", seqElapsed)
+		t.Errorf("sequential elapsed %v, want >= 4s", seqElapsed)
+	}
+}
+
+// TestParallelCompiled proves the parallel path carries the build artifact
+// into every per-test jail. The sequential path builds into one jail and
+// reuses it, but the parallel path materializes a fresh jail per test: if the
+// artifact is not copied, a compiled language (c) with max_parallel=2 cannot
+// find its binary and every test fails (defect 1 from the C1 review).
+func TestParallelCompiled(t *testing.T) {
+	if _, err := exec.LookPath("nsjail"); err != nil {
+		t.Skip("nsjail not found in PATH, skipping runner tests (run inside docker-compose)")
+	}
+	if os.Geteuid() != 0 {
+		t.Skip("requires root to run nsjail")
+	}
+	if runtime.NumCPU() < 2 {
+		t.Skip("requires at least 2 CPUs for parallel test")
+	}
+	if _, err := exec.LookPath("gcc"); err != nil {
+		t.Skip("gcc not found in PATH")
+	}
+
+	cConfig := config.LanguageConfig{
+		ID:               "c",
+		Name:             "C",
+		SourceFilename:   "main.c",
+		ArtifactFilename: "solution",
+		BuildCmd:         []string{"/usr/bin/gcc", "-x", "c", "-o", "/app/solution", "/app/main.c"},
+		RunCmd:           []string{"/app/solution"},
+		DefaultLimits: config.Limits{
+			WallTimeS:    9,
+			MemoryKB:     1048576,
+			MaxProcesses: 100,
+		},
+		BuildLimits: config.Limits{
+			WallTimeS:    9,
+			MemoryKB:     1048576,
+			MaxProcesses: 100,
+		},
+		RunLimits: config.Limits{
+			WallTimeS:    9,
+			MemoryKB:     524288,
+			MaxProcesses: 64,
+		},
+	}
+
+	src := `#include <stdio.h>
+#include <string.h>
+int main(void) {
+    char line[4096];
+    if (fgets(line, sizeof line, stdin) == NULL) return 1;
+    line[strcspn(line, "\n")] = 0;
+    if (strcmp(line, "ping") == 0) { printf("pong\n"); return 0; }
+    if (strcmp(line, "hello") == 0) { printf("world\n"); return 0; }
+    return 2;
+}
+`
+
+	// Warm up the one-time sandbox setup (cgroup probe, seccomp policy).
+	warmReq := models.RunRequest{
+		Language: "c",
+		Source:   src,
+		Tests:    []models.TestCase{{Stdin: "ping\n", ExpectedStdout: "pong\n"}},
+	}
+	if _, _, err := ExecuteRun(context.Background(), warmReq, cConfig); err != nil {
+		t.Fatalf("warmup ExecuteRun: %v", err)
+	}
+
+	par2 := 2
+	req := models.RunRequest{
+		Language:    "c",
+		Source:      src,
+		MaxParallel: &par2,
+		Tests: []models.TestCase{
+			{Stdin: "ping\n", ExpectedStdout: "pong\n"},
+			{Stdin: "hello\n", ExpectedStdout: "world\n"},
+		},
+	}
+
+	buildRes, results, err := ExecuteRun(context.Background(), req, cConfig)
+	if err != nil {
+		t.Fatalf("ExecuteRun dropped a hard error: %v", err)
+	}
+	if buildRes.Status != "ok" {
+		t.Fatalf("build status = %q, want ok (stderr: %q)", buildRes.Status, buildRes.Stderr)
+	}
+	if len(results) != 2 {
+		t.Fatalf("expected 2 results, got %d", len(results))
+	}
+	for i, r := range results {
+		if r.Status != "accepted" {
+			t.Errorf("result[%d].Status = %q, want accepted (stderr: %q)", i, r.Status, r.Stderr)
+		}
+	}
+}
+
+// TestUidPoolParallel locks the pool sizing contract (defect 2 from the C1
+// review): each request holds one uid for its template jail for its whole
+// lifetime plus up to NumCPU uids at once for its parallel tests, and up to
+// maxJobs requests can be in flight, so worst-case simultaneous demand is
+// maxJobs x (NumCPU + 1). A pool sized to anything less can be exhausted
+// while the admission gate still admits requests.
+func TestUidPoolParallel(t *testing.T) {
+	if runtime.NumCPU() < 2 {
+		t.Skip("parallel uid demand only exists with more than one CPU")
+	}
+	// Computed independently of UidBudget() on purpose: maxJobs x (NumCPU + 1),
+	// where the +1 is the template-jail uid each request holds for its whole
+	// lifetime. Re-multiplying ConcurrentJobs() without the +1 (the old want)
+	// could not catch a UidBudget regression that drops the template uid.
+	want := uidpool.ConcurrentJobs() * (runtime.NumCPU() + 1)
+	if got := uidPool.Size(); got != want {
+		t.Errorf("uidPool.Size() = %d, want %d (maxJobs x (NumCPU + 1))", got, want)
+	}
+}
+
+// TestConcurrentParallelRequests proves parallel cgroup names cannot collide
+// (defect 3 from the C1 review): two concurrent parallel requests must each
+// create their own per-test cgroup dirs. The old `par-<pid>-<idx>` scheme
+// collided because os.Getpid() is constant per process and idx restarts per
+// request - the second request's NewJail hit EEXIST and silently degraded to
+// rlimits, leaving both requests' processes sharing (or missing) cgroup
+// enforcement. This test watches the cgroup base dir while both requests run
+// and asserts that 2 requests x 2 tests create 4 distinct jail dirs.
+func TestConcurrentParallelRequests(t *testing.T) {
+	if _, err := exec.LookPath("nsjail"); err != nil {
+		t.Skip("nsjail not found in PATH, skipping runner tests (run inside docker-compose)")
+	}
+	if os.Geteuid() != 0 {
+		t.Skip("requires root to run nsjail")
+	}
+	if runtime.NumCPU() < 2 {
+		t.Skip("requires at least 2 CPUs for parallel test")
+	}
+
+	py3Config := config.LanguageConfig{
+		ID:             "py3",
+		Name:           "Python 3",
+		RunCmd:         []string{"/usr/bin/python3", "main.py"},
+		SourceFilename: "main.py",
+		DefaultLimits: config.Limits{
+			WallTimeS:    9,
+			MemoryKB:     102400,
+			MaxProcesses: 100,
+		},
+		RunLimits: config.Limits{
+			WallTimeS:    9,
+			MemoryKB:     102400,
+			MaxProcesses: 100,
+		},
+	}
+
+	// Warm up the one-time sandbox setup (cgroup probe, seccomp policy) before
+	// the timing-sensitive part.
+	warmReq := models.RunRequest{
+		Language: "py3",
+		Source:   "print('warm')",
+		Tests:    []models.TestCase{{Stdin: "", ExpectedStdout: "warm\n"}},
+	}
+	if _, _, err := ExecuteRun(context.Background(), warmReq, py3Config); err != nil {
+		t.Fatalf("warmup ExecuteRun: %v", err)
+	}
+
+	if !cgroupv2.Default().Active() {
+		t.Skip("cgroup v2 inactive; cgroup name collisions only matter when cgroup dirs are created")
+	}
+	base := filepath.Join(cgroupv2.Default().Root(), "goboxd")
+
+	// Snapshot pre-existing jail dirs: leftovers from earlier tests must not
+	// count toward the 4 dirs this test expects.
+	pre := map[string]bool{}
+	if entries, err := os.ReadDir(base); err == nil {
+		for _, e := range entries {
+			pre[e.Name()] = true
+		}
+	}
+
+	par2 := 2
+	req := models.RunRequest{
+		Language:    "py3",
+		Source:      "import time\ntime.sleep(1)\nprint('done')",
+		MaxParallel: &par2,
+		Tests: []models.TestCase{
+			{Stdin: "", ExpectedStdout: "done\n"},
+			{Stdin: "", ExpectedStdout: "done\n"},
+		},
+	}
+
+	start := make(chan struct{})
+	errs := make([]error, 2)
+	results := make([][]models.TestResult, 2)
+	var wg sync.WaitGroup
+	for i := 0; i < 2; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			<-start
+			_, r, err := ExecuteRun(context.Background(), req, py3Config)
+			errs[i] = err
+			results[i] = r
+		}(i)
+	}
+
+	// Watch the cgroup base dir while both requests run: every jail (template
+	// and per-test) creates a leaf here, and with unique names the dirs are
+	// distinct. With the colliding scheme only one or two names ever exist.
+	var mu sync.Mutex
+	seen := map[string]bool{}
+	stop := make(chan struct{})
+	watchDone := make(chan struct{})
+	go func() {
+		defer close(watchDone)
+		tick := time.NewTicker(2 * time.Millisecond)
+		defer tick.Stop()
+		for {
+			select {
+			case <-stop:
+				return
+			case <-tick.C:
+				entries, err := os.ReadDir(base)
+				if err != nil {
+					continue
+				}
+				mu.Lock()
+				for _, e := range entries {
+					if e.IsDir() && !pre[e.Name()] {
+						seen[e.Name()] = true
+					}
+				}
+				mu.Unlock()
+			}
+		}
+	}()
+	close(start)
+	wg.Wait()
+	close(stop)
+	<-watchDone
+
+	for i, err := range errs {
+		if err != nil {
+			t.Errorf("request %d: ExecuteRun dropped a hard error: %v", i, err)
+		}
+		for j, r := range results[i] {
+			if r.Status != "accepted" {
+				t.Errorf("request %d test %d: status = %q, want accepted (stderr: %q)", i, j, r.Status, r.Stderr)
+			}
+		}
+	}
+
+	mu.Lock()
+	distinct := len(seen)
+	mu.Unlock()
+	if distinct < 4 {
+		t.Errorf("saw %d distinct cgroup jail dirs during 2 concurrent 2-test parallel requests, want >= 4 (cgroup name collision)", distinct)
+	}
+
+	// No par-* leftovers may remain after teardown.
+	if entries, err := os.ReadDir(base); err == nil {
+		for _, e := range entries {
+			if strings.HasPrefix(e.Name(), "par-") {
+				t.Errorf("leftover cgroup dir %s", e.Name())
+			}
+		}
 	}
 }
 

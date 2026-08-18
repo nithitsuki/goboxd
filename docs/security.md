@@ -23,7 +23,7 @@ The goal is to prevent the attacker from:
 | 4 | No request size limits | `http.MaxBytesReader` (256 KiB), test count cap (50), per-field cap (64 KiB), output capped at 64 KiB | `internal/api/handlers.go`, `internal/runner/runner.go` |
 | 5 | UID collisions under load | Each jail runs as a distinct unprivileged host uid from a pool. Jail dirs are 0700 and owned by the jail uid. | `internal/uidpool/`, `internal/runner/runner.go` |
 | 6 | Unbounded child output | `io.LimitReader` caps stdout/stderr at 64 KiB, `readCapped` adds truncation marker | `internal/runner/runner.go` |
-| 7 | Stale jail directories | `defer os.RemoveAll` after every jail dir creation + startup orphan sweep (30 min) | `internal/runner/runner.go`, `cmd/goboxd/main.go` |
+| 7 | Stale jail directories | `jail.teardown` (deferred) releases uid + jail dir + cgroup leaf on every path; startup orphan sweep (30 min) | `internal/runner/jail.go`, `cmd/goboxd/main.go` |
 | 8 | nsjail error misclassification | `isInfraError` detects pipe and start failures. It separates infrastructure errors from user-code errors in both build and test paths. | `internal/runner/runner.go` |
 | 9 | Unbounded concurrency | The admission gate limits concurrent executions to `runtime.NumCPU()` (or `GOBOXD_MAX_JOBS`) with at most `GOBOXD_MAX_QUEUED` queued, preventing resource exhaustion under burst load | `internal/api/handlers.go` |
 | 10 | Server crash on handler panic | `RecoveryMiddleware` catches panics in all handlers, logs stack trace, returns 500. One bad request cannot crash the server. | `internal/api/logging.go` |
@@ -65,9 +65,11 @@ This prevents flag injection attacks, for example `-fplugin=evil.so` and
 
 ### Hole 5 — One unprivileged uid per jail
 The uid pool gives each jail one uid from a fixed range. The range starts
-at `GOBOXD_UID_MIN` (default 10000). The pool size equals the admission gate
-bound `GOBOXD_MAX_JOBS` (default `runtime.NumCPU()`). The pool can never be
-empty while the server admits jobs.
+at `GOBOXD_UID_MIN` (default 10000) and holds `GOBOXD_MAX_JOBS x (NumCPU + 1)`
+uids. Each request holds one uid for its template jail for the whole request,
+plus up to `NumCPU` uids at once for its parallel tests (capped at the host
+CPU count), and up to `GOBOXD_MAX_JOBS` requests are in flight, so the pool
+can never be empty while the server admits jobs.
 An allocation failure returns `internal_error`. Two jails never share a uid.
 
 The jail dir starts root-owned with mode 0700. The runner chowns it to the
@@ -84,9 +86,10 @@ exceeds 64 KiB, the server truncates it. The server appends
 consumption from chatty processes.
 
 ### Hole 7 — Cleanup on every path
-`defer os.RemoveAll(jailDir)` runs immediately after directory creation. It
-ensures cleanup on panic, error, or success. On startup, `SweepOrphans`
-removes any leftover jail dirs older than 30 minutes.
+`jail.teardown` runs via `defer` immediately after the jail is materialized.
+It releases the uid, removes the jail dir, and tears down the cgroup leaf. It
+ensures cleanup on panic, error, or success and is idempotent. On startup,
+`SweepOrphans` removes any leftover jail dirs older than 30 minutes.
 
 ### Hole 8 — nsjail error classification
 `isInfraError` detects infrastructure failures. A failure is an

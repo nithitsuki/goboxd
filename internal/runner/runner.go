@@ -62,9 +62,11 @@ func expandFlags(cmdArgs []string, flags []string) []string {
 const maxOutputBytes = 64 * 1024 // 64 KiB
 
 // uidPool hands out a distinct unprivileged uid per jail (piston/isolate
-// model). Sized to the same bound as the API concurrency semaphore so the pool
-// can never be exhausted while jobs are admitted.
-var uidPool = uidpool.New(uidpool.ConcurrentJobs())
+// model). Sized to maxJobs x (NumCPU + 1): a request holds one uid for its
+// template jail for the whole request plus up to NumCPU uids for its parallel
+// tests, and up to maxJobs requests are in flight, so the pool can never be
+// exhausted while the API admission gate admits jobs.
+var uidPool = uidpool.New(uidpool.UidBudget())
 
 func ExecuteRun(ctx context.Context, req models.RunRequest, lc config.LanguageConfig) (models.BuildResult, []models.TestResult, error) {
 	buildRes := models.BuildResult{
@@ -74,89 +76,31 @@ func ExecuteRun(ctx context.Context, req models.RunRequest, lc config.LanguageCo
 		DurationMs: 0,
 	}
 
-	// Allocate this jail's unprivileged uid. Never share a uid between jails:
-	// an allocation failure is an infrastructure error, not a silent fallback.
-	uid, err := uidPool.Alloc()
+	srcName := resolveSourceName(req, lc)
+
+	// Materialize the template jail: uid, dir+chown, cgroup leaf, source.
+	// The build runs into this jail; sequential tests reuse it, parallel
+	// tests are seeded from it (see jail.go).
+	tmpl, err := newJail(req, lc, srcName)
 	if err != nil {
 		buildRes.Status = "internal_error"
 		buildRes.Stderr = err.Error()
-		return buildRes, nil, fmt.Errorf("allocating jail uid: %w", err)
+		return buildRes, nil, fmt.Errorf("materializing jail: %w", err)
 	}
-	defer uidPool.Release(uid)
+	// Security Hole #7: Stale jail directories. teardown removes the jail dir
+	// (plus the uid and cgroup leaf) on every path.
+	defer tmpl.teardown()
 
 	// Ensure per-UID cache directories exist and are chowned to the jail uid.
 	// Failure here is non-fatal: builds work without cache, just slower.
-	if err := ensureCacheDirs(uid); err != nil {
+	if err := ensureCacheDirs(tmpl.uid); err != nil {
 		log.Printf("[runner] cache dir setup failed (builds will run without cache): %v", err)
-	}
-
-	// Security Hole #5: UID collisions. os.MkdirTemp guarantees unique, non-colliding directories.
-	jailDir, err := os.MkdirTemp("", "goboxd-jail-*")
-	if err != nil {
-		buildRes.Status = "internal_error"
-		buildRes.Stderr = fmt.Sprintf("failed to create jail dir: %v", err)
-		return buildRes, nil, fmt.Errorf("failed to create jail dir: %w", err)
-	}
-	// Security Hole #7: Stale jail directories. Defer cleanup immediately.
-	defer func() {
-		if err := os.RemoveAll(jailDir); err != nil {
-			fmt.Fprintf(os.Stderr, "failed to remove jail dir: %v\n", err)
-		}
-	}()
-
-	// The jail dir starts root-owned 0700; hand it to this jail's uid so the
-	// jailed process can read/write its own files while other uids (other
-	// jails) cannot even traverse it. The runner (root) keeps access for
-	// cleanup and artifact reads.
-	if err := os.Chown(jailDir, uid, uid); err != nil {
-		buildRes.Status = "internal_error"
-		buildRes.Stderr = fmt.Sprintf("failed to chown jail dir: %v", err)
-		return buildRes, nil, fmt.Errorf("failed to chown jail dir: %w", err)
-	}
-
-	// Per-jail cgroup v2 directory (memory+pids limits enforced by nsjail
-	// inside it). Any setup failure degrades to the rlimit path for this
-	// request — limits stay enforced either way, never a gap.
-	var jailCg *cgroupv2.Jail
-	if cgroupv2.Default().Active() {
-		jailCg, err = cgroupv2.Default().NewJail(filepath.Base(jailDir))
-		if err != nil {
-			log.Printf("[runner] cgroup jail setup failed, using rlimit fallback for this request: %v", err)
-			jailCg = nil
-		} else {
-			defer jailCg.Teardown()
-		}
-	}
-
-	srcName := resolveSourceName(req, lc)
-
-	srcDir := filepath.Join(jailDir, "app")
-	if err := os.MkdirAll(srcDir, 0755); err != nil {
-		buildRes.Status = "internal_error"
-		buildRes.Stderr = fmt.Sprintf("failed to create app dir: %v", err)
-		return buildRes, nil, fmt.Errorf("failed to create app dir: %w", err)
-	}
-	if err := os.Chown(srcDir, uid, uid); err != nil {
-		buildRes.Status = "internal_error"
-		buildRes.Stderr = fmt.Sprintf("failed to chown app dir: %v", err)
-		return buildRes, nil, fmt.Errorf("failed to chown app dir: %w", err)
-	}
-	srcPath := filepath.Join(srcDir, srcName)
-	if err := writeSource(srcPath, []byte(req.Source)); err != nil {
-		buildRes.Status = "internal_error"
-		buildRes.Stderr = fmt.Sprintf("failed to write source: %v", err)
-		return buildRes, nil, fmt.Errorf("failed to write source: %w", err)
-	}
-	if err := os.Chown(srcPath, uid, uid); err != nil {
-		buildRes.Status = "internal_error"
-		buildRes.Stderr = fmt.Sprintf("failed to chown source: %v", err)
-		return buildRes, nil, fmt.Errorf("failed to chown source: %w", err)
 	}
 
 	// Build step for compiled languages
 	buildStart := time.Now()
 	if len(lc.BuildCmd) > 0 {
-		buildRes, err = runBuild(ctx, jailDir, req, lc, uid, jailCg)
+		buildRes, err = runBuild(ctx, tmpl.dir, req, lc, tmpl.uid, tmpl.cg)
 		buildRes.DurationMs = int(time.Since(buildStart).Milliseconds())
 		if err != nil {
 			return buildRes, nil, err
@@ -190,8 +134,9 @@ func ExecuteRun(ctx context.Context, req models.RunRequest, lc config.LanguageCo
 
 	if effectiveParallel > 1 {
 		// Parallel execution: bounded concurrency via semaphore channel.
-		// Each test gets its own jailDir (nsjail cannot share a bind-mount
-		// across concurrent processes).
+		// Each test gets its own jail (nsjail cannot share a bind-mount
+		// across concurrent processes), materialized fresh from the build
+		// template so the source AND the build artifact land in every jail.
 		results = make([]models.TestResult, len(req.Tests))
 		var wg sync.WaitGroup
 		sem := make(chan struct{}, effectiveParallel)
@@ -205,19 +150,7 @@ func ExecuteRun(ctx context.Context, req models.RunRequest, lc config.LanguageCo
 				defer wg.Done()
 				defer func() { <-sem }() // release semaphore
 
-				// Create a per-test jail directory.
-				parJailDir, err := os.MkdirTemp("", "goboxd-jail-*")
-				if err != nil {
-					results[idx] = models.TestResult{
-						Status: "internal_error",
-						Stderr: fmt.Sprintf("creating jail dir: %v", err),
-					}
-					return
-				}
-				defer func() { _ = os.RemoveAll(parJailDir) }()
-
-				// Chown for the jail uid.
-				parUid, err := uidPool.Alloc()
+				parJail, err := newJail(req, lc, srcName)
 				if err != nil {
 					results[idx] = models.TestResult{
 						Status: "internal_error",
@@ -225,67 +158,26 @@ func ExecuteRun(ctx context.Context, req models.RunRequest, lc config.LanguageCo
 					}
 					return
 				}
-				defer uidPool.Release(parUid)
-				if err := os.Chown(parJailDir, parUid, parUid); err != nil {
+				defer parJail.teardown()
+				if err := parJail.seedFrom(tmpl); err != nil {
 					results[idx] = models.TestResult{
 						Status: "internal_error",
-						Stderr: fmt.Sprintf("chown jail dir: %v", err),
+						Stderr: fmt.Sprintf("seeding jail: %v", err),
 					}
 					return
 				}
 
-				// Write source into the per-test jail.
-				parSrcDir := filepath.Join(parJailDir, "app")
-				if err := os.MkdirAll(parSrcDir, 0755); err != nil {
-					results[idx] = models.TestResult{
-						Status: "internal_error",
-						Stderr: fmt.Sprintf("creating app dir: %v", err),
-					}
-					return
-				}
-				if err := os.Chown(parSrcDir, parUid, parUid); err != nil {
-					results[idx] = models.TestResult{
-						Status: "internal_error",
-						Stderr: fmt.Sprintf("chown app dir: %v", err),
-					}
-					return
-				}
-				parSrcPath := filepath.Join(parSrcDir, srcName)
-				if err := writeSource(parSrcPath, []byte(req.Source)); err != nil {
-					results[idx] = models.TestResult{
-						Status: "internal_error",
-						Stderr: fmt.Sprintf("writing source: %v", err),
-					}
-					return
-				}
-				if err := os.Chown(parSrcPath, parUid, parUid); err != nil {
-					results[idx] = models.TestResult{
-						Status: "internal_error",
-						Stderr: fmt.Sprintf("chown source: %v", err),
-					}
-					return
-				}
-
-				// Per-test cgroup leaf.
-				var parCg *cgroupv2.Jail
-				if cgroupv2.Default().Active() {
-					parCg, _ = cgroupv2.Default().NewJail(fmt.Sprintf("par-%d-%d", os.Getpid(), idx))
-					if parCg != nil {
-						defer parCg.Teardown()
-					}
-				}
-
-				results[idx] = runSingleTest(ctx, tc, lc, parJailDir, req.Run, parUid, parCg, outputCap)
+				results[idx] = runSingleTest(ctx, tc, lc, parJail.dir, req.Run, parJail.uid, parJail.cg, outputCap)
 			}(i, tc)
 		}
 		wg.Wait()
 	} else {
-		// Sequential execution (default).
+		// Sequential execution (default): reuse the template jail for all tests.
 		for _, tc := range req.Tests {
 			if ctx.Err() != nil {
 				break
 			}
-			res := runSingleTest(ctx, tc, lc, jailDir, req.Run, uid, jailCg, outputCap)
+			res := runSingleTest(ctx, tc, lc, tmpl.dir, req.Run, tmpl.uid, tmpl.cg, outputCap)
 			results = append(results, res)
 		}
 	}

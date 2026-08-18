@@ -144,3 +144,23 @@ func TestPoolSizeAtLeastOne(t *testing.T) {
 		t.Errorf("unexpected uid %d", a)
 	}
 }
+
+// TestUidBudget locks the pool sizing contract: maxJobs x (NumCPU + 1) (each
+// request holds one uid for its template jail plus up to NumCPU uids for its
+// parallel tests, and up to maxJobs requests are in flight), and an
+// overflowing GOBOXD_MAX_JOBS saturates at MaxInt (keeping the +1 factor)
+// instead of wrapping negative.
+func TestUidBudget(t *testing.T) {
+	t.Setenv("GOBOXD_MAX_JOBS", "4")
+	if got, want := UidBudget(), 4*(runtime.NumCPU()+1); got != want {
+		t.Errorf("UidBudget with GOBOXD_MAX_JOBS=4 = %d, want %d", got, want)
+	}
+	t.Setenv("GOBOXD_MAX_JOBS", "")
+	if got, want := UidBudget(), runtime.NumCPU()*(runtime.NumCPU()+1); got != want {
+		t.Errorf("UidBudget default = %d, want %d", got, want)
+	}
+	t.Setenv("GOBOXD_MAX_JOBS", "9223372036854775807")
+	if got, want := UidBudget(), int(^uint(0)>>1); got != want {
+		t.Errorf("UidBudget overflow = %d, want saturated MaxInt %d", got, want)
+	}
+}

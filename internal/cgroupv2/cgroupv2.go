@@ -310,6 +310,15 @@ func (m *Manager) NewJail(id string) (*Jail, error) {
 	return &Jail{manager: m, path: p, cpuActive: m.CPUActive()}, nil
 }
 
+// RemoveJail removes the per-jail cgroup directory for id, best-effort.
+// NewJail creates the directory before enabling its controllers; when enabling
+// fails, NewJail returns an error and no *Jail exists for the caller to
+// Teardown. Callers use RemoveJail to clean up that partially-created dir. It
+// is a safe no-op on a missing dir.
+func (m *Manager) RemoveJail(id string) error {
+	return removeJailDir(filepath.Join(m.base, id))
+}
+
 // Sweep removes leftover jail cgroup dirs (crashed runs). Call it only when
 // no jails can be active: at probe time and after the shutdown drain.
 func (m *Manager) Sweep() {

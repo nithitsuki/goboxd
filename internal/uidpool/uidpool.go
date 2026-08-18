@@ -20,9 +20,7 @@ import (
 const DefaultMinUid = 10000
 
 // ConcurrentJobs returns the concurrent-jobs bound used by the API semaphore:
-// GOBOXD_MAX_JOBS if set and positive, else runtime.NumCPU(). The uid pool is
-// sized to this bound so the pool can never be exhausted while the semaphore
-// admits jobs (pool size >= in-flight jails by construction).
+// GOBOXD_MAX_JOBS if set and positive, else runtime.NumCPU().
 func ConcurrentJobs() int {
 	if e := os.Getenv("GOBOXD_MAX_JOBS"); e != "" {
 		if v, err := strconv.Atoi(e); err == nil && v > 0 {
@@ -30,6 +28,34 @@ func ConcurrentJobs() int {
 		}
 	}
 	return runtime.NumCPU()
+}
+
+// UidBudget returns the size of the uid pool: ConcurrentJobs() x (NumCPU + 1).
+//
+// The admission gate admits up to maxJobs requests. A request holds one uid
+// for its template jail for the whole request, plus up to NumCPU uids at once
+// for its parallel tests (capped at runtime.NumCPU() in ExecuteRun), so
+// worst-case simultaneous demand is maxJobs x (NumCPU + 1). A pool sized to
+// that product can never be exhausted while jobs are admitted. The per-request
+// +1 (the template uid) is folded into the per-request factor, so an
+// overflowing GOBOXD_MAX_JOBS cannot silently drop it: the product saturates
+// at MaxInt instead of wrapping negative. Exhaustion stays an internal_error,
+// never a silent uid sharing.
+func UidBudget() int {
+	jobs := ConcurrentJobs()
+	if jobs < 1 {
+		jobs = 1
+	}
+	cpus := runtime.NumCPU()
+	if cpus < 1 {
+		cpus = 1
+	}
+	per := cpus + 1 // template jail uid + one per parallel test
+	maxInt := int(^uint(0) >> 1)
+	if jobs > maxInt/per {
+		return maxInt // saturate: maxJobs x (NumCPU + 1) cannot be represented
+	}
+	return jobs * per
 }
 
 // minUid reads GOBOXD_UID_MIN, falling back to DefaultMinUid.
@@ -89,4 +115,11 @@ func (p *Pool) Release(uid int) {
 		return
 	}
 	delete(p.inUse, uid)
+}
+
+// Size returns the number of uids the pool can hand out.
+func (p *Pool) Size() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.size
 }
