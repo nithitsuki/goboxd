@@ -587,15 +587,20 @@ func TestSecurityHole2NoShellCommands(t *testing.T) {
 	t.Log("Security hole #2: CLOSED — no shell interpreters invoked")
 }
 
-// TestHandleRunLimitValidation guards the downward-only limit contract:
-// client-requested build/run limits must never exceed the configured YAML
-// maxima (HTTP 400 limit_exceeded), must be positive (400 invalid_limit),
-// and interpreted languages reject build limits (no build stage).
+// TestHandleRunLimitValidation guards the per-language ceiling contract:
+// client-requested limits must be positive (400 invalid_limit), must not
+// exceed the per-language ceiling (400 limit_exceeded), may exceed the
+// YAML maxima up to the ceiling (200, P1-10), and interpreted languages
+// reject build limits (no build stage).
 func TestHandleRunLimitValidation(t *testing.T) {
 	c := config.DefaultRegistry["c"]
 	py := config.DefaultRegistry["py3"]
+	goLimits := config.DefaultRegistry["go"]
 	if c.BuildLimits.MemoryKB == 0 || py.RunLimits.MemoryKB == 0 || py.RunLimits.CpuTimeS == 0 {
 		t.Fatal("test requires c build limits and py3 run limits (incl. cpu_time_s) in the registry")
+	}
+	if goLimits.BuildLimits.WallTimeS == 0 {
+		t.Fatal("test requires go build limits in the registry")
 	}
 
 	tests := []struct {
@@ -656,6 +661,33 @@ func TestHandleRunLimitValidation(t *testing.T) {
 			expectedCode: http.StatusOK,
 		},
 		{
+			// P1-10: a value above the default max but at or below the
+			// per-language ceiling is the new raise behavior and must pass.
+			name: "build wall between max and ceiling accepted",
+			body: fmt.Sprintf(`{"language":"go","source":"package main\nfunc main(){}","build":{"limits":{"wall_time_s":%d}},"tests":[{"stdin":"","expected_stdout":""}]}`,
+				goLimits.BuildLimits.WallTimeS+1),
+			expectedCode: http.StatusOK,
+		},
+		{
+			// P1-10: a value above the ceiling is rejected even though the
+			// same value would be fine for a language with a higher ceiling.
+			name: "build wall above ceiling rejected",
+			body: fmt.Sprintf(`{"language":"go","source":"package main\nfunc main(){}","build":{"limits":{"wall_time_s":%d}},"tests":[{"stdin":"","expected_stdout":""}]}`,
+				goLimits.BuildCeiling.WallTimeS+1),
+			expectedCode: http.StatusBadRequest,
+			errorCode:    "limit_exceeded",
+		},
+		{
+			// P1-10: with no ceiling declared the default max acts as the
+			// ceiling, so a raise above max stays rejected. Uses memory_kb
+			// so this case differs from the pre-existing wall_time_s one.
+			name: "ceiling absent above max rejected",
+			body: fmt.Sprintf(`{"language":"py3","source":"print(1)","run":{"limits":{"memory_kb":%d}},"tests":[{"stdin":"","expected_stdout":"1\n"}]}`,
+				py.RunLimits.MemoryKB+1),
+			expectedCode: http.StatusBadRequest,
+			errorCode:    "limit_exceeded",
+		},
+		{
 			name: "run cpu above max",
 			body: fmt.Sprintf(`{"language":"py3","source":"print(1)","run":{"limits":{"cpu_time_s":%d}},"tests":[{"stdin":"","expected_stdout":"1\n"}]}`,
 				py.RunLimits.CpuTimeS+1),
@@ -701,30 +733,36 @@ func TestHandleRunLimitValidation(t *testing.T) {
 }
 
 // TestValidateStageLimitsCPU locks the cpu_time_s contract: positive,
-// downward-only against the YAML max, and a zero YAML max (a language with
-// no cpu cap configured) rejects any client cpu limit with invalid_limit.
+// at most the per-language ceiling (P1-10), and a zero YAML max (a language
+// with no cpu cap configured) rejects any client cpu limit with
+// invalid_limit. A zero ceiling field means the stage max acts as the
+// ceiling for that field.
 func TestValidateStageLimitsCPU(t *testing.T) {
 	max := config.Limits{WallTimeS: 9, MemoryKB: 102400, MaxProcesses: 100, CpuTimeS: 11}
 
 	ptr := func(n int) *int { return &n }
 	cases := []struct {
-		name     string
-		stageMax config.Limits
-		limit    *int
-		wantCode string
+		name      string
+		stageMax  config.Limits
+		stageCeil config.Limits
+		limit     *int
+		wantCode  string
 	}{
-		{"below max ok", max, ptr(5), ""},
-		{"equal max ok", max, ptr(11), ""},
-		{"above max rejected", max, ptr(12), "limit_exceeded"},
-		{"zero rejected", max, ptr(0), "invalid_limit"},
-		{"negative rejected", max, ptr(-1), "invalid_limit"},
-		{"no cap in registry rejected", config.Limits{CpuTimeS: 0}, ptr(2), "invalid_limit"},
+		{"below max ok", max, max, ptr(5), ""},
+		{"equal max ok", max, max, ptr(11), ""},
+		{"above max rejected", max, max, ptr(12), "limit_exceeded"},
+		{"between max and ceiling ok", max, config.Limits{CpuTimeS: 22}, ptr(12), ""},
+		{"equal ceiling ok", max, config.Limits{CpuTimeS: 22}, ptr(22), ""},
+		{"above ceiling rejected", max, config.Limits{CpuTimeS: 22}, ptr(23), "limit_exceeded"},
+		{"zero rejected", max, max, ptr(0), "invalid_limit"},
+		{"negative rejected", max, max, ptr(-1), "invalid_limit"},
+		{"no cap in registry rejected", config.Limits{CpuTimeS: 0}, config.Limits{}, ptr(2), "invalid_limit"},
 	}
 	for _, tt := range cases {
 		t.Run(tt.name, func(t *testing.T) {
 			w := httptest.NewRecorder()
 			stage := &models.StageConfig{Limits: &models.Limits{CpuTimeS: tt.limit}}
-			if validateStageLimits(w, stage, tt.stageMax, true, "run") == (tt.wantCode != "") {
+			if validateStageLimits(w, stage, tt.stageMax, tt.stageCeil, true, "run") == (tt.wantCode != "") {
 				t.Errorf("validateStageLimits accepted=%v, want error %q", tt.wantCode == "", tt.wantCode)
 			}
 			if tt.wantCode != "" {

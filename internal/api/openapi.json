@@ -86,7 +86,7 @@
     "/run": {
       "post": {
         "summary": "Execute untrusted code",
-        "description": "Runs source against test cases inside a sandbox. Per-request build/run limits may only go down from the configured maxima.",
+        "description": "Runs source against test cases inside a sandbox. Per-request build/run limits may go down from the defaults or up to the per-language ceiling. The ceiling equals the default maximum when the language declares no ceiling.",
         "requestBody": {
           "required": true,
           "content": {
@@ -153,6 +153,7 @@
       },
       "Limits": {
         "type": "object",
+        "description": "Per-request limits for a stage. The server accepts values up to the per-language ceiling. The ceiling equals the default maximum when the language declares no ceiling.",
         "properties": {
           "wall_time_s": { "type": "integer" },
           "memory_kb": { "type": "integer" },

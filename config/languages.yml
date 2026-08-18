@@ -78,6 +78,9 @@ languages:
         cpu_time_s: 48
         memory_kb: 4194304
         max_processes: 100
+      # P1-10: measured-safe maximum for build wall time (2x the default).
+      ceiling:
+        wall_time_s: 12
     run:
       cmd: /usr/bin/java
       args: ["-cp", ".", "{{artifact}}"]
@@ -144,6 +147,9 @@ languages:
         cpu_time_s: 80
         memory_kb: 4194304
         max_processes: 100
+      # P1-10: measured-safe maximum for build wall time (2x the default).
+      ceiling:
+        wall_time_s: 20
       flag_allowlist: ["-O*"]
     run:
       cmd: ./{{artifact}}
@@ -165,6 +171,11 @@ languages:
         cpu_time_s: 120
         memory_kb: 4194304
         max_processes: 100
+      # P1-10: measured-safe maxima. Clients may raise build limits up to
+      # these values (2x the defaults for wall time and memory).
+      ceiling:
+        wall_time_s: 30
+        memory_kb: 8388608
       flag_allowlist: ["-ldflags*", "-tags*"]
     run:
       cmd: ./{{artifact}}
@@ -361,6 +372,9 @@ languages:
         cpu_time_s: 36
         memory_kb: 8388608
         max_processes: 100
+      # P1-10: measured-safe maximum for run memory (1.5x the default).
+      ceiling:
+        memory_kb: 12582912
 
   - id: ts
     name: TypeScript
@@ -395,6 +409,9 @@ languages:
         cpu_time_s: 160
         memory_kb: 4194304
         max_processes: 100
+      # P1-10: measured-safe maximum for build wall time (2x the default).
+      ceiling:
+        wall_time_s: 40
       smoke_cmd: /usr/local/dotnet/dotnet
       smoke_args: ["--version"]
     run:

@@ -27,10 +27,36 @@ type Limits struct {
 // {{source}} and {{artifact}} are expanded per-request.
 // {{flags}} is replaced with user-supplied flags at request time.
 type StageCmd struct {
-	Cmd           string   `yaml:"cmd"`
-	Args          []string `yaml:"args"`
-	Limits        Limits   `yaml:"limits"`
+	Cmd    string   `yaml:"cmd"`
+	Args   []string `yaml:"args"`
+	Limits Limits   `yaml:"limits"`
+	// Ceiling holds the measured-safe maxima for this stage. It is a Limits
+	// value parallel to limits in the YAML (P1-10). When the ceiling key is
+	// absent, HasCeiling is false and the stage limits act as the ceiling
+	// (backward compatible). A zero ceiling field means that field's max
+	// acts as the ceiling: a ceiling block may raise only some fields.
+	Ceiling       Limits   `yaml:"ceiling"`
+	HasCeiling    bool     `yaml:"-"`
 	FlagAllowlist []string `yaml:"flag_allowlist,omitempty"`
+}
+
+// UnmarshalYAML decodes a stage and records whether the ceiling key was
+// present. yaml.v3 cannot tell a missing key from a zero value, and an
+// absent ceiling must fall back to the stage limits.
+func (s *StageCmd) UnmarshalYAML(node *yaml.Node) error {
+	type rawStage StageCmd
+	var raw rawStage
+	if err := node.Decode(&raw); err != nil {
+		return err
+	}
+	*s = StageCmd(raw)
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		if node.Content[i].Value == "ceiling" {
+			s.HasCeiling = true
+			break
+		}
+	}
+	return nil
 }
 
 // LanguageYAML is the per-language YAML config structure.
@@ -64,6 +90,9 @@ type LanguageConfig struct {
 	DefaultLimits          Limits   // merged limits (build limits for compiled, run for interpreted)
 	BuildLimits            Limits   // YAML build limits (for compiled languages)
 	RunLimits              Limits   // YAML run limits
+	BuildCeiling           Limits   // measured-safe build maxima (build limits when ceiling absent)
+	RunCeiling             Limits   // measured-safe run maxima (run limits when ceiling absent)
+	DefaultCeiling         Limits   // merged ceiling (build for compiled, run for interpreted)
 	FlagAllowlist          []string
 	SmokeCmd               []string // readiness probe override (nil = probe build/run cmd)
 	SourceFilenameStrategy string
@@ -120,14 +149,21 @@ func LoadRegistry() error {
 			lc.SmokeCmd = append([]string{lang.SmokeCmd}, lang.SmokeArgs...)
 		}
 
-		// Store separate build and run limits from YAML
+		// Store separate build and run limits from YAML. Ceilings default to
+		// the stage limits when the ceiling key is absent (P1-10 backward
+		// compatibility: the existing limits max acts as the ceiling).
 		if lang.Build != nil {
 			lc.BuildLimits = lang.Build.Limits
 			lc.DefaultLimits = lang.Build.Limits
+			lc.BuildCeiling = resolveCeiling(lang.Build.Ceiling, lang.Build.Limits, lang.Build.HasCeiling)
 		}
 		lc.RunLimits = lang.Run.Limits
+		lc.RunCeiling = resolveCeiling(lang.Run.Ceiling, lang.Run.Limits, lang.Run.HasCeiling)
 		if lang.Build == nil {
 			lc.DefaultLimits = lang.Run.Limits
+			lc.DefaultCeiling = lc.RunCeiling
+		} else {
+			lc.DefaultCeiling = lc.BuildCeiling
 		}
 
 		if _, exists := DefaultRegistry[lang.ID]; exists {
@@ -167,6 +203,29 @@ func LoadRegistry() error {
 	}
 
 	return nil
+}
+
+// resolveCeiling fills the ceiling fields that the YAML left unset with the
+// stage max. A ceiling block may raise only some fields, and the resolved
+// ceiling must hold a complete set of maxima. When the ceiling key is
+// absent, the stage limits are the ceiling (backward compatible).
+func resolveCeiling(ceiling, limits Limits, hasCeiling bool) Limits {
+	if !hasCeiling {
+		return limits
+	}
+	if ceiling.WallTimeS == 0 {
+		ceiling.WallTimeS = limits.WallTimeS
+	}
+	if ceiling.MemoryKB == 0 {
+		ceiling.MemoryKB = limits.MemoryKB
+	}
+	if ceiling.MaxProcesses == 0 {
+		ceiling.MaxProcesses = limits.MaxProcesses
+	}
+	if ceiling.CpuTimeS == 0 {
+		ceiling.CpuTimeS = limits.CpuTimeS
+	}
+	return ceiling
 }
 
 // expandCmd replaces {{source}} and {{artifact}} templates and builds the arg slice.

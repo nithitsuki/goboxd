@@ -334,6 +334,14 @@ func HandleInfo(w http.ResponseWriter, r *http.Request) {
 				"max_processes": lc.DefaultLimits.MaxProcesses,
 				"cpu_time_s":    lc.DefaultLimits.CpuTimeS,
 			},
+			// P1-10: the measured-safe maxima clients may raise limits up to.
+			// Equals default_run_limits when the language declares no ceiling.
+			"ceiling_run_limits": map[string]interface{}{
+				"wall_time_s":   lc.DefaultCeiling.WallTimeS,
+				"memory_kb":     lc.DefaultCeiling.MemoryKB,
+				"max_processes": lc.DefaultCeiling.MaxProcesses,
+				"cpu_time_s":    lc.DefaultCeiling.CpuTimeS,
+			},
 		})
 	}
 
@@ -454,13 +462,14 @@ func HandleRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Downward-only limits: client-requested build/run limits may never
-	// exceed the configured YAML maxima, and must be positive. The YAML
-	// defaults are the effective caps (piston model).
-	if !validateStageLimits(w, req.Build, lc.BuildLimits, len(lc.BuildCmd) > 0, "build") {
+	// Per-language limit contract (P1-10): a client may lower any limit and
+	// may raise a limit up to the per-language ceiling. The YAML limits are
+	// the defaults; the ceiling is the measured-safe maximum (defaults to
+	// the limits when the YAML declares no ceiling).
+	if !validateStageLimits(w, req.Build, lc.BuildLimits, lc.BuildCeiling, len(lc.BuildCmd) > 0, "build") {
 		return
 	}
-	if !validateStageLimits(w, req.Run, lc.RunLimits, true, "run") {
+	if !validateStageLimits(w, req.Run, lc.RunLimits, lc.RunCeiling, true, "run") {
 		return
 	}
 
@@ -604,11 +613,13 @@ func classifyAcquireErr(ctx context.Context, err error) (status string, isError 
 	return "cancelled", false
 }
 
-// validateStageLimits enforces the downward-only limit contract for one stage.
-// Returns false (after writing the error response) when a limit is invalid or
-// exceeds the configured maximum. Interpreted languages (hasBuild == false)
-// reject any build limits: they have no build stage.
-func validateStageLimits(w http.ResponseWriter, stage *models.StageConfig, max config.Limits, hasBuild bool, stageName string) bool {
+// validateStageLimits enforces the per-language limit contract for one
+// stage. A client may lower any limit and may raise a limit up to the
+// per-language ceiling. The server rejects values above the ceiling with
+// limit_exceeded and non-positive values with invalid_limit. Interpreted
+// languages (hasBuild == false) reject any build limits: they have no build
+// stage.
+func validateStageLimits(w http.ResponseWriter, stage *models.StageConfig, max, ceiling config.Limits, hasBuild bool, stageName string) bool {
 	if stage == nil || stage.Limits == nil {
 		return true
 	}
@@ -616,25 +627,35 @@ func validateStageLimits(w http.ResponseWriter, stage *models.StageConfig, max c
 		writeError(w, "invalid_limit", fmt.Sprintf("%s.limits are not allowed: this language has no %s stage", stageName, stageName))
 		return false
 	}
-	check := func(field string, value int, maximum int) bool {
+	// ceilingAt returns the effective ceiling for one field. A zero ceiling
+	// field means the stage max acts as the ceiling for that field: a YAML
+	// ceiling block may raise only some fields.
+	ceilingAt := func(fieldCeiling, fieldMax int) int {
+		if fieldCeiling == 0 {
+			return fieldMax
+		}
+		return fieldCeiling
+	}
+	check := func(field string, value int, maximum int, fieldCeiling int) bool {
 		if value <= 0 {
 			writeError(w, "invalid_limit", fmt.Sprintf("%s.limits.%s must be positive", stageName, field))
 			return false
 		}
-		if value > maximum {
-			writeError(w, "limit_exceeded", fmt.Sprintf("%s.limits.%s of %d exceeds maximum of %d", stageName, field, value, maximum))
+		effective := ceilingAt(fieldCeiling, maximum)
+		if value > effective {
+			writeError(w, "limit_exceeded", fmt.Sprintf("%s.limits.%s of %d exceeds ceiling of %d", stageName, field, value, effective))
 			return false
 		}
 		return true
 	}
 	l := stage.Limits
-	if l.WallTimeS != nil && !check("wall_time_s", *l.WallTimeS, max.WallTimeS) {
+	if l.WallTimeS != nil && !check("wall_time_s", *l.WallTimeS, max.WallTimeS, ceiling.WallTimeS) {
 		return false
 	}
-	if l.MemoryKB != nil && !check("memory_kb", *l.MemoryKB, max.MemoryKB) {
+	if l.MemoryKB != nil && !check("memory_kb", *l.MemoryKB, max.MemoryKB, ceiling.MemoryKB) {
 		return false
 	}
-	if l.MaxProcesses != nil && !check("max_processes", *l.MaxProcesses, max.MaxProcesses) {
+	if l.MaxProcesses != nil && !check("max_processes", *l.MaxProcesses, max.MaxProcesses, ceiling.MaxProcesses) {
 		return false
 	}
 	if l.CpuTimeS != nil {
@@ -648,8 +669,9 @@ func validateStageLimits(w http.ResponseWriter, stage *models.StageConfig, max c
 			writeError(w, "invalid_limit", fmt.Sprintf("%s.limits.cpu_time_s is not allowed: this language has no cpu limit configured", stageName))
 			return false
 		}
-		if *l.CpuTimeS > max.CpuTimeS {
-			writeError(w, "limit_exceeded", fmt.Sprintf("%s.limits.cpu_time_s of %d exceeds maximum of %d", stageName, *l.CpuTimeS, max.CpuTimeS))
+		cpuCeiling := ceilingAt(ceiling.CpuTimeS, max.CpuTimeS)
+		if *l.CpuTimeS > cpuCeiling {
+			writeError(w, "limit_exceeded", fmt.Sprintf("%s.limits.cpu_time_s of %d exceeds ceiling of %d", stageName, *l.CpuTimeS, cpuCeiling))
 			return false
 		}
 	}

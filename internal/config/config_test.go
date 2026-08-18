@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
 
 func TestMain(m *testing.M) {
@@ -217,5 +219,86 @@ func TestJavaFilenameStrategyParsed(t *testing.T) {
 	}
 	if lc.SourceFilenameStrategy != "fixed" {
 		t.Errorf("java SourceFilenameStrategy = %q, want fixed", lc.SourceFilenameStrategy)
+	}
+}
+
+// TestStageCmdCeilingPresence locks the custom stage unmarshaler (P1-10):
+// the ceiling key presence is recorded even when its values are zero, and a
+// stage without the key reports HasCeiling false.
+func TestStageCmdCeilingPresence(t *testing.T) {
+	var withCeiling StageCmd
+	if err := yaml.Unmarshal([]byte("cmd: x\nargs: []\nlimits: {wall_time_s: 1}\nceiling: {wall_time_s: 2}\n"), &withCeiling); err != nil {
+		t.Fatalf("unmarshal with ceiling: %v", err)
+	}
+	if !withCeiling.HasCeiling {
+		t.Error("stage with ceiling key: HasCeiling = false, want true")
+	}
+	if withCeiling.Ceiling.WallTimeS != 2 {
+		t.Errorf("ceiling wall_time_s = %d, want 2", withCeiling.Ceiling.WallTimeS)
+	}
+
+	var without StageCmd
+	if err := yaml.Unmarshal([]byte("cmd: x\nargs: []\nlimits: {wall_time_s: 1}\n"), &without); err != nil {
+		t.Fatalf("unmarshal without ceiling: %v", err)
+	}
+	if without.HasCeiling {
+		t.Error("stage without ceiling key: HasCeiling = true, want false")
+	}
+}
+
+// TestCeilingsParsedFromYAML locks the P1-10 ceiling resolution in
+// LoadRegistry: languages with a ceiling block get their measured-safe
+// maxima, languages without one fall back to the stage limits (backward
+// compatible), and a ceiling block may raise only some fields.
+func TestCeilingsParsedFromYAML(t *testing.T) {
+	// Reload the full registry: earlier tests may have filtered it.
+	t.Setenv("GOBOXD_LANGS", "")
+	t.Setenv("GOBOXD_EXCLUDE_LANGS", "")
+	if err := LoadRegistry(); err != nil {
+		t.Fatalf("LoadRegistry: %v", err)
+	}
+	goLang, ok := DefaultRegistry["go"]
+	if !ok {
+		t.Fatal("go not in registry")
+	}
+	if goLang.BuildCeiling.WallTimeS != 30 {
+		t.Errorf("go build ceiling wall_time_s = %d, want 30", goLang.BuildCeiling.WallTimeS)
+	}
+	if goLang.BuildCeiling.MemoryKB != 8388608 {
+		t.Errorf("go build ceiling memory_kb = %d, want 8388608", goLang.BuildCeiling.MemoryKB)
+	}
+	// Fields absent from the ceiling block keep the stage max as ceiling.
+	if goLang.BuildCeiling.MaxProcesses != goLang.BuildLimits.MaxProcesses {
+		t.Errorf("go build ceiling max_processes = %d, want %d (fallback to max)", goLang.BuildCeiling.MaxProcesses, goLang.BuildLimits.MaxProcesses)
+	}
+	if goLang.BuildCeiling.CpuTimeS != goLang.BuildLimits.CpuTimeS {
+		t.Errorf("go build ceiling cpu_time_s = %d, want %d (fallback to max)", goLang.BuildCeiling.CpuTimeS, goLang.BuildLimits.CpuTimeS)
+	}
+	if goLang.DefaultCeiling != goLang.BuildCeiling {
+		t.Errorf("go DefaultCeiling = %+v, want BuildCeiling %+v (compiled language)", goLang.DefaultCeiling, goLang.BuildCeiling)
+	}
+
+	// Ceiling absent: the resolved ceiling equals the stage limits.
+	py, ok := DefaultRegistry["py3"]
+	if !ok {
+		t.Fatal("py3 not in registry")
+	}
+	if py.RunCeiling != py.RunLimits {
+		t.Errorf("py3 run ceiling = %+v, want equal to run limits %+v (no ceiling declared)", py.RunCeiling, py.RunLimits)
+	}
+	if py.DefaultCeiling != py.RunLimits {
+		t.Errorf("py3 DefaultCeiling = %+v, want RunLimits %+v (interpreted language)", py.DefaultCeiling, py.RunLimits)
+	}
+
+	// Elixir run ceiling: only memory raised.
+	ex, ok := DefaultRegistry["elixir"]
+	if !ok {
+		t.Fatal("elixir not in registry")
+	}
+	if ex.RunCeiling.MemoryKB != 12582912 {
+		t.Errorf("elixir run ceiling memory_kb = %d, want 12582912", ex.RunCeiling.MemoryKB)
+	}
+	if ex.RunCeiling.WallTimeS != ex.RunLimits.WallTimeS {
+		t.Errorf("elixir run ceiling wall_time_s = %d, want %d (fallback to max)", ex.RunCeiling.WallTimeS, ex.RunLimits.WallTimeS)
 	}
 }

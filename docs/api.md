@@ -68,14 +68,24 @@ returns HTTP 500 for infrastructure failures.
 | Field | Description |
 |---|---|
 | `wall_time_s` | Wall-clock time limit in seconds |
-| `cpu_time_s` | CPU time limit in seconds. Counts every thread of the program. Must be positive and at most the configured per-language maximum. |
+| `cpu_time_s` | CPU time limit in seconds. Counts every thread of the program. Must be positive and at most the configured per-language ceiling. |
 | `memory_kb` | Memory limit in KiB |
 | `max_processes` | Maximum process count |
 
-A client may lower any limit but never raise it above the configured
-per-language maximum. The server rejects limits above the maximum with
-`limit_exceeded` and non-positive limits with `invalid_limit`. A client may
-not set `cpu_time_s` for a language with no cpu limit configured.
+A client may lower any limit. A client may raise a limit up to the
+configured per-language ceiling. The server rejects limits above the ceiling
+with `limit_exceeded`. It rejects non-positive limits with `invalid_limit`.
+A client may not set `cpu_time_s` for a language with no cpu limit
+configured.
+
+Each language declares a ceiling for its build and run stages. The ceiling
+is the measured-safe maximum. When a language declares no ceiling, its
+default limits act as the ceiling. Clients can raise limits up to the
+ceiling. Values above the ceiling stay rejected. For compiled languages,
+the reported ceiling applies to the build stage. The run stage has its own
+ceiling, reported separately in `/info`. A declared cpu ceiling has no
+effect on a language with no cpu limit configured. That language rejects
+every client cpu limit.
 
 A run that exceeds `cpu_time_s` stops with `cpu_time_exceeded`. The kill
 happens at the limit, usually well before `wall_time_s` fires. The default
@@ -292,6 +302,12 @@ HTTP 200.
         "memory_kb": 102400,
         "max_processes": 100,
         "cpu_time_s": 11
+      },
+      "ceiling_run_limits": {
+        "wall_time_s": 9,
+        "memory_kb": 102400,
+        "max_processes": 100,
+        "cpu_time_s": 11
       }
     }
   ],
@@ -310,6 +326,10 @@ HTTP 200.
   }
 }
 ```
+
+Each language entry reports `default_run_limits` and `ceiling_run_limits`.
+The ceiling is the measured-safe maximum. It equals the default limits when
+the language declares no ceiling.
 
 ---
 
