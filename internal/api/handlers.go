@@ -132,26 +132,36 @@ func validateFlags(flags []string, allowlist []string) (bool, string) {
 }
 
 // computeTopLevelStatus determines the top-level run status per the API contract.
-func computeTopLevelStatus(build models.BuildResult, tests []models.TestResult) string {
-	if build.Status == "internal_error" {
-		return "internal_error"
+func computeTopLevelStatus(build models.BuildResult, tests []models.TestResult) models.ResultStatus {
+	if build.Status == models.BuildInternalError {
+		return models.ResultInternalError
 	}
-	if build.Status != "ok" {
-		return "build_failed"
+	// A zero BuildStatus ("") is invalid and must be treated as not-ok: a
+	// forgotten status must never read as success (C5 decision).
+	if !build.Status.Valid() {
+		return models.ResultBuildFailed
+	}
+	if build.Status != models.BuildOk {
+		return models.ResultBuildFailed
 	}
 	// Check for internal errors in tests first (those take precedence)
 	for _, t := range tests {
-		if t.Status == "internal_error" {
-			return "internal_error"
+		if t.Status == models.ResultInternalError {
+			return models.ResultInternalError
 		}
 	}
-	// First non-accepted test status becomes top-level
+	// First non-accepted test status becomes top-level. A status outside
+	// the closed set (including the zero value) reads as not_executed so
+	// a "" can never reach the wire top-level.
 	for _, t := range tests {
-		if t.Status != "accepted" {
+		if t.Status != models.ResultAccepted {
+			if !t.Status.Valid() {
+				return models.ResultNotExecuted
+			}
 			return t.Status
 		}
 	}
-	return "accepted"
+	return models.ResultAccepted
 }
 
 func HandleHealthz(w http.ResponseWriter, r *http.Request) {
@@ -543,10 +553,10 @@ func HandleRun(w http.ResponseWriter, r *http.Request) {
 			lastInternalErrMu.Lock()
 			lastInternalErr = time.Now()
 			lastInternalErrMu.Unlock()
-			recordRun("cancelled", time.Since(start), true)
+			recordRun(string(models.ResultCancelled), time.Since(start), true)
 			return
 		}
-		recordRun("cancelled", time.Since(start), false)
+		recordRun(string(models.ResultCancelled), time.Since(start), false)
 		return
 	}
 	if err != nil {
@@ -554,16 +564,16 @@ func HandleRun(w http.ResponseWriter, r *http.Request) {
 			req.Language, err, buildRes.Status, buildRes.Stderr)
 		// If buildRes already has internal_error status, return 200 with it
 		// (per the API contract: internal_error is a status in the response body, not a 5xx)
-		if buildRes.Status == "internal_error" {
+		if buildRes.Status == models.BuildInternalError {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
 			if err := json.NewEncoder(w).Encode(models.RunResponse{
-				Status: "internal_error",
+				Status: string(models.ResultInternalError),
 				Build:  buildRes,
 			}); err != nil {
 				log.Printf("failed to write internal_error response: %v", err)
 			}
-			recordRun("internal_error", time.Since(start), true)
+			recordRun(string(models.ResultInternalError), time.Since(start), true)
 			return
 		}
 		log.Printf("Internal error during execution: %v", err)
@@ -571,24 +581,24 @@ func HandleRun(w http.ResponseWriter, r *http.Request) {
 		lastInternalErr = time.Now()
 		lastInternalErrMu.Unlock()
 		writeInternalError(w, "sandbox execution failed")
-		recordRun("internal_error", time.Since(start), true)
+		recordRun(string(models.ResultInternalError), time.Since(start), true)
 		return
 	}
 
 	topStatus := computeTopLevelStatus(buildRes, testsRes)
 
 	// If build failed, construct not_executed entries for all tests per the API contract
-	if topStatus == "build_failed" || topStatus == "internal_error" {
+	if topStatus == models.ResultBuildFailed || topStatus == models.ResultInternalError {
 		if testsRes == nil && len(req.Tests) > 0 {
 			testsRes = make([]models.TestResult, len(req.Tests))
 		}
 		for i := range testsRes {
-			testsRes[i].Status = "not_executed"
+			testsRes[i].Status = models.ResultNotExecuted
 		}
 	}
 
 	resp := models.RunResponse{
-		Status: topStatus,
+		Status: string(topStatus),
 		Build:  buildRes,
 		Tests:  testsRes,
 	}
@@ -598,7 +608,7 @@ func HandleRun(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
 		log.Printf("failed to write run response: %v", err)
 	}
-	recordRun(topStatus, time.Since(start), topStatus == "internal_error")
+	recordRun(string(topStatus), time.Since(start), topStatus == models.ResultInternalError)
 }
 
 // classifyAcquireErr maps an admission failure to the recorded metric
@@ -612,7 +622,7 @@ func classifyAcquireErr(ctx context.Context, err error) (status string, isError 
 	}
 	// Cancelled while queued: the client is gone, so the response cannot
 	// be delivered and the write is skipped (P0-1 semantics).
-	return "cancelled", false
+	return string(models.ResultCancelled), false
 }
 
 // validateStageLimits enforces the per-language limit contract for one

@@ -69,7 +69,7 @@ var uidPool = uidpool.New(uidpool.UidBudget())
 
 func ExecuteRun(ctx context.Context, req models.RunRequest, lc config.LanguageConfig) (models.BuildResult, []models.TestResult, error) {
 	buildRes := models.BuildResult{
-		Status:     "ok",
+		Status:     models.BuildOk,
 		Stdout:     "",
 		Stderr:     "",
 		DurationMs: 0,
@@ -82,7 +82,7 @@ func ExecuteRun(ctx context.Context, req models.RunRequest, lc config.LanguageCo
 	// tests are seeded from it (see jail.go).
 	tmpl, err := newJail(req, lc, srcName)
 	if err != nil {
-		buildRes.Status = "internal_error"
+		buildRes.Status = models.BuildInternalError
 		buildRes.Stderr = err.Error()
 		return buildRes, nil, fmt.Errorf("materializing jail: %w", err)
 	}
@@ -104,7 +104,7 @@ func ExecuteRun(ctx context.Context, req models.RunRequest, lc config.LanguageCo
 		if err != nil {
 			return buildRes, nil, err
 		}
-		if buildRes.Status != "ok" {
+		if buildRes.Status != models.BuildOk {
 			// Build failed, don't run tests
 			return buildRes, nil, nil
 		}
@@ -152,7 +152,7 @@ func ExecuteRun(ctx context.Context, req models.RunRequest, lc config.LanguageCo
 				parJail, err := newJail(req, lc, srcName)
 				if err != nil {
 					results[idx] = models.TestResult{
-						Status: "internal_error",
+						Status: models.ResultInternalError,
 						Stderr: err.Error(),
 					}
 					return
@@ -160,7 +160,7 @@ func ExecuteRun(ctx context.Context, req models.RunRequest, lc config.LanguageCo
 				defer parJail.teardown()
 				if err := parJail.seedFrom(tmpl); err != nil {
 					results[idx] = models.TestResult{
-						Status: "internal_error",
+						Status: models.ResultInternalError,
 						Stderr: fmt.Sprintf("seeding jail: %v", err),
 					}
 					return
@@ -229,7 +229,7 @@ func runBuild(ctx context.Context, j *jail, req models.RunRequest, lc config.Lan
 		log.Printf("[runner] build for %s hit its cpu limit (%ds)", req.Language, cpuLimit)
 	}
 	res := models.BuildResult{
-		Status:    "ok",
+		Status:    models.BuildOk,
 		Stdout:    outcome.Stdout,
 		Stderr:    outcome.Stderr,
 		CpuTimeMs: int(outcome.CPUTimeUS / 1000),
@@ -240,18 +240,18 @@ func runBuild(ctx context.Context, j *jail, req models.RunRequest, lc config.Lan
 			// Wall timeout: execInJail appended this marker and classified the
 			// build as failed (never infra); keep that behavior byte-identical.
 			res.Stderr += "\n... [build timed out]"
-			res.Status = "failed"
+			res.Status = models.BuildFailed
 		} else if outcome.Infra {
-			res.Status = "internal_error"
+			res.Status = models.BuildInternalError
 			return res, outcome.Err
 		} else {
-			res.Status = "failed"
+			res.Status = models.BuildFailed
 		}
 	} else if ctx.Err() == context.DeadlineExceeded {
 		// The process exited cleanly as the deadline fired. Today's execInJail
 		// still read this as a failed, timed-out build.
 		res.Stderr += "\n... [build timed out]"
-		res.Status = "failed"
+		res.Status = models.BuildFailed
 	}
 	return res, nil
 }
@@ -542,7 +542,7 @@ func runSingleTest(ctx context.Context, tc models.TestCase, lc config.LanguageCo
 	start := time.Now()
 
 	if ctx.Err() != nil {
-		return failResult("cancelled", "", start)
+		return failResult(models.ResultCancelled, "", start)
 	}
 
 	// Use language-specific run limits, not build limits
@@ -601,7 +601,7 @@ func runSingleTest(ctx context.Context, tc models.TestCase, lc config.LanguageCo
 		}
 		log.Printf("[runner] nsjail infra error: %v | stderr: %s", outcome.Err, stderr)
 		return models.TestResult{
-			Status:       "internal_error",
+			Status:       models.ResultInternalError,
 			Stdout:       outcome.Stdout,
 			Stderr:       stderr,
 			DurationMs:   duration,
@@ -659,8 +659,9 @@ func exitFacts(ps *os.ProcessState) (exitCode, sig int) {
 	return code, 0
 }
 
-// signalKillReason checks if the process was killed by a signal and determines why.
-func signalKillReason(ps *os.ProcessState) string {
+// signalKillReason checks if the process was killed by a signal and
+// determines why. The empty ResultStatus means no signal kill.
+func signalKillReason(ps *os.ProcessState) models.ResultStatus {
 	if ps == nil {
 		return ""
 	}
@@ -673,25 +674,25 @@ func signalKillReason(ps *os.ProcessState) string {
 
 // signalReasonFromStatus classifies a wait status into a result status.
 // Pure (no os.ProcessState) so tests can feed it synthetic statuses.
-func signalReasonFromStatus(status syscall.WaitStatus) string {
+func signalReasonFromStatus(status syscall.WaitStatus) models.ResultStatus {
 	if !status.Signaled() {
 		// nsjail exits 128+signal when its child was killed by a signal:
 		// SIGXCPU from RLIMIT_CPU reads as exit 152, not a signaled status.
 		if status.ExitStatus() == 128+int(syscall.SIGXCPU) {
-			return "cpu_time_exceeded"
+			return models.ResultCPUTimeExceeded
 		}
 		return ""
 	}
 	sig := status.Signal()
 	switch sig {
 	case syscall.SIGKILL:
-		return "time_exceeded"
+		return models.ResultTimeExceeded
 	case syscall.SIGSEGV, syscall.SIGABRT:
-		return "memory_exceeded"
+		return models.ResultMemoryExceeded
 	case syscall.SIGXCPU:
-		return "cpu_time_exceeded"
+		return models.ResultCPUTimeExceeded
 	default:
-		return "runtime_error"
+		return models.ResultRuntimeError
 	}
 }
 
@@ -714,26 +715,26 @@ type cpuOutcome struct {
 	killed  bool  // the poller killed the process at the cgroup limit
 }
 
-func computeTestStatus(ctx context.Context, err error, stdout, expected string, ps *os.ProcessState, oomKilled bool, cpu cpuOutcome) string {
+func computeTestStatus(ctx context.Context, err error, stdout, expected string, ps *os.ProcessState, oomKilled bool, cpu cpuOutcome) models.ResultStatus {
 	// Client disconnect / request-context cancellation beats everything else:
 	// the run was killed on purpose, not by its limits.
 	if ctx.Err() == context.Canceled {
-		return "cancelled"
+		return models.ResultCancelled
 	}
 	// cgroup OOM kill (detected via the leaf's memory.events) is definitive:
 	// the process died for memory, not wall time.
 	if oomKilled {
-		return "memory_exceeded"
+		return models.ResultMemoryExceeded
 	}
 	// cpu limit: the poller killed the process when its cgroup usage hit the
 	// limit, or the kernel SIGKILLed it at the RLIMIT_CPU limit (nsjail reads
 	// the child's signal death as exit 137).
-	if cpu.killed || (err != nil && signalKillReason(ps) == "cpu_time_exceeded") {
-		return "cpu_time_exceeded"
+	if cpu.killed || (err != nil && signalKillReason(ps) == models.ResultCPUTimeExceeded) {
+		return models.ResultCPUTimeExceeded
 	}
 	// Check context deadline first (Go killed the process)
 	if ctx.Err() == context.DeadlineExceeded {
-		return "time_exceeded"
+		return models.ResultTimeExceeded
 	}
 	if err != nil {
 		if reason := signalKillReason(ps); reason != "" {
@@ -751,22 +752,22 @@ func computeTestStatus(ctx context.Context, err error, stdout, expected string, 
 		// inflate it on rlimit-only hosts.)
 		if strings.Contains(err.Error(), "exit status 137") {
 			if cpu.limitUS > 0 && cpu.timeUS >= cpu.limitUS {
-				return "cpu_time_exceeded"
+				return models.ResultCPUTimeExceeded
 			}
-			return "time_exceeded"
+			return models.ResultTimeExceeded
 		}
-		return "runtime_error"
+		return models.ResultRuntimeError
 	}
 	if expected == "" {
-		return "accepted"
+		return models.ResultAccepted
 	}
 	if stdout == expected {
-		return "accepted"
+		return models.ResultAccepted
 	}
 	if strings.TrimSpace(stdout) == strings.TrimSpace(expected) {
-		return "output_whitespace_mismatch"
+		return models.ResultWhitespaceMismatch
 	}
-	return "wrong_output"
+	return models.ResultWrongOutput
 }
 
 // ensureCacheDirs creates the per-UID cache directories under /var/cache/goboxd/uid-<uid>/
@@ -874,7 +875,7 @@ func readCapped(r io.Reader, limit int) string {
 	return string(raw)
 }
 
-func failResult(status, stderr string, start time.Time) models.TestResult {
+func failResult(status models.ResultStatus, stderr string, start time.Time) models.TestResult {
 	return models.TestResult{
 		Status:     status,
 		Stdout:     "",

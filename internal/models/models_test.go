@@ -109,6 +109,20 @@ func TestRunResponseJSONContract(t *testing.T) {
 	}
 }
 
+// TestZeroValueStatusNotExecuted locks the zero-value contract: a fresh
+// TestResult (status never set) must serialize as "not_executed", never "".
+// The empty string is a real unhandled state the parallel path used to emit
+// on cancellation; after C5 the zero value must be meaningful.
+func TestZeroValueStatusNotExecuted(t *testing.T) {
+	b, err := json.Marshal(TestResult{})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if !strings.Contains(string(b), `"status":"not_executed"`) {
+		t.Errorf("zero TestResult must read status not_executed, got %s", b)
+	}
+}
+
 // TestExitFactsAlwaysPresent locks the zero-value contract: exit facts are
 // result facts, not optional limits, so a zero TestResult must still carry
 // both fields in the marshaled JSON (no omitempty).

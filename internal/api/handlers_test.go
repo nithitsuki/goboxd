@@ -441,31 +441,43 @@ func TestComputeTopLevelStatus(t *testing.T) {
 		name     string
 		build    models.BuildResult
 		tests    []models.TestResult
-		expected string
+		expected models.ResultStatus
 	}{
 		{
 			name:     "all ok",
-			build:    models.BuildResult{Status: "ok"},
-			tests:    []models.TestResult{{Status: "accepted"}},
-			expected: "accepted",
+			build:    models.BuildResult{Status: models.BuildOk},
+			tests:    []models.TestResult{{Status: models.ResultAccepted}},
+			expected: models.ResultAccepted,
 		},
 		{
 			name:     "build failed",
-			build:    models.BuildResult{Status: "failed"},
-			tests:    []models.TestResult{{Status: "accepted"}},
-			expected: "build_failed",
+			build:    models.BuildResult{Status: models.BuildFailed},
+			tests:    []models.TestResult{{Status: models.ResultAccepted}},
+			expected: models.ResultBuildFailed,
 		},
 		{
 			name:     "internal error on build",
-			build:    models.BuildResult{Status: "internal_error"},
-			tests:    []models.TestResult{{Status: "accepted"}},
-			expected: "internal_error",
+			build:    models.BuildResult{Status: models.BuildInternalError},
+			tests:    []models.TestResult{{Status: models.ResultAccepted}},
+			expected: models.ResultInternalError,
+		},
+		{
+			name:     "zero build status is not ok",
+			build:    models.BuildResult{},
+			tests:    []models.TestResult{{Status: models.ResultAccepted}},
+			expected: models.ResultBuildFailed,
+		},
+		{
+			name:     "invalid test status maps to not_executed",
+			build:    models.BuildResult{Status: models.BuildOk},
+			tests:    []models.TestResult{{Status: models.ResultStatus("")}},
+			expected: models.ResultNotExecuted,
 		},
 		{
 			name:     "first non-accepted test",
-			build:    models.BuildResult{Status: "ok"},
-			tests:    []models.TestResult{{Status: "accepted"}, {Status: "wrong_output"}, {Status: "time_exceeded"}},
-			expected: "wrong_output",
+			build:    models.BuildResult{Status: models.BuildOk},
+			tests:    []models.TestResult{{Status: models.ResultAccepted}, {Status: models.ResultWrongOutput}, {Status: models.ResultTimeExceeded}},
+			expected: models.ResultWrongOutput,
 		},
 	}
 
@@ -1012,7 +1024,7 @@ func TestClassifyAcquireErr(t *testing.T) {
 	cancel()
 
 	status, isErr := classifyAcquireErr(ctx, errShuttingDown)
-	if status != "cancelled" || isErr {
+	if status != string(models.ResultCancelled) || isErr {
 		t.Errorf("dead ctx + shutting down = (%q, %v), want (cancelled, false)", status, isErr)
 	}
 
@@ -1022,7 +1034,7 @@ func TestClassifyAcquireErr(t *testing.T) {
 	}
 
 	status, isErr = classifyAcquireErr(context.Background(), context.Canceled)
-	if status != "cancelled" || isErr {
+	if status != string(models.ResultCancelled) || isErr {
 		t.Errorf("live ctx + cancel = (%q, %v), want (cancelled, false)", status, isErr)
 	}
 }

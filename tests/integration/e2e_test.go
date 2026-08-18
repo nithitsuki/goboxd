@@ -48,35 +48,35 @@ func TestE2E_Python3(t *testing.T) {
 		source         string
 		stdin          string
 		expectedStdout string
-		expectedStatus string
+		expectedStatus models.ResultStatus
 	}{
 		{
 			name:           "positive-basic",
 			source:         "print(\"Hello from Python 3!\")",
 			stdin:          "",
 			expectedStdout: "Hello from Python 3!\n",
-			expectedStatus: "accepted",
+			expectedStatus: models.ResultAccepted,
 		},
 		{
 			name:           "positive-advanced",
 			source:         "print(\"Python 3 advanced test\")\nimport sys\ndata = list(range(100))\nprint(f\"Processed {len(data)} items\")",
 			stdin:          "",
 			expectedStdout: "Python 3 advanced test\nProcessed 100 items\n",
-			expectedStatus: "accepted",
+			expectedStatus: models.ResultAccepted,
 		},
 		{
 			name:           "positive-io",
 			source:         "n = int(input())\nfor i in range(n):\n    print(f\"Line {i+1}\")",
 			stdin:          "3\n",
 			expectedStdout: "Line 1\nLine 2\nLine 3\n",
-			expectedStatus: "accepted",
+			expectedStatus: models.ResultAccepted,
 		},
 		{
 			name:           "memorylimit-high",
 			source:         "data = [1, 2, 3, 4, 5] * 1000\nprint(\"Memory test completed\")",
 			stdin:          "",
 			expectedStdout: "Memory test completed\n",
-			expectedStatus: "accepted",
+			expectedStatus: models.ResultAccepted,
 		},
 	}
 
@@ -140,7 +140,7 @@ int main(void) {
 
 	res := sendRun(t, req)
 
-	if res.Build.Status != "ok" {
+	if res.Build.Status != models.BuildOk {
 		t.Fatalf("build failed: status=%s stderr=%q", res.Build.Status, res.Build.Stderr)
 	}
 	if len(res.Tests) != 1 {
@@ -148,7 +148,7 @@ int main(void) {
 	}
 
 	got := res.Tests[0]
-	if got.Status != "runtime_error" {
+	if got.Status != models.ResultRuntimeError {
 		t.Errorf("expected runtime_error (SIGSYS from seccomp), got %q (stdout=%q stderr=%q)",
 			got.Status, got.Stdout, got.Stderr)
 	}
@@ -175,7 +175,7 @@ int main(void) {
 			},
 		}
 		res := sendRun(t, req)
-		if res.Build.Status != "ok" {
+		if res.Build.Status != models.BuildOk {
 			return 0, fmt.Errorf("build failed: status=%s stderr=%q", res.Build.Status, res.Build.Stderr)
 		}
 		if len(res.Tests) != 1 {
@@ -286,14 +286,14 @@ int main(void) {
 		},
 	}
 	res := sendRun(t, req)
-	if res.Build.Status != "ok" {
+	if res.Build.Status != models.BuildOk {
 		t.Fatalf("build failed: status=%s stderr=%q", res.Build.Status, res.Build.Stderr)
 	}
 	if len(res.Tests) != 1 {
 		t.Fatalf("expected 1 test result, got %d", len(res.Tests))
 	}
 	got := res.Tests[0]
-	if got.Status != "accepted" {
+	if got.Status != models.ResultAccepted {
 		t.Errorf("expected accepted (in-limit run), got %q (stdout=%q stderr=%q)",
 			got.Status, got.Stdout, got.Stderr)
 	}
@@ -347,14 +347,14 @@ int main(void) {
 		},
 	}
 	res := sendRun(t, req)
-	if res.Build.Status != "ok" {
+	if res.Build.Status != models.BuildOk {
 		t.Fatalf("build failed: status=%s stderr=%q", res.Build.Status, res.Build.Stderr)
 	}
 	if len(res.Tests) != 1 {
 		t.Fatalf("expected 1 test result, got %d", len(res.Tests))
 	}
 	got := res.Tests[0]
-	if got.Status == "memory_exceeded" {
+	if got.Status == models.ResultMemoryExceeded {
 		t.Error("memory_exceeded without cgroup v2 active: status classification depends on cgroup polling")
 	}
 	if !strings.Contains(got.Stdout, "malloc failed") {

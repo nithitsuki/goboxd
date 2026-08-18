@@ -43,13 +43,7 @@ C3. [ ] **Stop buffering run responses in the access log** — LoggingMiddleware
     × 1 MB cap ≈ 100 MB per request), quietly defeating the output cap.
     Capture only status code and run_status; stream the body to the client
     unbuffered.
-C5. [ ] **Typed result-status vocabulary** — TestResult.Status and BuildResult
-    statuses are string literals compared across models/runner/handlers; the
-    zero value "" is a real unhandled state the parallel path emits on
-    cancellation, and a typo compiles. Introduce ResultStatus (and
-    BuildStatus) types with constants; the zero value becomes meaningful
-    (NotExecuted); computeTestStatus and computeTopLevelStatus return the
-    typed values.
+C5. [x] **Typed result-status vocabulary** — shipped 2026-08-18. ResultStatus (11 constants) and BuildStatus (3 constants) in models; TestResult.Status and BuildResult.Status typed. ResultStatus("") marshals to not_executed (the parallel-path "" hole is closed); computeTopLevelStatus gates non-valid statuses to not_executed. JSON byte-identical for all real statuses (contract tests + fixture corpus pin the wire strings); a status typo now fails to compile. Verified: TestZeroValueStatusNotExecuted, TestComputeTestStatusTyped, grep gate clean, lint clean.
 
 ## What the executor must not build
 

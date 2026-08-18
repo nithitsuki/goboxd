@@ -75,7 +75,7 @@ func TestExecuteRun(t *testing.T) {
 		name           string
 		source         string
 		testCases      []models.TestCase
-		expectedStatus string
+		expectedStatus models.ResultStatus
 	}{
 		{
 			name:   "positive basic",
@@ -83,7 +83,7 @@ func TestExecuteRun(t *testing.T) {
 			testCases: []models.TestCase{
 				{Stdin: "", ExpectedStdout: "Hello from Python 3!\n"},
 			},
-			expectedStatus: "accepted",
+			expectedStatus: models.ResultAccepted,
 		},
 		{
 			name:   "timeout moderate",
@@ -91,7 +91,7 @@ func TestExecuteRun(t *testing.T) {
 			testCases: []models.TestCase{
 				{Stdin: "", ExpectedStdout: ""},
 			},
-			expectedStatus: "time_exceeded",
+			expectedStatus: models.ResultTimeExceeded,
 		},
 		{
 			name:   "runtime error (syntax)",
@@ -99,7 +99,7 @@ func TestExecuteRun(t *testing.T) {
 			testCases: []models.TestCase{
 				{Stdin: "", ExpectedStdout: ""},
 			},
-			expectedStatus: "runtime_error",
+			expectedStatus: models.ResultRuntimeError,
 		},
 		{
 			name:   "memory limit (OOM)",
@@ -107,7 +107,7 @@ func TestExecuteRun(t *testing.T) {
 			testCases: []models.TestCase{
 				{Stdin: "", ExpectedStdout: ""},
 			},
-			expectedStatus: "runtime_error",
+			expectedStatus: models.ResultRuntimeError,
 		},
 		{
 			name:   "wrong output",
@@ -115,7 +115,7 @@ func TestExecuteRun(t *testing.T) {
 			testCases: []models.TestCase{
 				{Stdin: "", ExpectedStdout: "right\n"},
 			},
-			expectedStatus: "wrong_output",
+			expectedStatus: models.ResultWrongOutput,
 		},
 	}
 
@@ -139,12 +139,12 @@ func TestExecuteRun(t *testing.T) {
 			res := results[0]
 
 			// Memory kills: sigkill from nsjail could surface as time_exceeded or runtime_error
-			if tt.name == "memory limit (OOM)" && (res.Status == "time_exceeded" || res.Status == "runtime_error") {
+			if tt.name == "memory limit (OOM)" && (res.Status == models.ResultTimeExceeded || res.Status == models.ResultRuntimeError) {
 				return
 			}
 
 			// Timeout: nsjail sigkill can read as time_exceeded or runtime_error
-			if tt.name == "timeout moderate" && (res.Status == "time_exceeded" || res.Status == "runtime_error") {
+			if tt.name == "timeout moderate" && (res.Status == models.ResultTimeExceeded || res.Status == models.ResultRuntimeError) {
 				return
 			}
 
@@ -225,8 +225,8 @@ func TestExecuteRunContextCancel(t *testing.T) {
 	if len(results) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(results))
 	}
-	if results[0].Status != "cancelled" {
-		t.Errorf("expected status %q, got %q (stderr: %q)", "cancelled", results[0].Status, results[0].Stderr)
+	if results[0].Status != models.ResultCancelled {
+		t.Errorf("expected status %q, got %q (stderr: %q)", models.ResultCancelled, results[0].Status, results[0].Stderr)
 	}
 	if results[0].Stdout != "" {
 		t.Errorf("expected empty stdout, got %q", results[0].Stdout)
@@ -364,22 +364,52 @@ func TestComputeTestStatus(t *testing.T) {
 		expected string
 		cpu      cpuOutcome
 		ctx      context.Context
-		want     string
+		want     models.ResultStatus
 	}{
-		{"exact match", nil, "hello\n", "hello\n", cpuOutcome{}, context.Background(), "accepted"},
-		{"whitespace diff", nil, "hello\n", "hello", cpuOutcome{}, context.Background(), "output_whitespace_mismatch"},
-		{"wrong output", nil, "world", "hello", cpuOutcome{}, context.Background(), "wrong_output"},
-		{"empty expected", nil, "anything", "", cpuOutcome{}, context.Background(), "accepted"},
-		{"exact match with empty expected", nil, "", "", cpuOutcome{}, context.Background(), "accepted"},
-		{"exit 137 early kill", fmt.Errorf("exit status 137"), "", "", cpuOutcome{}, context.Background(), "time_exceeded"},
-		{"exit 137 at wall time", fmt.Errorf("exit status 137"), "", "", cpuOutcome{}, context.Background(), "time_exceeded"},
-		{"exit 139 segv", fmt.Errorf("exit status 139"), "", "", cpuOutcome{}, context.Background(), "runtime_error"},
-		{"cpu kill wins over deadline-shaped error", fmt.Errorf("signal: killed"), "", "", cpuOutcome{killed: true}, context.Background(), "cpu_time_exceeded"},
-		{"cancelled beats cpu kill", fmt.Errorf("signal: killed"), "", "", cpuOutcome{killed: true}, canceledCtx(), "cancelled"},
-		{"no heuristic: err without signal is runtime_error even at wall time", fmt.Errorf("exit status 2"), "", "", cpuOutcome{}, context.Background(), "runtime_error"},
-		{"rlimit cpu kill reads as 137 with full cpu time", fmt.Errorf("exit status 137"), "", "", cpuOutcome{limitUS: 2 * 1e6, timeUS: 2 * 1e6}, context.Background(), "cpu_time_exceeded"},
-		{"wall kill with cpu time under the limit stays time_exceeded", fmt.Errorf("exit status 137"), "", "", cpuOutcome{limitUS: 11 * 1e6, timeUS: 9 * 1e6}, context.Background(), "time_exceeded"},
-		{"no cpu limit: 137 is always time_exceeded", fmt.Errorf("exit status 137"), "", "", cpuOutcome{timeUS: 2 * 1e6}, context.Background(), "time_exceeded"},
+		{"exact match", nil, "hello\n", "hello\n", cpuOutcome{}, context.Background(), models.ResultAccepted},
+		{"whitespace diff", nil, "hello\n", "hello", cpuOutcome{}, context.Background(), models.ResultWhitespaceMismatch},
+		{"wrong output", nil, "world", "hello", cpuOutcome{}, context.Background(), models.ResultWrongOutput},
+		{"empty expected", nil, "anything", "", cpuOutcome{}, context.Background(), models.ResultAccepted},
+		{"exact match with empty expected", nil, "", "", cpuOutcome{}, context.Background(), models.ResultAccepted},
+		{"exit 137 early kill", fmt.Errorf("exit status 137"), "", "", cpuOutcome{}, context.Background(), models.ResultTimeExceeded},
+		{"exit 137 at wall time", fmt.Errorf("exit status 137"), "", "", cpuOutcome{}, context.Background(), models.ResultTimeExceeded},
+		{"exit 139 segv", fmt.Errorf("exit status 139"), "", "", cpuOutcome{}, context.Background(), models.ResultRuntimeError},
+		{"cpu kill wins over deadline-shaped error", fmt.Errorf("signal: killed"), "", "", cpuOutcome{killed: true}, context.Background(), models.ResultCPUTimeExceeded},
+		{"cancelled beats cpu kill", fmt.Errorf("signal: killed"), "", "", cpuOutcome{killed: true}, canceledCtx(), models.ResultCancelled},
+		{"no heuristic: err without signal is runtime_error even at wall time", fmt.Errorf("exit status 2"), "", "", cpuOutcome{}, context.Background(), models.ResultRuntimeError},
+		{"rlimit cpu kill reads as 137 with full cpu time", fmt.Errorf("exit status 137"), "", "", cpuOutcome{limitUS: 2 * 1e6, timeUS: 2 * 1e6}, context.Background(), models.ResultCPUTimeExceeded},
+		{"wall kill with cpu time under the limit stays time_exceeded", fmt.Errorf("exit status 137"), "", "", cpuOutcome{limitUS: 11 * 1e6, timeUS: 9 * 1e6}, context.Background(), models.ResultTimeExceeded},
+		{"no cpu limit: 137 is always time_exceeded", fmt.Errorf("exit status 137"), "", "", cpuOutcome{timeUS: 2 * 1e6}, context.Background(), models.ResultTimeExceeded},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := computeTestStatus(tt.ctx, tt.err, tt.stdout, tt.expected, nil, false, tt.cpu)
+			if got != tt.want {
+				t.Errorf("computeTestStatus = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestComputeTestStatusTyped locks the typed-status contract: computeTestStatus
+// must return the closed ResultStatus vocabulary (never a raw string), so a
+// typo in a status cannot compile. Before the C5 signature change this test
+// does not compile: a string result is not comparable to a ResultStatus.
+func TestComputeTestStatusTyped(t *testing.T) {
+	tests := []struct {
+		name     string
+		err      error
+		stdout   string
+		expected string
+		cpu      cpuOutcome
+		ctx      context.Context
+		want     models.ResultStatus
+	}{
+		{"exact match is accepted", nil, "hello\n", "hello\n", cpuOutcome{}, context.Background(), models.ResultAccepted},
+		{"wall kill is time_exceeded", fmt.Errorf("exit status 137"), "", "", cpuOutcome{}, context.Background(), models.ResultTimeExceeded},
+		{"cpu kill is cpu_time_exceeded", fmt.Errorf("signal: killed"), "", "", cpuOutcome{killed: true}, context.Background(), models.ResultCPUTimeExceeded},
+		{"cancelled beats cpu kill", fmt.Errorf("signal: killed"), "", "", cpuOutcome{killed: true}, canceledCtx(), models.ResultCancelled},
+		{"wrong output", nil, "world", "hello", cpuOutcome{}, context.Background(), models.ResultWrongOutput},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -473,14 +503,14 @@ func TestSignalReasonFromStatus(t *testing.T) {
 	cases := []struct {
 		name   string
 		status syscall.WaitStatus
-		want   string
+		want   models.ResultStatus
 	}{
-		{"sigxcpu signaled", syscall.WaitStatus(syscall.SIGXCPU), "cpu_time_exceeded"},
-		{"nsjail exit 152 (128+SIGXCPU)", syscall.WaitStatus(152 << 8), "cpu_time_exceeded"},
-		{"sigkill", syscall.WaitStatus(syscall.SIGKILL), "time_exceeded"},
-		{"sigsegv", syscall.WaitStatus(syscall.SIGSEGV), "memory_exceeded"},
-		{"sigabrt", syscall.WaitStatus(syscall.SIGABRT), "memory_exceeded"},
-		{"other signal", syscall.WaitStatus(syscall.SIGTERM), "runtime_error"},
+		{"sigxcpu signaled", syscall.WaitStatus(syscall.SIGXCPU), models.ResultCPUTimeExceeded},
+		{"nsjail exit 152 (128+SIGXCPU)", syscall.WaitStatus(152 << 8), models.ResultCPUTimeExceeded},
+		{"sigkill", syscall.WaitStatus(syscall.SIGKILL), models.ResultTimeExceeded},
+		{"sigsegv", syscall.WaitStatus(syscall.SIGSEGV), models.ResultMemoryExceeded},
+		{"sigabrt", syscall.WaitStatus(syscall.SIGABRT), models.ResultMemoryExceeded},
+		{"other signal", syscall.WaitStatus(syscall.SIGTERM), models.ResultRuntimeError},
 		{"clean exit has no reason", syscall.WaitStatus(0), ""},
 		{"user exit 137 is not a kill reason", syscall.WaitStatus(137 << 8), ""},
 	}
@@ -512,7 +542,7 @@ func TestComputeTestStatusSIGXCPU(t *testing.T) {
 		t.Fatal("helper process must exit non-zero")
 	}
 	got := computeTestStatus(context.Background(), fmt.Errorf("exit status 152"), "", "", cmd.ProcessState, false, cpuOutcome{})
-	if got != "cpu_time_exceeded" {
+	if got != models.ResultCPUTimeExceeded {
 		t.Errorf("computeTestStatus(SIGXCPU) = %q, want cpu_time_exceeded", got)
 	}
 }
@@ -579,7 +609,7 @@ func TestExecuteRunCPUKill(t *testing.T) {
 		t.Fatalf("expected 1 result, got %d", len(results))
 	}
 	res := results[0]
-	if res.Status != "cpu_time_exceeded" {
+	if res.Status != models.ResultCPUTimeExceeded {
 		t.Errorf("status = %q, want cpu_time_exceeded (stderr: %q)", res.Status, res.Stderr)
 	}
 	if res.CpuTimeMs < 1500 || res.CpuTimeMs > 3500 {
@@ -637,7 +667,7 @@ func TestExecuteRunCPUReported(t *testing.T) {
 		t.Fatalf("expected 1 result, got %d", len(results))
 	}
 	res := results[0]
-	if res.Status != "accepted" {
+	if res.Status != models.ResultAccepted {
 		t.Fatalf("status = %q, want accepted (stderr: %q)", res.Status, res.Stderr)
 	}
 	if res.CpuTimeMs <= 0 {
@@ -697,7 +727,7 @@ func TestExecuteRunExitFacts(t *testing.T) {
 		Source:   "print('warm')",
 		Tests:    []models.TestCase{{Stdin: "", ExpectedStdout: "warm\n"}},
 	}
-	if res := run(t, warmReq); res.Status != "accepted" {
+	if res := run(t, warmReq); res.Status != models.ResultAccepted {
 		t.Fatalf("warmup status = %q, want accepted (stderr: %q)", res.Status, res.Stderr)
 	}
 
@@ -707,7 +737,7 @@ func TestExecuteRunExitFacts(t *testing.T) {
 			Source:   "print('ok')",
 			Tests:    []models.TestCase{{Stdin: "", ExpectedStdout: "ok\n"}},
 		})
-		if res.Status != "accepted" {
+		if res.Status != models.ResultAccepted {
 			t.Fatalf("status = %q, want accepted (stderr: %q)", res.Status, res.Stderr)
 		}
 		if res.ExitCode != 0 || res.TerminationSignal != 0 {
@@ -721,7 +751,7 @@ func TestExecuteRunExitFacts(t *testing.T) {
 			Source:   "import sys\nsys.exit(3)",
 			Tests:    []models.TestCase{{Stdin: "", ExpectedStdout: ""}},
 		})
-		if res.Status != "runtime_error" {
+		if res.Status != models.ResultRuntimeError {
 			t.Fatalf("status = %q, want runtime_error (stderr: %q)", res.Status, res.Stderr)
 		}
 		if res.ExitCode != 3 || res.TerminationSignal != 0 {
@@ -756,7 +786,7 @@ func TestExecuteRunExitFacts(t *testing.T) {
 		if res.ExitCode != -1 && res.ExitCode != 137 {
 			t.Errorf("exit_code = %d, want -1 (goboxd kill) or 137 (nsjail propagation)", res.ExitCode)
 		}
-		if res.Status != "time_exceeded" {
+		if res.Status != models.ResultTimeExceeded {
 			t.Errorf("status = %q, want time_exceeded (stderr: %q)", res.Status, res.Stderr)
 		}
 	})
@@ -772,7 +802,7 @@ func TestExecuteRunExitFacts(t *testing.T) {
 			}},
 			Tests: []models.TestCase{{Stdin: "", ExpectedStdout: ""}},
 		})
-		if res.Status != "cpu_time_exceeded" {
+		if res.Status != models.ResultCPUTimeExceeded {
 			t.Fatalf("status = %q, want cpu_time_exceeded (stderr: %q)", res.Status, res.Stderr)
 		}
 		// On the cgroup path the poller kills nsjail directly: (-1, 9).
@@ -795,12 +825,12 @@ func TestComputeTestStatusOOMKilled(t *testing.T) {
 		name      string
 		err       error
 		oomKilled bool
-		want      string
+		want      models.ResultStatus
 	}{
-		{"oom kill at 137", fmt.Errorf("exit status 137"), true, "memory_exceeded"},
-		{"oom kill at wall time", fmt.Errorf("exit status 137"), true, "memory_exceeded"},
-		{"oom kill with nil err", nil, true, "memory_exceeded"},
-		{"no oom kill stays time_exceeded", fmt.Errorf("exit status 137"), false, "time_exceeded"},
+		{"oom kill at 137", fmt.Errorf("exit status 137"), true, models.ResultMemoryExceeded},
+		{"oom kill at wall time", fmt.Errorf("exit status 137"), true, models.ResultMemoryExceeded},
+		{"oom kill with nil err", nil, true, models.ResultMemoryExceeded},
+		{"no oom kill stays time_exceeded", fmt.Errorf("exit status 137"), false, models.ResultTimeExceeded},
 	}
 	for _, tt := range cases {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1064,7 +1094,7 @@ func TestJailEnvContract(t *testing.T) {
 		t.Fatalf("expected 1 result, got %d", len(results))
 	}
 	res := results[0]
-	if res.Status != "accepted" {
+	if res.Status != models.ResultAccepted {
 		t.Fatalf("status = %q, want accepted (stderr: %q)", res.Status, res.Stderr)
 	}
 
@@ -1186,7 +1216,7 @@ func TestExecuteRunParallel(t *testing.T) {
 		t.Fatalf("parallel: expected 3 results, got %d", len(parResults))
 	}
 	for i, r := range parResults {
-		if r.Status != "accepted" {
+		if r.Status != models.ResultAccepted {
 			t.Errorf("parallel result[%d].Status = %q, want accepted (stderr: %q)", i, r.Status, r.Stderr)
 		}
 		if r.Stdout != "done\n" {
@@ -1215,7 +1245,7 @@ func TestExecuteRunParallel(t *testing.T) {
 		t.Fatalf("sequential: expected 3 results, got %d", len(seqResults))
 	}
 	for i, r := range seqResults {
-		if r.Status != "accepted" {
+		if r.Status != models.ResultAccepted {
 			t.Errorf("sequential result[%d].Status = %q, want accepted (stderr: %q)", i, r.Status, r.Stderr)
 		}
 		if r.Stdout != "done\n" {
@@ -1308,14 +1338,14 @@ int main(void) {
 	if err != nil {
 		t.Fatalf("ExecuteRun dropped a hard error: %v", err)
 	}
-	if buildRes.Status != "ok" {
+	if buildRes.Status != models.BuildOk {
 		t.Fatalf("build status = %q, want ok (stderr: %q)", buildRes.Status, buildRes.Stderr)
 	}
 	if len(results) != 2 {
 		t.Fatalf("expected 2 results, got %d", len(results))
 	}
 	for i, r := range results {
-		if r.Status != "accepted" {
+		if r.Status != models.ResultAccepted {
 			t.Errorf("result[%d].Status = %q, want accepted (stderr: %q)", i, r.Status, r.Stderr)
 		}
 	}
@@ -1468,7 +1498,7 @@ func TestConcurrentParallelRequests(t *testing.T) {
 			t.Errorf("request %d: ExecuteRun dropped a hard error: %v", i, err)
 		}
 		for j, r := range results[i] {
-			if r.Status != "accepted" {
+			if r.Status != models.ResultAccepted {
 				t.Errorf("request %d test %d: status = %q, want accepted (stderr: %q)", i, j, r.Status, r.Stderr)
 			}
 		}
@@ -1540,13 +1570,13 @@ func main() { fmt.Println("cache test") }
 	if err != nil {
 		t.Fatalf("ExecuteRun dropped a hard error: %v", err)
 	}
-	if buildRes.Status != "ok" {
+	if buildRes.Status != models.BuildOk {
 		t.Fatalf("build status = %q, want ok (stderr: %q)", buildRes.Status, buildRes.Stderr)
 	}
 	if len(results) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(results))
 	}
-	if results[0].Status != "accepted" {
+	if results[0].Status != models.ResultAccepted {
 		t.Fatalf("test status = %q, want accepted (stderr: %q)", results[0].Status, results[0].Stderr)
 	}
 
@@ -1614,7 +1644,7 @@ func main() { fmt.Println("hello") }`
 	if err != nil {
 		t.Fatalf("build: %v", err)
 	}
-	if b.Status != "ok" {
+	if b.Status != models.BuildOk {
 		t.Fatalf("build status: %s", b.Status)
 	}
 
@@ -1699,7 +1729,7 @@ func TestOutputCapCustom(t *testing.T) {
 		t.Fatalf("expected 1 result, got %d", len(results))
 	}
 	res := results[0]
-	if res.Status != "accepted" {
+	if res.Status != models.ResultAccepted {
 		t.Fatalf("status = %q, want accepted (stderr: %q)", res.Status, res.Stderr)
 	}
 
