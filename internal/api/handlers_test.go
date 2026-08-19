@@ -957,6 +957,8 @@ func TestReadyzFullBreakdownOnSuccess(t *testing.T) {
 	if _, err := exec.LookPath("nsjail"); err != nil {
 		t.Skip("nsjail not installed: the success contract needs the nsjail probe to pass")
 	}
+	// Cold cache so this test always does a real probe (never a stale entry).
+	probes.resetForTest()
 	// Pin the registry to one reachable binary so the probe succeeds
 	// deterministically in any environment (the real registry includes
 	// languages that may not be installed on the test host).
@@ -1001,6 +1003,8 @@ func TestProbeReadinessSmokeOverride(t *testing.T) {
 		"plain":  {ID: "plain", RunCmd: []string{"/bin/echo"}},
 	})
 	defer func() { config.SetRegistryForTest(orig) }()
+	// Cold cache so the probes reflect this registry, not a stale entry.
+	probes.resetForTest()
 
 	state := probeReadiness()
 	smoked := state.Languages["smoked"]

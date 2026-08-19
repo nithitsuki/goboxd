@@ -214,90 +214,6 @@ func StartShutdown() { shuttingDown.Store(true) }
 // 503 shutting_down and queued requests are released immediately.
 func StopAdmission() { gate.Stop() }
 
-func probeReadiness() readyState {
-	state := readyState{
-		AllOK:     true,
-		Status:    "ok",
-		Languages: make(map[string]*readyProbe),
-	}
-	if shuttingDown.Load() {
-		// Shutdown in progress: no point probing runtimes. The response
-		// keeps the contract (503 + full state shape) without the execs.
-		state.AllOK = false
-		state.Status = "shutting_down"
-		return state
-	}
-	state.Nsjail = probeNsjail()
-	if !state.Nsjail.OK {
-		state.AllOK = false
-	}
-
-	reg := config.Registry()
-	for lid, lc := range reg {
-		var p *readyProbe
-		if len(lc.SmokeCmd) > 0 {
-			// Explicit smoke command from the YAML (languages whose build/run
-			// binary cannot answer --version).
-			p = probeExecArgs(lc.SmokeCmd[0], lc.SmokeCmd[1:]...)
-		} else {
-			probeCmd := lc.RunCmd[0]
-			if len(lc.BuildCmd) > 0 {
-				probeCmd = lc.BuildCmd[0]
-			}
-			p = probeExec(probeCmd, "--version")
-		}
-		state.Languages[lid] = p
-		if !p.OK {
-			state.AllOK = false
-		}
-	}
-
-	if !state.AllOK {
-		state.Status = "degraded"
-	}
-	return state
-}
-
-// probeNsjail checks nsjail via --help (nsjail does not support --version).
-func probeNsjail() *readyProbe {
-	cmd := exec.Command("nsjail", "--help")
-	if err := cmd.Run(); err != nil {
-		return &readyProbe{
-			OK:    false,
-			Error: fmt.Sprintf("nsjail not found or failed: %v", err),
-		}
-	}
-	return &readyProbe{
-		OK:      true,
-		Version: "3.6",
-	}
-}
-
-func probeExec(binary, arg string) *readyProbe {
-	return probeExecArgs(binary, arg)
-}
-
-func probeExecArgs(binary string, args ...string) *readyProbe {
-	out, err := exec.Command(binary, args...).Output()
-	if err == nil {
-		return &readyProbe{
-			OK:      true,
-			Version: strings.TrimSpace(string(out)),
-		}
-	}
-	// The command failed, try just confirming the binary exists
-	if path, lookupErr := exec.LookPath(binary); lookupErr == nil {
-		return &readyProbe{
-			OK:      true,
-			Version: path,
-		}
-	}
-	return &readyProbe{
-		OK:    false,
-		Error: fmt.Sprintf("%s not found: %v", binary, err),
-	}
-}
-
 func HandleInfo(w http.ResponseWriter, r *http.Request) {
 	// Git commit from build info
 	commit := "dev"
@@ -313,8 +229,8 @@ func HandleInfo(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Probe nsjail
-	nsjailProbe := probeNsjail()
+	// Probe nsjail (cached, shared with /readyz)
+	nsjailProbe := probes.nsjail()
 	nsjailPath := "/usr/bin/nsjail"
 	if _, err := exec.LookPath("nsjail"); err == nil {
 		nsjailPath, _ = exec.LookPath("nsjail")
@@ -329,11 +245,7 @@ func HandleInfo(w http.ResponseWriter, r *http.Request) {
 	langs := make([]map[string]interface{}, 0, len(reg))
 	for _, lc := range reg {
 		ver := lc.Name
-		probeCmd := lc.RunCmd[0]
-		if len(lc.BuildCmd) > 0 {
-			probeCmd = lc.BuildCmd[0]
-		}
-		if p := probeExec(probeCmd, "--version"); p.OK {
+		if p := probes.languageProbe(lc); p.OK {
 			ver = strings.SplitN(p.Version, "\n", 2)[0]
 		}
 		langs = append(langs, map[string]interface{}{

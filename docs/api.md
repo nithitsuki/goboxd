@@ -252,7 +252,7 @@ details for each component when any component is degraded.
 ```json
 {
   "status": "degraded",
-  "nsjail": { "ok": true, "version": "3.6" },
+  "nsjail": { "ok": true, "version": "<discovered from the nsjail binary>" },
   "languages": {
     "py3": { "ok": true, "version": "Python 3.11.2" },
     "c": { "ok": true, "version": "gcc 14" },
@@ -261,8 +261,19 @@ details for each component when any component is degraded.
 }
 ```
 
-The server probes each language by running `<compiler/runtime> --version`.
-If that fails, it falls back to `exec.LookPath` to confirm the binary exists.
+The server probes each language by running `<compiler/runtime> --version`
+(or a per-language `smoke_cmd` when one is configured). If that fails, it
+falls back to `exec.LookPath` to confirm the binary exists.
+
+Probes are cached briefly: each language and nsjail is probed at most once
+per TTL (default 5s, configurable via `GOBOXD_PROBE_TTL` seconds). Within the
+TTL, /readyz and /info serve warm probes with zero subprocess spawns. The
+cache can go stale by at most one TTL, so readiness remains a genuine health
+signal.
+
+nsjail has no `--version` flag, so its version is discovered by parsing
+`nsjail --help`; when that output reports no version it falls back to
+`GOBOXD_NSJAIL_VERSION` and then `"unknown"` (never a hardcoded value).
 
 During shutdown the server skips the probes. The per-component fields stay
 present but empty. The status is `shutting_down`.
@@ -291,7 +302,7 @@ HTTP 200.
   },
   "nsjail": {
     "path": "/usr/bin/nsjail",
-    "version": "3.6"
+    "version": "<discovered from the nsjail binary>"
   },
   "cgroupv2": {
     "active": true,
