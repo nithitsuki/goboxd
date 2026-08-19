@@ -520,6 +520,7 @@ func HandleRun(w http.ResponseWriter, r *http.Request) {
 	if err := gate.acquire(r.Context()); err != nil {
 		if errors.Is(err, errQueueFull) {
 			w.Header().Set("Retry-After", "1")
+			w.Header().Set("X-Run-Status", "queue_full")
 			writeErrorStatus(w, http.StatusServiceUnavailable, "queue_full",
 				"server is at capacity: too many jobs queued, retry shortly")
 			recordRun("queue_full", time.Since(start), true)
@@ -528,6 +529,7 @@ func HandleRun(w http.ResponseWriter, r *http.Request) {
 		status, isError := classifyAcquireErr(r.Context(), err)
 		if isError {
 			w.Header().Set("Retry-After", "1")
+			w.Header().Set("X-Run-Status", "shutting_down")
 			writeErrorStatus(w, http.StatusServiceUnavailable, "shutting_down",
 				"server is shutting down: retry shortly")
 		}
@@ -566,6 +568,7 @@ func HandleRun(w http.ResponseWriter, r *http.Request) {
 		// (per the API contract: internal_error is a status in the response body, not a 5xx)
 		if buildRes.Status == models.BuildInternalError {
 			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("X-Run-Status", string(models.ResultInternalError))
 			w.WriteHeader(http.StatusOK)
 			if err := json.NewEncoder(w).Encode(models.RunResponse{
 				Status: string(models.ResultInternalError),
@@ -604,6 +607,7 @@ func HandleRun(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Run-Status", string(topStatus))
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
 		log.Printf("failed to write run response: %v", err)

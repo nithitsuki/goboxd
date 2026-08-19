@@ -119,6 +119,11 @@ server runs tests sequentially.
 
 ### Response
 
+The response body carries the run result. The response also carries an
+`X-Run-Status` header with the top-level status string (for example
+`accepted` or `queue_full`). The header is additive and matches the
+body's `status` field.
+
 ```json
 {
   "status": "accepted",

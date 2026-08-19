@@ -3,7 +3,6 @@
 package api
 
 import (
-	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -44,12 +43,17 @@ func RequestIDMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// bodyRecorder wraps http.ResponseWriter to capture the status code and
-// response body for structured request logging.
+// bodyRecorder wraps http.ResponseWriter to capture the status code for
+// structured request logging. The body streams straight through to the
+// client: only the status code (a single int) is retained, so the access log
+// never buffers a response — a 50-test /run can push ~100 MB through without
+// keeping a copy.
 type bodyRecorder struct {
 	http.ResponseWriter
 	statusCode int
-	body       bytes.Buffer
+	// Note: Flusher/Hijacker/Pusher are not promoted (the embed is the
+	// interface, not the concrete *http.response). No handler uses them
+	// today; if streaming ever relies on http.Flusher, promote them here.
 }
 
 func (b *bodyRecorder) WriteHeader(code int) {
@@ -57,9 +61,19 @@ func (b *bodyRecorder) WriteHeader(code int) {
 	b.ResponseWriter.WriteHeader(code)
 }
 
+// Write passes the body through to the real ResponseWriter without copying.
+// The body is never buffered: TestLoggingNoBodyBuffering locks this
+// structurally (reflection over bodyRecorder ensures no bytes.Buffer or
+// []byte field exists).
 func (b *bodyRecorder) Write(data []byte) (int, error) {
-	b.body.Write(data)
 	return b.ResponseWriter.Write(data)
+}
+
+// RunStatus returns the X-Run-Status response header. Handlers that compute a
+// top-level run status (HandleRun) set it on every response; the empty value
+// is omitted from the log line (omitempty).
+func (b *bodyRecorder) RunStatus() string {
+	return b.ResponseWriter.Header().Get("X-Run-Status")
 }
 
 // RecoveryMiddleware catches panics in handlers so a single bad request
@@ -90,14 +104,13 @@ func LoggingMiddleware(next http.Handler) http.Handler {
 
 		next.ServeHTTP(rec, r)
 
-		// Extract status from POST /run response body
+		// run_status comes from the X-Run-Status header the handler set, not
+		// from parsing the body (see bodyRecorder). Read for any POST /run
+		// response, 200s and 503s alike; an absent header means no status was
+		// computed and the field is omitted.
 		runStatus := ""
-		if r.Method == "POST" && r.URL.Path == "/run" && rec.statusCode == 200 {
-			var resp struct {
-				Status string `json:"status"`
-			}
-			_ = json.Unmarshal(rec.body.Bytes(), &resp)
-			runStatus = resp.Status
+		if r.Method == "POST" && r.URL.Path == "/run" {
+			runStatus = rec.RunStatus()
 		}
 
 		entry := struct {
