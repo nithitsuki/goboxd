@@ -158,6 +158,82 @@ func TestExecuteRun(t *testing.T) {
 	}
 }
 
+// TestSeccompDeniedSyscall proves a per-language seccomp profile is applied
+// end to end under the ADDITIVE-merge model (P2-12): a language whose Seccomp
+// declares an extra deny (a syscall name, not an inline policy) must have a
+// program calling that syscall killed by SIGSYS (runtime_error, exit 159),
+// while the same program WITHOUT the profile stays accepted (the global
+// policy does not deny chmod). CombinedWith (unit-tested separately) proves
+// the global deny-list is never dropped, so this test only needs to prove the
+// extra is applied.
+func TestSeccompDeniedSyscall(t *testing.T) {
+	if _, err := exec.LookPath("nsjail"); err != nil {
+		t.Skip("nsjail not found in PATH, skipping runner tests (run inside docker-compose)")
+	}
+	if os.Geteuid() != 0 {
+		t.Skip("requires root to run nsjail")
+	}
+
+	base := config.LanguageConfig{
+		ID:             "py3",
+		Name:           "Python 3",
+		RunCmd:         []string{"/usr/bin/python3", "main.py"},
+		SourceFilename: "main.py",
+		RunLimits: config.Limits{
+			WallTimeS:    5,
+			MemoryKB:     102400,
+			MaxProcesses: 100,
+		},
+	}
+	// ADDITIVE model: Seccomp is now a list of ADDITIONAL syscall names to
+	// deny on top of the global policy, not a full kafel policy.
+	denying := base
+	denying.Seccomp = "chmod"
+
+	// os.chmod issues the chmod syscall (number 90 on x86_64). The target is
+	// the source file itself, which exists in jail by construction.
+	src := "import os\nos.chmod('main.py', 0o644)\nprint('ok')"
+
+	req := models.RunRequest{
+		Language: "py3",
+		Source:   src,
+		Tests:    []models.TestCase{{Stdin: "", ExpectedStdout: "ok\n"}},
+	}
+
+	// Control: Seccomp empty -> the global policy file applies, chmod is
+	// allowed (the global deny-list does not include chmod).
+	_, ctrlResults, err := ExecuteRun(context.Background(), req, base)
+	if err != nil {
+		t.Fatalf("control ExecuteRun dropped a hard error: %v", err)
+	}
+	if len(ctrlResults) != 1 {
+		t.Fatalf("control: expected 1 result, got %d", len(ctrlResults))
+	}
+	if ctrlResults[0].Status != models.ResultAccepted {
+		t.Fatalf("control status = %q, want accepted (chmod must not be denied by the global policy; stderr: %q)",
+			ctrlResults[0].Status, ctrlResults[0].Stderr)
+	}
+
+	// Profile adds chmod: the identical program must be killed by SIGSYS.
+	_, results, err := ExecuteRun(context.Background(), req, denying)
+	if err != nil {
+		t.Fatalf("ExecuteRun dropped a hard error: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	res := results[0]
+	if res.Status != models.ResultRuntimeError {
+		t.Errorf("status = %q, want runtime_error (seccomp kill; stderr: %q)", res.Status, res.Stderr)
+	}
+	// nsjail propagates the child's SIGSYS death as exit 128+31=159; a direct
+	// signal death reads (-1, 31). Either shape must carry signal 31.
+	if res.TerminationSignal != int(syscall.SIGSYS) {
+		t.Errorf("termination_signal = %d, want %d (SIGSYS) (exit_code=%d stderr: %q)",
+			res.TerminationSignal, syscall.SIGSYS, res.ExitCode, res.Stderr)
+	}
+}
+
 // TestExecuteRunContextCancel proves client-disconnect cancellation: a run
 // with a 60s wall time must return ~1s after the request context is canceled,
 // classify the test as "cancelled", free the uid, and leave no jail dir.
@@ -853,7 +929,7 @@ func TestComputeTestStatusOOMKilled(t *testing.T) {
 // the guard. Real resident-memory enforcement is cgroup v2 when active; the
 // rlimit is the always-present fallback.
 func TestNsjailArgsRlimitUnits(t *testing.T) {
-	args, err := nsjailArgs("/app", 5, 0, 65536, 100, 10000, nil) // 64MB, 100 procs, no cpu cap
+	args, err := nsjailArgs("/app", 5, 0, 65536, 100, 10000, nil, "") // 64MB, 100 procs, no cpu cap
 	if err != nil {
 		t.Fatalf("nsjailArgs: %v", err)
 	}
@@ -874,7 +950,7 @@ func TestNsjailArgsRlimitUnits(t *testing.T) {
 	}
 
 	// Large limits pass through 1:1: 16GB limit -> 16384MB virtual guard.
-	args, err = nsjailArgs("/app", 5, 0, 16*1024*1024, 100, 10000, nil)
+	args, err = nsjailArgs("/app", 5, 0, 16*1024*1024, 100, 10000, nil, "")
 	if err != nil {
 		t.Fatalf("nsjailArgs (16GB): %v", err)
 	}
@@ -885,11 +961,75 @@ func TestNsjailArgsRlimitUnits(t *testing.T) {
 	}
 }
 
+// TestNsjailArgsSeccompFlag (P2-12) locks the additive-merge wiring in
+// nsjailArgs: an EMPTY langSeccomp must select --seccomp_policy with the
+// global file path (byte-identical to pre-P2-12), and a NON-EMPTY langSeccomp
+// must select --seccomp_string with a combined inline policy that still
+// contains the global deny-list plus the extra syscall.
+func TestNsjailArgsSeccompFlag(t *testing.T) {
+	// Empty case: global file via --seccomp_policy, EXACTLY one seccomp flag.
+	args, err := nsjailArgs("/app", 5, 0, 65536, 100, 10000, nil, "")
+	if err != nil {
+		t.Fatalf("nsjailArgs (empty): %v", err)
+	}
+	polIdx, strIdx := -1, -1
+	for i, a := range args {
+		if a == "--seccomp_policy" {
+			polIdx = i
+		}
+		if a == "--seccomp_string" {
+			strIdx = i
+		}
+	}
+	if polIdx < 0 {
+		t.Error("empty langSeccomp must pass --seccomp_policy")
+	}
+	if strIdx >= 0 {
+		t.Error("empty langSeccomp must NOT pass --seccomp_string")
+	}
+	if polIdx >= 0 {
+		if _, err := os.Stat(args[polIdx+1]); err != nil {
+			t.Errorf("--seccomp_policy path %q not a readable file: %v", args[polIdx+1], err)
+		}
+	}
+
+	// Non-empty case: combined inline policy via --seccomp_string.
+	args, err = nsjailArgs("/app", 5, 0, 65536, 100, 10000, nil, "chmod")
+	if err != nil {
+		t.Fatalf("nsjailArgs (chmod): %v", err)
+	}
+	polIdx, strIdx = -1, -1
+	inline := ""
+	for i, a := range args {
+		if a == "--seccomp_policy" {
+			polIdx = i
+		}
+		if a == "--seccomp_string" {
+			strIdx = i
+			inline = args[i+1]
+		}
+	}
+	if strIdx < 0 {
+		t.Fatal("non-empty langSeccomp must pass --seccomp_string")
+	}
+	if polIdx >= 0 {
+		t.Error("non-empty langSeccomp must NOT pass --seccomp_policy")
+	}
+	for _, want := range []string{"mount", "ptrace", "chroot", "SYSCALL[166]", "chmod", "USE goboxd DEFAULT ALLOW"} {
+		if !strings.Contains(inline, want) {
+			t.Errorf("--seccomp_string policy missing %q", want)
+		}
+	}
+	if strings.Contains(inline, "USE py3") || strings.Contains(inline, "POLICY py3") {
+		t.Error("combined policy must reuse the global policy name, not a per-language one")
+	}
+}
+
 // TestNsjailArgsRlimitCPU locks the cpu limit contract: a positive cpu limit
 // is passed as --rlimit_cpu seconds (the kernel SIGXCPU path), a zero limit
 // (no cpu cap) is "inf" so nsjail's implicit 600s default never applies.
 func TestNsjailArgsRlimitCPU(t *testing.T) {
-	args, err := nsjailArgs("/app", 9, 2, 65536, 100, 10000, nil)
+	args, err := nsjailArgs("/app", 9, 2, 65536, 100, 10000, nil, "")
 	if err != nil {
 		t.Fatalf("nsjailArgs: %v", err)
 	}
@@ -906,7 +1046,7 @@ func TestNsjailArgsRlimitCPU(t *testing.T) {
 		t.Error("missing --rlimit_cpu in nsjail args")
 	}
 
-	args, err = nsjailArgs("/app", 9, 0, 65536, 100, 10000, nil)
+	args, err = nsjailArgs("/app", 9, 0, 65536, 100, 10000, nil, "")
 	if err != nil {
 		t.Fatalf("nsjailArgs (no cpu cap): %v", err)
 	}
@@ -952,7 +1092,7 @@ func TestWriteSourceRejectsSymlink(t *testing.T) {
 // unmapped overflow uid and mkdir('/tmp/nsjail.<pid>.root/...') fails EPERM
 // whenever a stale root dir from an earlier run exists.
 func TestNsjailArgsUidMapping(t *testing.T) {
-	args, err := nsjailArgs("/app", 5, 0, 65536, 100, 12345, nil)
+	args, err := nsjailArgs("/app", 5, 0, 65536, 100, 12345, nil, "")
 	if err != nil {
 		t.Fatalf("nsjailArgs: %v", err)
 	}

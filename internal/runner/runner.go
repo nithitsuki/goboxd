@@ -286,7 +286,13 @@ func jailEnv() []string {
 // polls and kills on cpu usage, the rlimit path gets a kernel SIGKILL at
 // --rlimit_cpu seconds (nsjail sets the soft and hard limits equal).
 // --max_cpus caps CPU usage; tune via GOBOXD_MAX_CPUS env var.
-func nsjailArgs(appDir string, wallTime, cpuLimit, memKB, procs, uid int, jailCg *cgroupv2.Jail) ([]string, error) {
+//
+// langSeccomp is the per-language ADDITIONAL deny syscalls (P2-12): when
+// non-empty they are MERGED with the global deny-list into a combined inline
+// policy passed as --seccomp_string; when empty the global --seccomp_policy
+// file is used (byte-identical). A profile can only ADD denies, never weaken
+// the global deny-list. nsjail takes EITHER flag, never both.
+func nsjailArgs(appDir string, wallTime, cpuLimit, memKB, procs, uid int, jailCg *cgroupv2.Jail, langSeccomp string) ([]string, error) {
 	// nsjail's --rlimit_as and --rlimit_fsize take MEGABYTES, not bytes
 	// (nsjail help text; passing bytes silently yields a ~1024x larger limit,
 	// which is how memory limits went unenforced before this fix).
@@ -302,13 +308,37 @@ func nsjailArgs(appDir string, wallTime, cpuLimit, memKB, procs, uid int, jailCg
 	}
 	maxCPUs := os.Getenv("GOBOXD_MAX_CPUS")
 
-	// Materialize the embedded seccomp policy (once) and pass it to nsjail.
-	// nsjail compiles it with kafel at jail startup and applies the filter to
-	// the jailed process. Failure here is an infrastructure error: the jail
-	// must not start without its seccomp policy.
-	seccompPolicy, err := seccomp.PolicyPath()
-	if err != nil {
-		return nil, err
+	// Materialize the seccomp policy and pass it to nsjail. ADDITIVE-MERGE
+	// (P2-12): a non-empty per-language directive (extra syscall names, parsed
+	// by seccomp.ParseSyscallNames) is MERGED into the global deny-list via
+	// seccomp.CombinedWith, producing a COMBINED inline policy that always
+	// contains the full global deny-list PLUS the extras (--seccomp_string).
+	// Otherwise the embedded global deny-list file is used (--seccomp_policy),
+	// byte-identical to before P2-12. nsjail compiles the policy with kafel at
+	// jail startup and applies the filter to the jailed process. Failure here
+	// is an infrastructure error: the jail must not start without its seccomp
+	// policy. nsjail accepts EITHER --seccomp_string OR --seccomp_policy,
+	// never both.
+	seccompFlag := "--seccomp_policy"
+	seccompValue := ""
+	if extras := seccomp.ParseSyscallNames(langSeccomp); len(extras) > 0 {
+		// Whitespace-only directives (ParseSyscallNames == nil) fall through
+		// to the global file, not --seccomp_string.
+		combined, err := seccomp.CombinedWith(extras)
+		if err != nil {
+			return nil, err
+		}
+		seccompValue = string(combined)
+		seccompFlag = "--seccomp_string"
+	} else {
+		// Only materialize the global file when the --seccomp_policy path is
+		// actually selected (Minor fix: never call PolicyPath for a
+		// --seccomp_string jail).
+		path, err := seccomp.PolicyPath()
+		if err != nil {
+			return nil, err
+		}
+		seccompValue = path
 	}
 	args := []string{
 		"-Q",
@@ -417,8 +447,11 @@ func nsjailArgs(appDir string, wallTime, cpuLimit, memKB, procs, uid int, jailCg
 		"-B", "/dev",
 		"-B", "/var/lib",
 		// Deny-list seccomp policy (DEFAULT ALLOW): blocks escape primitives
-		// such as mount, ptrace, and kernel-module loading.
-		"--seccomp_policy", seccompPolicy,
+		// such as mount, ptrace, and kernel-module loading. A per-language
+		// profile adds denies via --seccomp_string (combined with the global
+		// deny-list, additive only); a language without one gets the global
+		// file via --seccomp_policy (P2-12).
+		seccompFlag, seccompValue,
 		"--",
 	)
 	return args, nil

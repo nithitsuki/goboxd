@@ -268,9 +268,10 @@ tests during normal development.
   `/lib`, `/bin`, `/etc`, `/dev`) read-only
 - **Output capping** — the service caps stdout/stderr at 64 KiB to prevent
   unbounded memory consumption
-- **Seccomp-bpf policy** — every jail loads a deny-list policy
+- **Seccomp-bpf policy** — every jail loads the deny-list policy
   (`internal/seccomp/seccomp.policy`, embedded in the binary) via
-  `--seccomp_policy`, blocking mount, ptrace, bpf, and other escape
+  `--seccomp_policy` (or `--seccomp_string` when a language declares extra
+  additive denies), blocking mount, ptrace, bpf, and other escape
   primitives with SECCOMP_RET_KILL while allowing everything else
 - **Request limits** — 256 KiB max body size, 50 max test cases, 64 KiB per
   field

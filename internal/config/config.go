@@ -74,6 +74,12 @@ type LanguageYAML struct {
 	// SourceFilenameStrategy "fixed" means: always use the configured source
 	// filename and ignore the client's (Java needs the class name to match).
 	SourceFilenameStrategy string `yaml:"source_filename_strategy,omitempty"`
+	// Seccomp holds an optional whitespace-/comma-separated list of ADDITIONAL
+	// kafel syscall names to DENY for this language, on top of the global
+	// deny-list (ADDITIVE-MERGE, P2-12). A language profile can only add
+	// denies, never remove a global entry. Empty = no per-language extras; the
+	// runner uses the global policy file unchanged.
+	Seccomp string `yaml:"seccomp,omitempty"`
 }
 
 // ConfigYAML is the top-level YAML structure.
@@ -98,6 +104,10 @@ type LanguageConfig struct {
 	FlagAllowlist          []string
 	SmokeCmd               []string // readiness probe override (nil = probe build/run cmd)
 	SourceFilenameStrategy string
+	// Seccomp holds the language's ADDITIONAL deny syscalls (empty = no
+	// per-language extras; the runner uses the global policy file). See
+	// LanguageYAML.Seccomp.
+	Seccomp string
 }
 
 // registry holds the current language registry as an immutable snapshot.
@@ -161,6 +171,7 @@ func LoadRegistry() error {
 			Name:                   lang.Name,
 			SourceFilename:         lang.SourceFilename,
 			SourceFilenameStrategy: lang.SourceFilenameStrategy,
+			Seccomp:                lang.Seccomp,
 		}
 
 		// Expand build command

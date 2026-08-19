@@ -104,6 +104,18 @@ The server expands these placeholders in `cmd` and `args` at request time:
 | `{{artifact}}` | `artifact` from the config (overridable per-request) |
 | `{{flags}}` | User-supplied flags from the request body (filtered through `flag_allowlist`) |
 
+## Per-language seccomp denies
+
+A language may declare an optional `seccomp:` field listing extra syscall
+names to deny on top of the global deny-list (`internal/seccomp/seccomp.policy`).
+The value is a whitespace- or comma-separated list, e.g. `"chmod, chown"`.
+
+The merge is ADDITIVE: the runner combines the extra names with the full
+global deny-list and passes the combined inline policy via `--seccomp_string`.
+A per-language profile can only add denies; it can never remove a global
+entry. Languages without the field use the global `--seccomp_policy` file
+unchanged.
+
 ## Flag allow-lists
 
 Compiled languages can restrict which compiler flags the caller can pass.

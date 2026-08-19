@@ -221,6 +221,59 @@ func TestSmokeCmdParsedFromYAML(t *testing.T) {
 	}
 }
 
+// TestSeccompParsed locks the per-language seccomp directive (P2-12): a
+// language declaring an optional `seccomp:` field in the YAML (a whitespace-/
+// comma-separated list of ADDITIONAL syscall names to deny on top of the
+// global policy) must parse into LanguageConfig.Seccomp, and a language
+// without one keeps the empty string (the runner then falls back to the
+// global policy file).
+func TestSeccompParsed(t *testing.T) {
+	tmp := filepath.Join(t.TempDir(), "languages.yml")
+	yaml := `languages:
+  - id: locked
+    name: Locked
+    source_filename: locked.fk
+    run:
+      cmd: /bin/echo
+      args: ["{{source}}"]
+      limits: {wall_time_s: 1, memory_kb: 1024, max_processes: 1}
+    seccomp: "chmod, chown"
+  - id: open
+    name: Open
+    source_filename: open.fk
+    run:
+      cmd: /bin/echo
+      args: ["{{source}}"]
+      limits: {wall_time_s: 1, memory_kb: 1024, max_processes: 1}
+`
+	if err := os.WriteFile(tmp, []byte(yaml), 0644); err != nil {
+		t.Fatalf("writing yaml: %v", err)
+	}
+	orig := RegistryPath
+	RegistryPath = tmp
+	defer func() { RegistryPath = orig }()
+	defer SetRegistryForTest(testInitialRegistry)
+	if err := LoadRegistry(); err != nil {
+		t.Fatalf("LoadRegistry: %v", err)
+	}
+
+	lc, ok := Registry()["locked"]
+	if !ok {
+		t.Fatal("locked language not loaded")
+	}
+	if lc.Seccomp != "chmod, chown" {
+		t.Errorf("locked Seccomp = %q, want %q (additive deny list)", lc.Seccomp, "chmod, chown")
+	}
+
+	open, ok := Registry()["open"]
+	if !ok {
+		t.Fatal("open language not loaded")
+	}
+	if open.Seccomp != "" {
+		t.Errorf("open (no seccomp field) Seccomp = %q, want empty (use global policy)", open.Seccomp)
+	}
+}
+
 // TestJavaFilenameStrategyParsed locks the fixed source-filename strategy for
 // Java: javac needs the public class name to match the file name, so the
 // registry pins Main.java regardless of the client's filename.

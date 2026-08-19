@@ -27,7 +27,7 @@ The goal is to prevent the attacker from:
 | 8 | nsjail error misclassification | `isInfraError` detects pipe and start failures. It separates infrastructure errors from user-code errors in both build and test paths. | `internal/runner/runner.go` |
 | 9 | Unbounded concurrency | The admission gate limits concurrent executions to `runtime.NumCPU()` (or `GOBOXD_MAX_JOBS`) with at most `GOBOXD_MAX_QUEUED` queued, preventing resource exhaustion under burst load | `internal/api/handlers.go` |
 | 10 | Server crash on handler panic | `RecoveryMiddleware` catches panics in all handlers, logs stack trace, returns 500. One bad request cannot crash the server. | `internal/api/logging.go` |
-| 11 | Sandbox escape via dangerous syscalls | `--seccomp_policy` passes the embedded deny-list policy to every jail (build and run). kafel compiles it at jail start. DENY is SECCOMP_RET_KILL. | `internal/seccomp/seccomp.policy`, `internal/runner/runner.go` |
+| 11 | Sandbox escape via dangerous syscalls | `--seccomp_policy` passes the embedded deny-list policy to every jail (build and run). A per-language `seccomp:` directive ADDS denies on top of it via a combined `--seccomp_string` (never replaces it). kafel compiles it at jail start. DENY is SECCOMP_RET_KILL. | `internal/seccomp/seccomp.policy`, `internal/runner/runner.go` |
 | 12 | Memory limits not enforced | nsjail's `--rlimit_as` takes MB. The runner passed bytes. Limits were about 1024x too large. The guard is now tight and equal to the memory limit. | `internal/runner/runner.go` |
 | 13 | Symlink race on the source write | `writeSource` opens the source path with `O_EXCL` and `O_NOFOLLOW`. A planted symlink fails the open instead of being followed. | `internal/runner/runner.go` |
 | 14 | Memory and pids limits without cgroup v2 | Per-jail cgroup v2 dirs enforce `memory.max` and `pids.max`. Peak memory and OOM events come from the cgroup. The rlimit fallback stays active when cgroup v2 is not available. | `internal/cgroupv2/` |
@@ -112,12 +112,22 @@ request releases its ticket when the client disconnects.
 
 ### Hole 11 — Sandbox escape via dangerous syscalls
 The embedded deny-list policy `internal/seccomp/seccomp.policy` is passed to
-every jail via `--seccomp_policy` (build and run steps share `nsjailArgs`).
+every jail via `--seccomp_policy` (build and run steps share `nsjailArgs`),
+unless the language declares extra denies.
 nsjail compiles it with kafel at jail startup and applies the resulting
 seccomp-bpf filter. DENY is SECCOMP_RET_KILL. DEFAULT ALLOW keeps normal
 code execution intact. A denied syscall such as `mount`, `ptrace`, or `bpf`
 kills the jailed process with SIGSYS. The runner reports the kill as
 `runtime_error`.
+
+Per-language profiles are ADDITIVE-MERGE. A language may declare a
+`seccomp:` field in the registry listing extra syscall names to deny on top
+of the global list. The runner merges them into the global deny-list with
+`seccomp.CombinedWith` and passes the combined inline policy via
+`--seccomp_string`. The combined policy always contains the full global
+deny-list plus the extras, so a per-language profile can never WEAKEN the
+global policy (it can only add denies). Languages without the field get the
+global `--seccomp_policy` file byte-identical.
 
 Two kafel quirks required workarounds. kafel's lexer only accepts `//` and
 `/* */` comments (no `#`), and kafel's amd64 syscall table is missing

@@ -30,9 +30,15 @@ import (
 // build artifact lands in the app dir after the build step. teardown releases
 // all of it in one guaranteed path.
 type jail struct {
-	dir  string
-	uid  int
-	cg   *cgroupv2.Jail
+	dir string
+	uid int
+	cg  *cgroupv2.Jail
+	// seccomp holds the per-language ADDITIONAL deny syscalls (P2-12) carved
+	// from lc.Seccomp at materialization. Empty = this jail uses the global
+	// --seccomp_policy file; non-empty = nsjail gets --seccomp_string with the
+	// combined (global + extras) inline policy.
+	seccomp string
+
 	once sync.Once // teardown runs exactly once, even under concurrent calls
 }
 
@@ -69,7 +75,7 @@ func newJail(req models.RunRequest, lc config.LanguageConfig, srcName string) (*
 		return nil, fmt.Errorf("failed to chown jail dir: %w", err)
 	}
 
-	j := &jail{dir: dir, uid: uid}
+	j := &jail{dir: dir, uid: uid, seccomp: lc.Seccomp}
 
 	// Per-jail cgroup v2 directory (memory+pids limits enforced by nsjail
 	// inside it). The name is filepath.Base(dir) - unique by construction, so

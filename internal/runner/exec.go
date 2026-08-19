@@ -75,7 +75,7 @@ func execJail(ctx context.Context, j *jail, cmdArgs []string, lim execLimits, st
 		return ExecOutcome{Err: fmt.Errorf("app dir: %w", err)}
 	}
 
-	args, err := nsjailArgs(appDir, lim.wallTime, lim.cpuLimit, lim.memKB, lim.procs, j.uid, j.cg)
+	args, err := nsjailArgs(appDir, lim.wallTime, lim.cpuLimit, lim.memKB, lim.procs, j.uid, j.cg, j.seccomp)
 	if err != nil {
 		return ExecOutcome{Err: fmt.Errorf("start: %w", err), Infra: true}
 	}
