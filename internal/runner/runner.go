@@ -362,10 +362,28 @@ func nsjailArgs(appDir string, wallTime, cpuLimit, memKB, procs, uid int, jailCg
 		// loopback: the jailed process must have zero network interfaces,
 		// not even localhost (complete network isolation).
 		"--iface_no_lo",
+		// P2-13: mount proc manually instead of letting nsjail mount it last.
+		// nsjail appends its automatic --proc_path mount at the END of the mount
+		// list, so any mask placed under /proc (e.g. /proc/sys) is shadowed by
+		// the proc mount and its remount then fails EINVAL. Mounting proc in
+		// command order keeps the /proc/sys mask visible. --disable_proc turns
+		// off the appended proc mount; -m none:/proc:proc reproduces it at this
+		// position.
+		"--disable_proc",
+		"-m", "none:/proc:proc",
+		// Mask the host-kernel tunables. /proc/sys exposes the host's kernel
+		// configuration (sysctls, hostname via /proc/sys/kernel/hostname is
+		// already NSJAIL from the UTS ns, but IP forward grsecurity tunables,
+		// coredump settings, etc. are host fingerprints). An empty tmpfs over
+		// it keeps /proc/sys a real directory (runtimes don't trip on it) while
+		// hiding every entry. Only genuine directories under /proc can be
+		// overlaid this way; /proc/mounts and /proc/self/environ (symlink/file
+		// targets) cannot, so they remain readable (documented residual in
+		// docs/security.md).
+		"-m", "none:/proc/sys:tmpfs:size=4096",
 		"--bindmount", appDir + ":/app:rw",
 		"--cwd", "/app",
 		"--chroot", "/",
-		"--proc_path", "/proc",
 		"--time_limit", strconv.Itoa(wallTime),
 		"--rlimit_as", strconv.Itoa(memMB),
 		"--rlimit_nproc", strconv.Itoa(procs),
@@ -406,6 +424,19 @@ func nsjailArgs(appDir string, wallTime, cpuLimit, memKB, procs, uid int, jailCg
 	}
 	args = append(args,
 		"-B", "/etc",
+	)
+	// P2-13: override the bind-mounted host /etc with a localhost-only hosts
+	// file so a containerized /etc/hosts (container ID + hostname) cannot leak
+	// into the jail. Ordering matters: the -R single-file bind must follow the
+	// broad -B /etc bind so it lands on top. The hosts file is materialized
+	// once (see hosts.go); a failure to create it is an infrastructure error —
+	// the jail must not start with a leaking /etc/hosts.
+	hostsPath, err := maskedHostsPath()
+	if err != nil {
+		return nil, fmt.Errorf("materializing masked /etc/hosts: %w", err)
+	}
+	args = append(args,
+		"-R", hostsPath+":/etc/hosts",
 	)
 	// The jail environment is an explicit allowlist. nsjail clears the child
 	// env by default, so these -E flags are the complete jail environment:

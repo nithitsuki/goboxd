@@ -32,6 +32,7 @@ The goal is to prevent the attacker from:
 | 13 | Symlink race on the source write | `writeSource` opens the source path with `O_EXCL` and `O_NOFOLLOW`. A planted symlink fails the open instead of being followed. | `internal/runner/runner.go` |
 | 14 | Memory and pids limits without cgroup v2 | Per-jail cgroup v2 dirs enforce `memory.max` and `pids.max`. Peak memory and OOM events come from the cgroup. The rlimit fallback stays active when cgroup v2 is not available. | `internal/cgroupv2/` |
 | 15 | Server env leak into jail | `jailEnv` builds the `-E` flags from an allowlist of PATH, HOME, GOCACHE, LANG, LC_ALL. nsjail clears every other variable. | `internal/runner/runner.go` |
+| 16 | Host kernel and hostname leak via /proc and /etc/hosts | Mask `/etc/hosts` (localhost only) and `/proc/sys` (empty tmpfs) inside every jail; mount proc manually in command order so the mask survives. | `internal/runner/runner.go`, `internal/runner/hosts.go` |
 
 ## What each fix does
 
@@ -166,9 +167,62 @@ LANG, and LC_ALL. `jailEnv` builds the `-E` flags. nsjail clears every
 other variable. No server credential or proxy variable reaches the jail.
 PATH comes from the server environment. The other four values are fixed.
 
+### Hole 16 — Mask /proc/sys and /etc/hosts
+Every jail mounts a masked view of the host kernel and identity details.
+
+The jail masks `/etc/hosts`. A containerized deployment keeps a hosts file
+that carries the container ID and a randomized hostname. Untrusted code
+could read it and fingerprint the host. goboxd overlays a minimal file
+onto the jail `/etc/hosts`. The content names only IPv4 and IPv6 loopback
+as `localhost`. It carries no host or container identity. The overlay is a
+read-only tmpfs the source content is copied into (nsjail's `-R` bind of a
+single materialized file), placed after the broad `-B /etc` bind so it
+lands on top. It is not a live file bind: changing the source file does
+not update the jail's copy.
+
+The jail masks `/proc/sys`. This directory exposes the host kernel
+configuration: sysctls, coredump settings, IP forward tunables, and other
+host fingerprints. goboxd mounts an empty tmpfs over `/proc/sys`, so the
+directory exists but holds no entries. Runtimes that walk `/proc` do not
+trip on it.
+
+The two masks depend on nsjail mount ordering. nsjail appends its automatic
+`--proc_path` proc mount at the END of the mount list. Any mask placed under
+`/proc` is then shadowed by the proc mount, and nsjail's RO remount of the
+shadowed path fails with EINVAL, which aborts the jail. goboxd therefore
+passes `--disable_proc` and mounts proc itself in command order with
+`-m none:/proc:proc`, then mounts the `/proc/sys` tmpfs immediately after.
+Mounting proc at this position keeps the mask visible and skips the failing
+remount.
+
+Residual exposure. Two proc entries stay readable. `/proc/mounts` is a
+symlink to `/proc/self/mounts`, and `/proc/self/environ` is a regular file
+inside a symlinked directory. The nsjail bind-mount API only overlays real
+directories, so these two cannot be masked with the current mechanism.
+
+`/proc/mounts` leaks the HOST mount table. Inside a jail with `--chroot /`
+the entry resolves to the host's full mount list: real device nodes
+(`/dev/nvme*`), host paths (`/home`, `/efi`), any mounted drives, and
+per-user session mounts (`/run/user/<uid>`). This is a host fingerprint
+(disk layout, paths, session user ids). It does not expose host processes
+or host environment variables, but it does reveal the host's disks and
+paths. Reducing it is tracked as an exploration.
+
+`/proc/self/environ` shows the jailed process environment, which is already
+an allowlist-built jail env (Hole 15). It carries no host credentials.
+
+The pid namespace already isolates host processes: a fresh proc in the
+jail's pid namespace shows only the jailed pids.
+
+Masking does not break runtimes. Go, Java, C, Python, and Node read
+`/proc/self` and `/etc` (locale, passwd). The fixture corpus for py3, c, go,
+rust, and js stays green under the mask. Verifying each runtime preserves
+locale and passwd access while hiding the hostname and kernel tunables is
+part of the regression gate (`TestJailProcAndHostsMasked`).
+
 ## Accepted limitations
 
-goboxd accepts three boundary limitations.
+goboxd accepts four boundary limitations.
 
 - Exit code 137. A user program that exits with code 137 gets
   `time_exceeded`. When the cpu time is at the limit, it gets
@@ -181,6 +235,13 @@ goboxd accepts three boundary limitations.
   cgroup path. A program can cross its cpu limit in the last poll tick
   before the wall timer fires. The wall-time kill can then win. The result
   is `cpu_time_exceeded` but the wall timer fired first.
+- Host fingerprint via `/proc/mounts`. Inside a jail the file leaks the
+  host mount table (real device nodes, host paths, session user mounts).
+  `nsjail` can overlay only real directories, and `/proc/mounts` is a
+  symlink to `/proc/self/mounts`, so it cannot be masked with the current
+  mechanism. `/proc/self/environ` shows the allowlisted jail env (Hole 15),
+  not host credentials. Both are documented in Hole 16. Reducing the
+  `/proc/mounts` leak is tracked as an exploration.
 
 ### Per-UID build caches
 

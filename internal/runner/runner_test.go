@@ -50,6 +50,9 @@ func TestMain(m *testing.M) {
 }
 
 func TestExecuteRun(t *testing.T) {
+	if os.Geteuid() != 0 {
+		t.Skip("requires root to run nsjail")
+	}
 	if _, err := exec.LookPath("nsjail"); err != nil {
 		t.Skip("nsjail not found in PATH, skipping runner tests (run inside docker-compose)")
 	}
@@ -2023,3 +2026,141 @@ func TestExecOutcomeInfraStartFailure(t *testing.T) {
 }
 
 func intPtr(v int) *int { return &v }
+
+// TestJailProcAndHostsMasked (P2-13) proves the jail masks the two leak
+// surfaces: /etc/hosts must be localhost-only (no host/container hostname)
+// and /proc/sys must be unmasked-empty (host kernel tunables hidden), while
+// normal code still runs. It runs a Python program inside a real jail
+// (requires root + nsjail, like the other runner integration tests) and
+// asserts on its output: the masked hostname is NOT the calling host's
+// hostname, /etc/hosts contains "localhost" but not the host hostname, and
+// listing /proc/sys/sys fails or is empty (the mask).
+//
+// It is a M-tier grading gate: removing the /etc/hosts mask makes the
+// hosts assertions fail; removing the /proc/sys mask makes the sys
+// assertions fail.
+func TestJailProcAndHostsMasked(t *testing.T) {
+	if _, err := exec.LookPath("nsjail"); err != nil {
+		t.Skip("nsjail not found in PATH, skipping runner tests (run inside docker-compose)")
+	}
+	if os.Geteuid() != 0 {
+		t.Skip("requires root to run nsjail")
+	}
+
+	hostHostname, err := os.Hostname()
+	if err != nil {
+		t.Fatalf("os.Hostname: %v", err)
+	}
+
+	py3Config := config.LanguageConfig{
+		ID:             "py3",
+		Name:           "Python 3",
+		RunCmd:         []string{"/usr/bin/python3", "main.py"},
+		SourceFilename: "main.py",
+		RunLimits: config.Limits{
+			WallTimeS:    5,
+			MemoryKB:     102400,
+			MaxProcesses: 100,
+		},
+	}
+
+	// The probe prints delimited batches that the assertions parse out. It
+	// runs entirely inside the jail, so a failure to read a masked path is
+	// evidence of the mask (and proves code execution itself still works).
+	const marker = "PROBE_DONE"
+	src := `import subprocess
+import os
+print("HOSTS_BEGIN")
+print(open("/etc/hosts", "rb").read().decode())
+print("HOSTS_END")
+print("HOSTNAME_BEGIN")
+try:
+    print(subprocess.run(["cat", "/proc/sys/kernel/hostname"], capture_output=True, text=True).stdout.strip())
+except Exception as e:
+    print("HOSTNAME_ERR", e)
+print("HOSTNAME_END")
+print("SYS_BEGIN")
+try:
+    entries = os.listdir("/proc/sys")
+    print("COUNT", len(entries))
+    print("ENTRIES", ",".join(entries[:10]))
+except Exception as e:
+    print("SYS_ERR", e)
+print("SYS_END")
+print("` + marker + `")
+`
+
+	req := models.RunRequest{
+		Language: "py3",
+		Source:   src,
+		Tests:    []models.TestCase{{Stdin: "", ExpectedStdout: ""}},
+	}
+	_, results, err := ExecuteRun(context.Background(), req, py3Config)
+	if err != nil {
+		t.Fatalf("ExecuteRun dropped a hard error: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	res := results[0]
+	if res.Status != models.ResultAccepted && res.Status != models.ResultWrongOutput {
+		t.Fatalf("status = %q, want the probe to complete (stderr: %q) — masking must not break code execution", res.Status, res.Stderr)
+	}
+	if !strings.Contains(res.Stdout, marker) {
+		t.Fatalf("probe did not complete; output: %q", res.Stdout)
+	}
+
+	hosts := extractBetween(res.Stdout, "HOSTS_BEGIN", "HOSTS_END")
+	if !strings.Contains(hosts, "localhost") {
+		t.Errorf("/etc/hosts does not contain 'localhost': %q", hosts)
+	}
+	if strings.Contains(hosts, hostHostname) {
+		t.Errorf("/etc/hosts leaks the host hostname %q: %q", hostHostname, hosts)
+	}
+
+	hostname := extractBetween(res.Stdout, "HOSTNAME_BEGIN", "HOSTNAME_END")
+	// The jail's own UTS hostname is "NSJAIL" (masked), so it must never equal
+	// the host hostname. This also holds when /proc/sys/kernel/hostname is
+	// absent (masked to an empty dir).
+	if strings.TrimSpace(hostname) == hostHostname {
+		t.Errorf("/proc/sys/kernel/hostname reveals the host hostname %q", hostHostname)
+	}
+	// Belt and suspenders: the host hostname must not appear anywhere in the
+	// jail's output (a leak via /etc/hosts, /proc/sys, or env would surface it).
+	if hostHostname != "" && strings.Contains(res.Stdout, hostHostname) {
+		t.Errorf("host hostname %q leaked into the jail output", hostHostname)
+	}
+
+	sys := extractBetween(res.Stdout, "SYS_BEGIN", "SYS_END")
+	sys = strings.TrimSpace(sys)
+	// A proper mask presents an EMPTY /proc/sys directory. An error listing it
+	// is not an acceptable mask (it could hide the leak by breaking rather
+	// than masking), so it must not make the assertion pass.
+	if strings.Contains(sys, "SYS_ERR") {
+		t.Errorf("/proc/sys could not be listed (SYS_ERR): %q — a mask must present an empty directory, not an error", sys)
+	}
+	if !strings.Contains(sys, "COUNT 0") {
+		// Fall back: /proc/sys must never expose host kernel tunables even if
+		// the empty-dir form differs.
+		for _, tunable := range []string{"abi", "debug", "fs", "kernel", "net", "user", "vm"} {
+			if strings.Contains(sys, tunable) {
+				t.Errorf("/proc/sys exposes host kernel tunable %q: %q", tunable, sys)
+			}
+		}
+		t.Errorf("/proc/sys is not masked; got %q (want 0 entries)", sys)
+	}
+}
+
+// extractBetween returns the text between the begin and end delimiters in s.
+func extractBetween(s, begin, end string) string {
+	i := strings.Index(s, begin)
+	if i < 0 {
+		return ""
+	}
+	i += len(begin)
+	j := strings.Index(s[i:], end)
+	if j < 0 {
+		return ""
+	}
+	return s[i : i+j]
+}
