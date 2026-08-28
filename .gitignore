@@ -44,3 +44,8 @@ silverex
 sudo
 .DS_Store
 foreground.md
+# Generated build/compile artifacts (must never be committed)
+*.rsp
+erl_crash.dump
+# Stray root-level package.json (the real one lives under playground/)
+/package.json

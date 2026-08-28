@@ -13,11 +13,11 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
-          go-version: "1.25.13"
+          go-version: "1.25.13" # must match the `toolchain` in go.mod and .go-version
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v9
         with:
-          version: latest
+          version: v2.12.2 # pinned for reproducible analysis (see .go-version)
       - name: govulncheck
         run: |
           go run golang.org/x/vuln/cmd/govulncheck@latest ./...
@@ -31,6 +31,38 @@ jobs:
           go-version: "1.25.13"
       - name: Unit tests
         run: go test -v -count=1 ./internal/... ./cmd/...
+
+  # Root-only sandbox gate: builds nsjail from the pinned submodule and runs
+  # the runner integration suite + the py3 penetration fixtures as root. These
+  # prove the isolation boundary (file reads, network, eval/shell injection,
+  # symlink escapes, write protection, /proc and /etc/hosts masking) on every
+  # push/PR. The non-root `test` job above skips these, so this job is the
+  # only place the sandbox is actually exercised in CI.
+  sandbox:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive # nsjail + its kafel submodule
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.25.13"
+      - name: Install nsjail + test build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            make g++ pkg-config protobuf-compiler libprotobuf-dev \
+            libabsl-dev libnl-3-dev libnl-route-3-dev libcap-dev \
+            libseccomp-dev python3
+      - name: Build and install nsjail
+        run: |
+          make -C external/nsjail
+          sudo make -C external/nsjail install
+      - name: Runner integration tests (root)
+        run: sudo -E env "PATH=$PATH" HOME=/root go test -count=1 ./internal/runner/...
+      - name: Penetration + integration tests (py3, root)
+        run: sudo -E env "PATH=$PATH" HOME=/root go test -count=1 -v ./tests/integration/ -lang py3
 
   build:
     runs-on: ubuntu-latest

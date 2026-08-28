@@ -1,5 +1,12 @@
 .PHONY: build run test integration integration-docker integration-safe lint fmt vulncheck
 
+# Pinned Go toolchain (single source of truth: .go-version). The `make lint`
+# target forces GOTOOLCHAIN to this exact version so golangci-lint is
+# deterministic even when the host default Go is newer (golangci-lint crashes
+# on the Go 1.27 internal API changes). Matches .github/workflows/ci.yml.
+GO_VERSION := $(shell cat .go-version 2>/dev/null || echo "1.25.13")
+GOTOOLCHAIN := GOTOOLCHAIN=go$(GO_VERSION)
+
 build:
 	./scripts/build.sh $(LANGS)
 
@@ -7,16 +14,16 @@ run:
 	LANGS="$(LANGS)" docker compose up
 
 test:
-	go test -v ./boxd/...
+	$(GOTOOLCHAIN) go test -count=1 ./internal/... ./cmd/...
 
 integration:
-	go test -v -count=1 ./tests/integration/...
+	$(GOTOOLCHAIN) go test -v -count=1 ./tests/integration/...
 
 integration-docker:
-	API_URL=http://localhost:8080 go test -v -count=1 ./tests/integration/...
+	$(GOTOOLCHAIN) API_URL=http://localhost:8080 go test -v -count=1 ./tests/integration/...
 
 integration-safe:
-	SKIP_PENETRATION=1 API_URL=http://localhost:8080 go test -v -count=1 ./tests/integration/...
+	$(GOTOOLCHAIN) SKIP_PENETRATION=1 API_URL=http://localhost:8080 go test -v -count=1 ./tests/integration/...
 
 load:
 	./scripts/bench.sh
@@ -25,7 +32,7 @@ load-save:
 	BENCH_SAVE=1 ./scripts/bench.sh
 
 lint:
-	golangci-lint run ./... && $(MAKE) vulncheck
+	$(GOTOOLCHAIN) golangci-lint run ./... && $(MAKE) vulncheck
 
 vulncheck:
 	go run golang.org/x/vuln/cmd/govulncheck@latest ./...
