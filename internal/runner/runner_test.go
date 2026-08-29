@@ -1142,10 +1142,12 @@ func TestResolveSourceName(t *testing.T) {
 	}
 }
 
-// TestJailEnv locks the environment allowlist: exactly four vars, in a
+// TestJailEnv locks the environment allowlist: a fixed set of vars, in a
 // stable order, with PATH copied from the server env at call time and a
 // hardcoded fallback when PATH is unset or empty. GOCACHE and CCACHE_DIR
 // are set by nsjailArgs after cache bind-mounts, not by jailEnv.
+// DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1 lets .NET run without a
+// system-ICU package (see jailEnv), so it is part of the allowlist.
 func TestJailEnv(t *testing.T) {
 	t.Setenv("PATH", "/custom/bin")
 	got := jailEnv()
@@ -1154,6 +1156,7 @@ func TestJailEnv(t *testing.T) {
 		"-E", "HOME=/tmp",
 		"-E", "LANG=C.UTF-8",
 		"-E", "LC_ALL=C.UTF-8",
+		"-E", "DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1",
 	}
 	if len(got) != len(want) {
 		t.Fatalf("jailEnv = %q, want %q", got, want)
@@ -1173,6 +1176,7 @@ func TestJailEnv(t *testing.T) {
 		"-E", "HOME=/tmp",
 		"-E", "LANG=C.UTF-8",
 		"-E", "LC_ALL=C.UTF-8",
+		"-E", "DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1",
 	}
 	if len(got) != len(wantPath) {
 		t.Fatalf("jailEnv (empty PATH) = %q, want %q", got, wantPath)

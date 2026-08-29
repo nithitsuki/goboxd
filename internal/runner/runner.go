@@ -272,6 +272,14 @@ func jailEnv() []string {
 		"-E", "HOME=/tmp",
 		"-E", "LANG=C.UTF-8",
 		"-E", "LC_ALL=C.UTF-8",
+		// Run .NET in invariant globalization mode. This removes the
+		// dependency on a system ICU package with a SONAME dotnet recognizes
+		// (e.g. Debian's libicu72). On hosts without a dotnet-compatible ICU
+		// (Arch provides libicuuc.so.78 only), the default mode aborts the
+		// build with "Couldn't find a valid ICU package". Invariant mode is
+		// safe for sandboxed code execution and keeps csharp portable across
+		// base images without per-distro ICU pinning.
+		"-E", "DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1",
 	}
 }
 
