@@ -33,6 +33,7 @@ The goal is to prevent the attacker from:
 | 14 | Memory and pids limits without cgroup v2 | Per-jail cgroup v2 dirs enforce `memory.max` and `pids.max`. Peak memory and OOM events come from the cgroup. The rlimit fallback stays active when cgroup v2 is not available. | `internal/cgroupv2/` |
 | 15 | Server env leak into jail | `jailEnv` builds the `-E` flags from an allowlist of PATH, HOME, GOCACHE, LANG, LC_ALL. nsjail clears every other variable. | `internal/runner/runner.go` |
 | 16 | Host kernel and hostname leak via /proc and /etc/hosts | Mask `/etc/hosts` (localhost only) and `/proc/sys` (empty tmpfs) inside every jail; mount proc manually in command order so the mask survives. | `internal/runner/runner.go`, `internal/runner/hosts.go` |
+| 17 | DNS exfiltration | Mask `/etc/resolv.conf` (no nameservers) and `/etc/nsswitch.conf` (`hosts: files` only) so hostname lookups cannot tunnel data out even though raw TCP/UDP is blocked. | `internal/runner/hosts.go`, `internal/runner/runner.go` |
 
 ## What each fix does
 
@@ -225,6 +226,28 @@ Masking does not break runtimes. Go, Java, C, Python, and Node read
 rust, and js stays green under the mask. Verifying each runtime preserves
 locale and passwd access while hiding the hostname and kernel tunables is
 part of the regression gate (`TestJailProcAndHostsMasked`).
+
+### Hole 17 — Close the DNS exfiltration channel
+
+The jail blocks raw TCP/UDP (`CLONE_NEWNET`, no interfaces), but hostname
+lookups historically still resolved: `/etc/resolv.conf` carried the host's
+resolver (e.g. Tailscale MagicDNS) and `/etc/nsswitch.conf`'s `hosts:` line
+routed lookups to system resolvers (`resolve`/`mdns`/`dns`). That exposed a
+DNS-tunneling exfiltration/C2 channel even with no sockets available.
+
+goboxd masks both inside the jail:
+
+- `/etc/resolv.conf` is replaced with a nameserver-free file (bind-mounted
+  `-R` after the broad `-B /etc` bind, like `/etc/hosts`), so glibc's `dns`
+  module has no resolver to query.
+- `/etc/nsswitch.conf` is replaced with a copy whose `hosts:` is `files`
+  only — lookups resolve exclusively against the masked `/etc/hosts`
+  (localhost). `passwd`/`group`/`shadow` stay on `files` so runtimes still
+  resolve users (`getpwnam`) locally.
+
+Regression-gated by `TestJailDNSMasked`: a hostname lookup inside the jail
+must fail (empty), while `getpwnam` must still work. The `network-dns`
+penetration fixtures assert lookups are blocked.
 
 ## Accepted limitations
 

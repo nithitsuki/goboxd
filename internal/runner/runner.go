@@ -450,6 +450,29 @@ func nsjailArgs(appDir string, wallTime, cpuLimit, memKB, procs, uid int, jailCg
 	args = append(args,
 		"-R", hostsPath+":/etc/hosts",
 	)
+	// DNS exfiltration mask: bind a nameserver-free /etc/resolv.conf over the
+	// host's (which carries a real resolver, e.g. Tailscale MagicDNS). Without
+	// this, jailed code can resolve hostnames and tunnel data out over DNS even
+	// though raw TCP/UDP is blocked. A comment-only resolv.conf breaks
+	// resolution without breaking runtimes that just read the file.
+	resolvPath, err := maskedResolvPath()
+	if err != nil {
+		return nil, fmt.Errorf("materializing masked /etc/resolv.conf: %w", err)
+	}
+	args = append(args,
+		"-R", resolvPath+":/etc/resolv.conf",
+	)
+	// nsswitch host lookup mask: the host's hosts: line may route lookups to
+	// `resolve`/`mdns`/`dns` (system services) that ignore the masked
+	// resolv.conf. Rewrite hosts: to files-only so hostname lookups resolve
+	// only against the masked /etc/hosts (localhost) and cannot tunnel out.
+	nsswitchPath, err := maskedNsswitchPath()
+	if err != nil {
+		return nil, fmt.Errorf("materializing masked /etc/nsswitch.conf: %w", err)
+	}
+	args = append(args,
+		"-R", nsswitchPath+":/etc/nsswitch.conf",
+	)
 	// The jail environment is an explicit allowlist. nsjail clears the child
 	// env by default, so these -E flags are the complete jail environment:
 	// nothing from the server env (credentials, GOBOXD_*, proxy vars) can

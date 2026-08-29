@@ -1,0 +1,17 @@
+{
+  "language": "c",
+  "source": "#include <netdb.h>\n#include <stdio.h>\nint main(){struct hostent*h=gethostbyname(\"example.com\");if(h)printf(\"%s\",(char*)h->h_addr_list[0]);}\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 4,
+      "memory_kb": 102400,
+      "max_processes": 64
+    }
+  }
+}

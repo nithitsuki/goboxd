@@ -1257,7 +1257,7 @@ func TestJailEnvContract(t *testing.T) {
 		keys[k] = v
 	}
 
-	allowed := []string{"PATH", "HOME", "GOCACHE", "LANG", "LC_ALL"}
+	allowed := []string{"PATH", "HOME", "GOCACHE", "LANG", "LC_ALL", "DOTNET_SYSTEM_GLOBALIZATION_INVARIANT"}
 	allowedSet := map[string]bool{}
 	for _, k := range allowed {
 		allowedSet[k] = true
@@ -2152,6 +2152,72 @@ print("` + marker + `")
 			}
 		}
 		t.Errorf("/proc/sys is not masked; got %q (want 0 entries)", sys)
+	}
+}
+
+// TestJailDNSMasked (DNS-exfil fix) proves the jail has no working resolver:
+// /etc/resolv.conf is nameserver-free and /etc/nsswitch.conf hosts: is
+// files-only, so a hostname lookup fails (empty) instead of exfiltrating a
+// DNS-tunneling channel. Removes/breaks either mask and the lookup resolves,
+// failing the gate.
+func TestJailDNSMasked(t *testing.T) {
+	if _, err := exec.LookPath("nsjail"); err != nil {
+		t.Skip("nsjail not found in PATH, skipping runner tests (run inside docker-compose)")
+	}
+	if os.Geteuid() != 0 {
+		t.Skip("requires root to run nsjail")
+	}
+
+	py3Config := config.LanguageConfig{
+		ID:             "py3",
+		Name:           "Python 3",
+		RunCmd:         []string{"/usr/bin/python3", "main.py"},
+		SourceFilename: "main.py",
+		RunLimits: config.Limits{
+			WallTimeS:    5,
+			MemoryKB:     102400,
+			MaxProcesses: 100,
+		},
+	}
+
+	src := `import socket
+print("DONE_BEGIN")
+try:
+    socket.getaddrinfo("example.com", 80)
+    print("RESOLVED")
+except Exception as e:
+    print("FAILED", type(e).__name__)
+print("DONE_END")
+try:
+    print(open("/etc/resolv.conf").read())
+except Exception as e:
+    print("RESOLV_ERR", e)
+import pwd
+print("PM", pwd.getpwnam("root").pw_name)
+`
+
+	req := models.RunRequest{
+		Language: "py3",
+		Source:   src,
+		Tests:    []models.TestCase{{Stdin: "", ExpectedStdout: ""}},
+	}
+	_, results, err := ExecuteRun(context.Background(), req, py3Config)
+	if err != nil {
+		t.Fatalf("ExecuteRun dropped a hard error: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	res := results[0]
+	out := res.Stdout
+
+	blocked := extractBetween(out, "DONE_BEGIN", "DONE_END")
+	if strings.Contains(blocked, "RESOLVED") {
+		t.Errorf("DNS resolution succeeded inside the jail (%q) — DNS exfil channel is open", blocked)
+	}
+
+	if !strings.Contains(out, "PM root") {
+		t.Errorf("getpwnam failed inside the jail (passwd must keep working); stdout=%q stderr=%q", out, res.Stderr)
 	}
 }
 
