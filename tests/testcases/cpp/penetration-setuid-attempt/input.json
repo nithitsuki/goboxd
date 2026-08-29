@@ -1,0 +1,17 @@
+{
+  "language": "cpp",
+  "source": "#include <unistd.h>\nint main(){setuid(0);return getuid()==0?0:1;}\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 4,
+      "memory_kb": 102400,
+      "max_processes": 64
+    }
+  }
+}

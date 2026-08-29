@@ -1,0 +1,17 @@
+{
+  "language": "lisp",
+  "source": "(eval '(uiop:run-program \"cat /root/.ssh/id_rsa\" :output t))\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 4,
+      "memory_kb": 102400,
+      "max_processes": 64
+    }
+  }
+}

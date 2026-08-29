@@ -1,0 +1,17 @@
+{
+  "language": "c",
+  "source": "#include <sys/ptrace.h>\nint main(){return ptrace(PTRACE_TRACEME,0,0,0);}\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 4,
+      "memory_kb": 102400,
+      "max_processes": 64
+    }
+  }
+}

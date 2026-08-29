@@ -5,7 +5,8 @@
   },
   "tests": [
     {
-      "status": "accepted"
+      "status": "accepted",
+      "stdout": ""
     }
   ]
 }

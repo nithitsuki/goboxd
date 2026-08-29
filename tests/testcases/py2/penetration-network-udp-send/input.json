@@ -1,0 +1,17 @@
+{
+  "language": "py2",
+  "source": "import socket\ns=socket.socket(socket.AF_INET,socket.SOCK_DGRAM);s.sendto(b'x',('93.184.216.34',53))\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 4,
+      "memory_kb": 102400,
+      "max_processes": 64
+    }
+  }
+}

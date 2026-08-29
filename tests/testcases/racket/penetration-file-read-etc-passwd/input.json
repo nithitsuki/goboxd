@@ -1,6 +1,6 @@
 {
   "language": "racket",
-  "source": "#lang racket\n(with-handlers ([exn:fail? void]) (display (call-with-input-file \"/etc/passwd\" port->string)))",
+  "source": "(display (call-with-input-file \"/etc/passwd\" (lambda (p) (read-string 9999999 p))))\n",
   "tests": [
     {
       "stdin": "",
@@ -9,9 +9,9 @@
   ],
   "run": {
     "limits": {
-      "wall_time_s": 5,
-      "memory_kb": 524288,
-      "max_processes": 100
+      "wall_time_s": 4,
+      "memory_kb": 102400,
+      "max_processes": 64
     }
   }
 }

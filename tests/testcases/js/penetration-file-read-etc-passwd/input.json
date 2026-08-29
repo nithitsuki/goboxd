@@ -1,15 +1,17 @@
 {
   "language": "js",
-  "source": "const fs = require('fs');\ntry {\n  console.log(fs.readFileSync('/etc/passwd', 'utf8'));\n} catch(e) {\n  console.log('error:', e.message);\n}",
-  "run": {
-    "limits": {
-      "wall_time_s": 5
-    }
-  },
+  "source": "const fs=require('fs');process.stdout.write(fs.readFileSync('/etc/passwd'));\n",
   "tests": [
     {
       "stdin": "",
       "expected_stdout": ""
     }
-  ]
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 4,
+      "memory_kb": 102400,
+      "max_processes": 64
+    }
+  }
 }

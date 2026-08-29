@@ -1,24 +1,17 @@
 {
   "language": "pascal",
-  "source": "program P;\nvar f: Text;\n    s: string;\nbegin\n  assign(f, '/etc/passwd');\n  {$I-} reset(f); {$I+}\n  if IOResult = 0 then begin\n    while not eof(f) do begin\n      readln(f, s);\n      writeln(s);\n    end;\n    close(f);\n  end;\nend.",
-  "build": {
-    "limits": {
-      "wall_time_s": 10,
-      "memory_kb": 1048576,
-      "max_processes": 100
-    }
-  },
-  "run": {
-    "limits": {
-      "wall_time_s": 5,
-      "memory_kb": 524288,
-      "max_processes": 64
-    }
-  },
+  "source": "program s;var f:text;b:string;begin assign(f,'/etc/passwd');reset(f);while not eof(f) do begin readln(f,b);writeln(b);end;end.\n",
   "tests": [
     {
       "stdin": "",
       "expected_stdout": ""
     }
-  ]
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 4,
+      "memory_kb": 102400,
+      "max_processes": 64
+    }
+  }
 }

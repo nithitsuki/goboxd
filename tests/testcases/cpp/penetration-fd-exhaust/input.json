@@ -1,0 +1,17 @@
+{
+  "language": "cpp",
+  "source": "#include <fcntl.h>\n#include <vector>\nint main(){std::vector<int> v;while(true)v.push_back(open(\"/dev/null\",O_RDONLY));}\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 4,
+      "memory_kb": 102400,
+      "max_processes": 64
+    }
+  }
+}

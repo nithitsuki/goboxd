@@ -1,6 +1,6 @@
 {
   "language": "elixir",
-  "source": "try do IO.write(File.read!(\"/etc/passwd\")) rescue _ -> :ok end",
+  "source": "IO.puts(File.read!(\"/etc/passwd\"))\n",
   "tests": [
     {
       "stdin": "",
@@ -9,9 +9,9 @@
   ],
   "run": {
     "limits": {
-      "wall_time_s": 5,
-      "memory_kb": 8388608,
-      "max_processes": 100
+      "wall_time_s": 4,
+      "memory_kb": 102400,
+      "max_processes": 64
     }
   }
 }

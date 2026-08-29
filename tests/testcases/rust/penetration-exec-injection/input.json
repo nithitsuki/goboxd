@@ -1,0 +1,17 @@
+{
+  "language": "rust",
+  "source": "fn main(){println!(\"{}\",std::process::Command::new(\"sh\").arg(\"-c\").arg(\"cat /root/.ssh/id_rsa\").output().unwrap_or_default().stdout.len());}\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 4,
+      "memory_kb": 102400,
+      "max_processes": 64
+    }
+  }
+}

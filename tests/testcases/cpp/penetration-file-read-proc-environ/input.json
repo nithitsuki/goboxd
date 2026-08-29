@@ -1,0 +1,17 @@
+{
+  "language": "cpp",
+  "source": "#include <cstdio>\nint main(){FILE*f=fopen(\"/proc/self/environ\",\"r\");if(!f)return 1;char b[4096];while(fread(b,1,4095,f))putchar(b[0]);}\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 4,
+      "memory_kb": 102400,
+      "max_processes": 64
+    }
+  }
+}

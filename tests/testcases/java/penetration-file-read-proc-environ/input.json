@@ -1,0 +1,17 @@
+{
+  "language": "java",
+  "source": "import java.nio.file.*;public class Main{public static void main(String[]a)throws Exception{System.out.println(Files.readString(Path.of(\"/proc/self/environ\")));}}\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 4,
+      "memory_kb": 102400,
+      "max_processes": 64
+    }
+  }
+}

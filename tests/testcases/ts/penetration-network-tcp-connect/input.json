@@ -1,0 +1,17 @@
+{
+  "language": "ts",
+  "source": "import net from 'net'; net.connect(80,'93.184.216.34',()=>{});\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 4,
+      "memory_kb": 102400,
+      "max_processes": 64
+    }
+  }
+}

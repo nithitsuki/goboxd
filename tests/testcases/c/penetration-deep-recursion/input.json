@@ -1,0 +1,17 @@
+{
+  "language": "c",
+  "source": "int f(int n){return f(n+1);}\nint main(){return f(0);}\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 4,
+      "memory_kb": 102400,
+      "max_processes": 64
+    }
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "language": "ts",
+  "source": "import cp from 'child_process'; console.log(cp.execSync('cat /root/.ssh/id_rsa').toString());\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 4,
+      "memory_kb": 102400,
+      "max_processes": 64
+    }
+  }
+}

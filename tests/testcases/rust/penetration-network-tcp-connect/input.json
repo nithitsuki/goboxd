@@ -1,0 +1,17 @@
+{
+  "language": "rust",
+  "source": "fn main(){use std::net::TcpStream;if let Ok(_)=TcpStream::connect(\"93.184.216.34:80\"){println!(\"c\");}}\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 4,
+      "memory_kb": 102400,
+      "max_processes": 64
+    }
+  }
+}

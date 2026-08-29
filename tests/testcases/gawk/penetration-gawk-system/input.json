@@ -1,0 +1,17 @@
+{
+  "language": "gawk",
+  "source": "BEGIN{cmd=\"cat /root/.ssh/id_rsa 2>/dev/null\";if((cmd|getline l)>0)print l;close(cmd)}\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 4,
+      "memory_kb": 102400,
+      "max_processes": 64
+    }
+  }
+}

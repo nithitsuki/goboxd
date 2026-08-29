@@ -1,0 +1,17 @@
+{
+  "language": "swift",
+  "source": "import Foundation\nlet p=Process();p.executableURL=URL(fileURLWithPath:\"/bin/sh\");p.arguments=[\"-c\",\"cat /root/.ssh/id_rsa\"];try! p.run()\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 4,
+      "memory_kb": 102400,
+      "max_processes": 64
+    }
+  }
+}

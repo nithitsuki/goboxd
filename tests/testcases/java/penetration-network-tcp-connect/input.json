@@ -1,0 +1,17 @@
+{
+  "language": "java",
+  "source": "import java.net.*;public class Main{public static void main(String[]a)throws Exception{new Socket(\"93.184.216.34\",80);}}\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 4,
+      "memory_kb": 102400,
+      "max_processes": 64
+    }
+  }
+}

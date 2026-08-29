@@ -1,0 +1,17 @@
+{
+  "language": "go",
+  "source": "package main\nfunc main(){s:=make([]byte,0,1<<20);for{s=append(s,make([]byte,1<<20)...)}}\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 4,
+      "memory_kb": 102400,
+      "max_processes": 64
+    }
+  }
+}

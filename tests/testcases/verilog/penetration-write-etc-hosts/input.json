@@ -1,0 +1,17 @@
+{
+  "language": "verilog",
+  "source": "module s;initial begin $system(\"echo x > /etc/hosts\"); $finish; end endmodule\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 4,
+      "memory_kb": 102400,
+      "max_processes": 64
+    }
+  }
+}

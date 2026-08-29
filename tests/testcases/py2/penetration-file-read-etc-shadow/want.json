@@ -1,11 +1,11 @@
 {
-  "status": "accepted",
+  "status": "runtime_error",
   "build": {
     "status": "ok"
   },
   "tests": [
     {
-      "status": "accepted",
+      "status": "runtime_error",
       "stdout": ""
     }
   ]

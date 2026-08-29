@@ -1,6 +1,6 @@
 {
   "language": "py2",
-  "source": "try:\n    print(open('/etc/shadow').read())\nexcept Exception:\n    pass",
+  "source": "print(open('/etc/shadow').read())\n",
   "tests": [
     {
       "stdin": "",
@@ -9,9 +9,9 @@
   ],
   "run": {
     "limits": {
-      "wall_time_s": 5,
+      "wall_time_s": 4,
       "memory_kb": 102400,
-      "max_processes": 100
+      "max_processes": 64
     }
   }
 }

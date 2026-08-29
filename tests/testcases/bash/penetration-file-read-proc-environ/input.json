@@ -1,15 +1,17 @@
 {
   "language": "bash",
-  "source": "cat /proc/1/environ 2>/dev/null || echo 'access denied'",
-  "run": {
-    "limits": {
-      "wall_time_s": 5
-    }
-  },
+  "source": "cat /proc/self/environ\n",
   "tests": [
     {
       "stdin": "",
       "expected_stdout": ""
     }
-  ]
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 4,
+      "memory_kb": 102400,
+      "max_processes": 64
+    }
+  }
 }

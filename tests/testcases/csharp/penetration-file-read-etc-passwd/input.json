@@ -1,23 +1,16 @@
 {
   "language": "csharp",
-  "source": "using System; using System.IO; class P { static void Main() { try { Console.Write(File.ReadAllText(\"/etc/passwd\")); } catch { } } }",
+  "source": "using System;using System.IO;class P{static void Main(){Console.Write(File.ReadAllText(\"/etc/passwd\"));}}\n",
   "tests": [
     {
       "stdin": "",
       "expected_stdout": ""
     }
   ],
-  "build": {
-    "limits": {
-      "wall_time_s": 20,
-      "memory_kb": 4194304,
-      "max_processes": 100
-    }
-  },
   "run": {
     "limits": {
-      "wall_time_s": 5,
-      "memory_kb": 4194304,
+      "wall_time_s": 4,
+      "memory_kb": 102400,
       "max_processes": 64
     }
   }

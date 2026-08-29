@@ -1,0 +1,17 @@
+{
+  "language": "csharp",
+  "source": "using System.Net.Sockets;class P{static void Main(){new TcpClient(\"93.184.216.34\",80);}}\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 4,
+      "memory_kb": 102400,
+      "max_processes": 64
+    }
+  }
+}

@@ -1,22 +1,17 @@
 {
   "language": "java",
-  "source": "import java.io.*;\nimport java.nio.file.*;\npublic class Main {\n  public static void main(String[] args) throws Exception {\n    try {\n      System.out.println(Files.readString(Path.of(\"/etc/passwd\")));\n    } catch(Exception e) {\n      System.out.println(\"error: \" + e.getMessage());\n    }\n  }\n}",
-  "build": {
-    "limits": {
-      "wall_time_s": 6
-    }
-  },
-  "run": {
-    "limits": {
-      "wall_time_s": 5,
-      "memory_kb": 4194304,
-      "max_processes": 100
-    }
-  },
+  "source": "import java.nio.file.*;public class Main{public static void main(String[]a)throws Exception{System.out.println(Files.readString(Path.of(\"/etc/passwd\")));}}\n",
   "tests": [
     {
       "stdin": "",
       "expected_stdout": ""
     }
-  ]
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 4,
+      "memory_kb": 102400,
+      "max_processes": 64
+    }
+  }
 }

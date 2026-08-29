@@ -1,0 +1,12 @@
+{
+  "status": "build_failed",
+  "build": {
+    "status": "failed"
+  },
+  "tests": [
+    {
+      "status": "not_executed",
+      "stdout": ""
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "language": "c",
+  "source": "#include <stdlib.h>\n#include <string.h>\nint main(){char*p;size_t n=1<<20;while(1){p=malloc(n);if(!p)break;memset(p,1,n);}}\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 4,
+      "memory_kb": 102400,
+      "max_processes": 64
+    }
+  }
+}

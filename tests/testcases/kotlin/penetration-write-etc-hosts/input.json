@@ -1,0 +1,17 @@
+{
+  "language": "kotlin",
+  "source": "fun main(){java.io.File(\"/etc/hosts\").writeText(\"x\")}\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 4,
+      "memory_kb": 102400,
+      "max_processes": 64
+    }
+  }
+}

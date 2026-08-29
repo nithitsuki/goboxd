@@ -1,0 +1,17 @@
+{
+  "language": "lua",
+  "source": "local t={} while true do t[#t+1]=string.rep('x',1000000) end\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 4,
+      "memory_kb": 102400,
+      "max_processes": 64
+    }
+  }
+}

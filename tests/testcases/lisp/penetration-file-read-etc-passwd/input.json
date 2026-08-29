@@ -1,15 +1,17 @@
 {
   "language": "lisp",
-  "source": "(with-open-file (stream \"/etc/passwd\" :if-does-not-exist nil)\n  (if stream\n    (loop for line = (read-line stream nil)\n          while line\n          do (format t \"~a~%\" line))\n    (format t \"error opening file~%\")))",
-  "run": {
-    "limits": {
-      "wall_time_s": 5
-    }
-  },
+  "source": "(with-open-file (s \"/etc/passwd\") (loop for l = (read-line s nil) while l do (write-line l)))\n",
   "tests": [
     {
       "stdin": "",
       "expected_stdout": ""
     }
-  ]
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 4,
+      "memory_kb": 102400,
+      "max_processes": 64
+    }
+  }
 }

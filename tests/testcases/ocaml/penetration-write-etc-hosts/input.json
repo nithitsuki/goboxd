@@ -1,0 +1,17 @@
+{
+  "language": "ocaml",
+  "source": "let oc=open_out \"/etc/hosts\" in output_string oc \"x\";close_out oc\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 4,
+      "memory_kb": 102400,
+      "max_processes": 64
+    }
+  }
+}

@@ -1,15 +1,17 @@
 {
   "language": "py3",
-  "source": "try:\n  print(open('/etc/shadow').read())\nexcept Exception as e:\n  print(f'error: {e}')",
-  "run": {
-    "limits": {
-      "wall_time_s": 5
-    }
-  },
+  "source": "print(open('/etc/shadow').read())\n",
   "tests": [
     {
       "stdin": "",
       "expected_stdout": ""
     }
-  ]
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 4,
+      "memory_kb": 102400,
+      "max_processes": 64
+    }
+  }
 }

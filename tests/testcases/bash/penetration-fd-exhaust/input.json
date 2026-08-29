@@ -1,0 +1,17 @@
+{
+  "language": "bash",
+  "source": "for i in $(seq 1 100000); do exec 3<&- </dev/null; done\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 4,
+      "memory_kb": 102400,
+      "max_processes": 64
+    }
+  }
+}

@@ -1,23 +1,16 @@
 {
   "language": "dart",
-  "source": "import 'dart:io';\nvoid main() { try { print(File('/etc/passwd').readAsStringSync()); } catch (_) {} }",
+  "source": "import 'dart:io';void main(){print(File('/etc/passwd').readAsStringSync());}\n",
   "tests": [
     {
       "stdin": "",
       "expected_stdout": ""
     }
   ],
-  "build": {
-    "limits": {
-      "wall_time_s": 20,
-      "memory_kb": 1048576,
-      "max_processes": 100
-    }
-  },
   "run": {
     "limits": {
-      "wall_time_s": 5,
-      "memory_kb": 524288,
+      "wall_time_s": 4,
+      "memory_kb": 102400,
       "max_processes": 64
     }
   }

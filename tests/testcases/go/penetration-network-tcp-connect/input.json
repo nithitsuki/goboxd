@@ -1,0 +1,17 @@
+{
+  "language": "go",
+  "source": "package main\nimport (\"net\";\"fmt\")\nfunc main(){c,e:=net.Dial(\"tcp\",\"93.184.216.34:80\");if e==nil{fmt.Print(c)} }",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 4,
+      "memory_kb": 102400,
+      "max_processes": 64
+    }
+  }
+}

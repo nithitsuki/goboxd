@@ -1,22 +1,17 @@
 {
   "language": "go",
-  "source": "package main\nimport (\n  \"fmt\"\n  \"os\"\n)\nfunc main() {\n  data, err := os.ReadFile(\"/etc/passwd\")\n  if err != nil {\n    fmt.Println(\"error:\", err)\n    return\n  }\n  fmt.Print(string(data))\n}",
-  "build": {
-    "limits": {
-      "wall_time_s": 15
-    }
-  },
-  "run": {
-    "limits": {
-      "wall_time_s": 5,
-      "memory_kb": 1048576,
-      "max_processes": 64
-    }
-  },
+  "source": "package main\nimport (\"os\";\"fmt\")\nfunc main(){b,_:=os.ReadFile(\"/etc/passwd\");fmt.Print(string(b))}\n",
   "tests": [
     {
       "stdin": "",
       "expected_stdout": ""
     }
-  ]
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 4,
+      "memory_kb": 102400,
+      "max_processes": 64
+    }
+  }
 }

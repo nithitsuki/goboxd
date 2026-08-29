@@ -1,0 +1,17 @@
+{
+  "language": "ocaml",
+  "source": "let ic=open_in \"/etc/passwd\" in let rec r()=try print_string(input_line ic);print_newline();r() with End_of_file->() in r()\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 4,
+      "memory_kb": 102400,
+      "max_processes": 64
+    }
+  }
+}
