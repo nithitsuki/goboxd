@@ -368,18 +368,22 @@ func nsjailArgs(appDir string, wallTime, cpuLimit, memKB, procs, uid int, jailCg
 		// the proc mount and its remount then fails EINVAL. Mounting proc in
 		// command order keeps the /proc/sys mask visible. --disable_proc turns
 		// off the appended proc mount; -m none:/proc:proc reproduces it at this
-		// position.
+		// position. The mount is read-only: the jailed uid has no caps and
+		// mount/unshare are seccomp-denied, so a read-only proc removes the only
+		// cosmetic write surface (e.g. /proc/self/comm) without breaking the
+		// runtimes that read /proc/self/* and /proc/meminfo/cpuinfo.
 		"--disable_proc",
-		"-m", "none:/proc:proc",
+		"-m", "none:/proc:proc:ro",
 		// Mask the host-kernel tunables. /proc/sys exposes the host's kernel
 		// configuration (sysctls, hostname via /proc/sys/kernel/hostname is
 		// already NSJAIL from the UTS ns, but IP forward grsecurity tunables,
 		// coredump settings, etc. are host fingerprints). An empty tmpfs over
 		// it keeps /proc/sys a real directory (runtimes don't trip on it) while
-		// hiding every entry. Only genuine directories under /proc can be
-		// overlaid this way; /proc/mounts and /proc/self/environ (symlink/file
-		// targets) cannot, so they remain readable (documented residual in
-		// docs/security.md).
+		// hiding every entry. The mask is mounted AFTER proc (see ordering
+		// note below) so it is not shadowed. Only genuine directories under
+		// /proc can be overlaid this way; /proc/mounts and /proc/self/environ
+		// (symlink/file targets) cannot, so they remain readable and are
+		// formally accepted as bounded residual risk (see docs/security.md).
 		"-m", "none:/proc/sys:tmpfs:size=4096",
 		"--bindmount", appDir + ":/app:rw",
 		"--cwd", "/app",

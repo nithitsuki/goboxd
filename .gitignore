@@ -49,3 +49,8 @@ foreground.md
 erl_crash.dump
 # Stray root-level package.json (the real one lives under playground/)
 /package.json
+# Native dev-server runtime artifacts (produced by scripts/serve.sh)
+.goboxd.pid
+goboxd.log
+# Compiled server binary (built locally; not part of the repo)
+/goboxd

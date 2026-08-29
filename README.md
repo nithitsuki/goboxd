@@ -231,9 +231,12 @@ instructions for adding new languages.
 
 ## Penetration testing
 
-goboxd includes 145 automated penetration test cases organized by attack
-vector. The test cases cover 22 languages. The table shows the attack
-vectors and the languages they cover:
+goboxd ships an automated penetration suite organized by attack vector. The
+test cases live in `tests/testcases/*/penetration-*/` and run on **every
+push/PR** in the `sandbox` CI job (which installs every language runtime via
+`scripts/install.sh` and runs the full corpus with penetration enabled — the
+same path the Docker image uses). The table shows the attack vectors and the
+languages they cover:
 
 | Vector | Languages | What it probes |
 |---|---|---|

@@ -200,6 +200,12 @@ symlink to `/proc/self/mounts`, and `/proc/self/environ` is a regular file
 inside a symlinked directory. The nsjail bind-mount API only overlays real
 directories, so these two cannot be masked with the current mechanism.
 
+`/proc` itself is mounted **read-only** (the `proc:ro` mount above), which
+closes the only cosmetic write surface (e.g. `/proc/self/comm`) without
+breaking the runtimes that read `/proc/self/*` and `/proc/meminfo/cpuinfo`.
+This is the high-value half of Hole 16; the two symlink/file-target leaks
+below are explicitly accepted as bounded risk.
+
 `/proc/mounts` leaks the HOST mount table. Inside a jail with `--chroot /`
 the entry resolves to the host's full mount list: real device nodes
 (`/dev/nvme*`), host paths (`/home`, `/efi`), any mounted drives, and
@@ -223,7 +229,6 @@ part of the regression gate (`TestJailProcAndHostsMasked`).
 ## Accepted limitations
 
 goboxd accepts four boundary limitations.
-
 - Exit code 137. A user program that exits with code 137 gets
   `time_exceeded`. When the cpu time is at the limit, it gets
   `cpu_time_exceeded`. The result reads exit_code 137 and
@@ -242,6 +247,26 @@ goboxd accepts four boundary limitations.
   mechanism. `/proc/self/environ` shows the allowlisted jail env (Hole 15),
   not host credentials. Both are documented in Hole 16. Reducing the
   `/proc/mounts` leak is tracked as an exploration.
+
+### Formally accepted `/proc` residuals (Hole 16)
+
+The following two readable `/proc` entries are **consciously accepted, not
+unfixed**:
+
+- **`/proc/mounts`** (host mount table: device nodes, host paths, session
+  user mounts). Bounded: a host fingerprint only — it does not expose host
+  processes or host environment variables. The jailed pid namespace already
+  isolates host processes. Closing it needs an nsjail feature or custom mount
+  wiring (overlay the symlink target), which is out of scope for the current
+  executor work.
+- **`/proc/self/environ`** shows the allowlisted jail env (Hole 15), which
+  carries no host credentials and no `GOBOXD_*`/proxy/AWS variables. It is
+  by design, not a leak.
+
+Both are regression-tested by `TestJailProcAndHostsMasked`: removing the
+`/proc/sys` mask or the read-only proc mount fails that gate. The writable
+proc surface is closed; only the two symlink/file-target reads above remain,
+and they are accepted as bounded.
 
 ### Per-UID build caches
 
