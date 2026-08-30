@@ -31,3 +31,8 @@ services:
       # GOBOXD_ALLOWED_ORIGINS intentionally left unset (server-to-server
       # sends no Origin; unset means every browser origin is rejected).
       - GOBOXD_ALLOWED_ORIGINS=${GOBOXD_ALLOWED_ORIGINS:-}
+      # Per-IP /run backstop (internal/api/ratelimit.go). Read once at startup,
+      # so changing these requires a container restart. Burst 5 keeps a NAT'd
+      # classroom from tripping the limit while still capping a single caller.
+      - GOBOXD_RATE_LIMIT_RPS=${GOBOXD_RATE_LIMIT_RPS:-1}
+      - GOBOXD_RATE_BURST=${GOBOXD_RATE_BURST:-5}
