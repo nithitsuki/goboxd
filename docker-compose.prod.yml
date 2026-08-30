@@ -1,0 +1,30 @@
+services:
+  goboxd:
+    build:
+      context: .
+      args:
+        # Comma-separated language subset, e.g. LANGS=py3,c,swift.
+        # "all" (default) installs every language.
+        LANGS: ${LANGS:-all}
+    ports:
+      - "127.0.0.1:8080:8080"
+    privileged: true # Required for nsjail to create namespaces
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 2G
+    volumes:
+      - ./tests/testcases:/app/testcases:ro
+    environment:
+      - PORT=8080
+      - GOBOXD_MAX_CPUS=2
+      - GOBOXD_MAX_JOBS=4
+      - GOBOXD_AUTH_TOKEN=${GOBOXD_AUTH_TOKEN:-}
+      # Advertise only the languages the image was built with.
+      # Follows the LANGS used at build time; empty = all.
+      - GOBOXD_LANGS=${LANGS:-}
+      # GOBOXD_ALLOWED_ORIGINS intentionally left unset (server-to-server
+      # sends no Origin; unset means every browser origin is rejected).
+      - GOBOXD_ALLOWED_ORIGINS=${GOBOXD_ALLOWED_ORIGINS:-}
