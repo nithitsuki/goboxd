@@ -42,6 +42,11 @@ jobs:
   sandbox:
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    env:
+      # Penetration-critical subset that fits the ~14 GB runner disk; the full
+      # 28-language image needs ~33 GB and can't fit a hosted runner. Widen to
+      # add coverage. The pinned-bookworm image installs these deterministically.
+      SANDBOX_LANGS: py3,c,cpp,go,rust,java,js,bash
     steps:
       - uses: actions/checkout@v7
         with:
@@ -60,22 +65,36 @@ jobs:
         run: |
           make -C external/nsjail
           sudo make -C external/nsjail install
-      # Install every language runtime using the project's own install scripts
-      # (the same ones the Docker image runs), plus bash/gawk which are plain
-      # system packages. mirrors the image so CI matches production.
-      - name: Install all language runtimes
-        run: |
-          sudo apt-get install -y --no-install-recommends bash gawk
-          sudo bash scripts/install.sh
-      - name: Runner integration tests (root)
+      - name: Runner integration tests (host nsjail, root)
         run: sudo -E env "PATH=$PATH" HOME=/root go test -count=1 ./internal/runner/...
-      # Full corpus across all installed languages, penetration ENABLED.
-      # GOBOXD_LANGS is left unset so the server advertises every runtime the
-      # image installs; the fixture harness skips any unadvertised language.
-      - name: Penetration + integration suite (all languages, root)
-        run: sudo -E env "PATH=$PATH" HOME=/root go test -count=1 ./tests/integration/...
-      # #14 soak gate: leak/soak + fuzz regression (see tests/integration/soak_test.go).
-      - name: Soak + fuzz regression (root)
+      # Language runtimes come from the PINNED Debian-bookworm Docker image, not
+      # the ephemeral ubuntu host. The install scripts are bookworm-pinned by
+      # name AND version (e.g. libprotobuf32, ruby3.1, curl=…deb12u15) and can
+      # never resolve on ubuntu-latest, which is why the old host install kept
+      # failing with "E: Version … was not found". Building the image resolves
+      # every pin deterministically and exercises the real artifact.
+      - name: Build goboxd image (pinned bookworm)
+        run: make build LANGS=${{ env.SANDBOX_LANGS }}
+      - name: Start goboxd (privileged)
+        run: |
+          LANGS=${{ env.SANDBOX_LANGS }} docker compose up -d
+          for i in $(seq 1 90); do
+            if curl -sf http://localhost:8080/readyz >/dev/null 2>&1; then
+              echo "goboxd ready"; exit 0
+            fi
+            sleep 2
+          done
+          echo "goboxd not ready:"; docker compose logs; exit 1
+      # Full penetration + fixture corpus (penetration ENABLED) against the
+      # running bookworm container. Soak/Fuzz are excluded here — see below.
+      - name: Penetration + integration suite (in-container)
+        run: API_URL=http://localhost:8080 go test -count=1 -skip 'Soak|Fuzz' ./tests/integration/...
+      # #14 soak/fuzz gate on the HOST with one runtime so jail-dir/cgroup leak
+      # checks are meaningful (they count the host /tmp + cgroup tree, which an
+      # in-container server can't expose). python3 is a plain ubuntu package.
+      - name: Install soak runtime (host, minimal)
+        run: sudo apt-get install -y --no-install-recommends python3
+      - name: Soak + fuzz regression (host, root)
         run: sudo -E env "PATH=$PATH" HOME=/root go test -count=1 -run 'Soak|Fuzz' ./tests/integration/...
 
   build:
