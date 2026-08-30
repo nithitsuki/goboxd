@@ -25,7 +25,7 @@ COPY . .
 # Docker contexts have no .git, so the commit must be passed explicitly;
 # scripts/build.sh supplies the real HEAD SHA.
 ARG COMMIT=dev
-ARG VERSION=0.1.0
+ARG VERSION=0.2.0
 RUN CGO_ENABLED=0 GOOS=linux go build -o goboxd \
     -ldflags "-s -w \
       -X github.com/nithitsuki/goboxd/internal/buildinfo.Commit=${COMMIT} \

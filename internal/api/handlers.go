@@ -280,13 +280,22 @@ func HandleInfo(w http.ResponseWriter, r *http.Request) {
 	// Stats from the global tracker
 	s := GetStats()
 
+	buildInfo := map[string]interface{}{
+		"version":    buildinfo.Version,
+		"commit":     commit,
+		"build_date": buildinfo.BuildDate,
+		"go_version": runtime.Version(),
+	}
+	// "Minimum versioning": accept an optional ?min= floor and report whether
+	// this build satisfies it, so operators can assert a deployed goboxd is at
+	// least some version without parsing commit hashes.
+	if min := r.URL.Query().Get("min"); min != "" {
+		buildInfo["min_version_requested"] = min
+		buildInfo["version_satisfies_min"] = buildinfo.AtLeast(buildinfo.Version, min)
+	}
+
 	info := map[string]interface{}{
-		"build_info": map[string]interface{}{
-			"version":    buildinfo.Version,
-			"commit":     commit,
-			"build_date": buildinfo.BuildDate,
-			"go_version": runtime.Version(),
-		},
+		"build_info": buildInfo,
 		"nsjail": map[string]interface{}{
 			"path":    nsjailPath,
 			"version": nsjailVersion,

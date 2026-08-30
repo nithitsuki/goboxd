@@ -2,7 +2,7 @@
   "openapi": "3.0.3",
   "info": {
     "title": "goboxd API",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "description": "Sandboxed multi-language code execution. Untrusted code runs inside nsjail with per-jail uids, seccomp, and cgroup v2 or rlimit resource enforcement."
   },
   "paths": {
