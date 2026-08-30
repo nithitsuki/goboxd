@@ -63,7 +63,7 @@ func TestSoakNoLeaks(t *testing.T) {
 			t.Fatalf("iteration %d POST /run: %v", i, err)
 		}
 		body, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
 			fail++
 			if fail <= 3 {
@@ -90,7 +90,7 @@ func TestSoakNoLeaks(t *testing.T) {
 	if resp, err := client.Get(base + "/healthz"); err != nil || resp.StatusCode != http.StatusOK {
 		t.Errorf("post-soak healthz failed: err=%v status=%v", err, respStatusCode(resp))
 	} else {
-		resp.Body.Close()
+		_ = resp.Body.Close()
 	}
 }
 
@@ -163,7 +163,7 @@ func FuzzRunParsing(f *testing.F) {
 		if err != nil {
 			return // network/transport failure is acceptable; we care about crashes
 		}
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 		body, _ := io.ReadAll(resp.Body)
 		// Must not crash: status must be a valid HTTP code and body must be
 		// parseable JSON (a well-formed error envelope) when present.
