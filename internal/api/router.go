@@ -38,7 +38,7 @@ func NewRouter() http.Handler {
 		mux.Handle("GET /playground/", http.StripPrefix("/playground", http.HandlerFunc(HandlePlayground)))
 	}
 
-	return RecoveryMiddleware(RequestIDMiddleware(LoggingMiddleware(AuthMiddleware(mux))))
+	return RecoveryMiddleware(RequestIDMiddleware(LoggingMiddleware(RateLimitMiddleware(AuthMiddleware(mux)))))
 }
 
 // NewServer builds the HTTP server with Slowloris mitigations: bounded header

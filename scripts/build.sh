@@ -22,7 +22,11 @@ if ! docker buildx inspect goboxd-builder >/dev/null 2>&1; then
 fi
 
 echo "==> Building goboxd image (LANGS=${LANGS})"
-docker compose build --builder goboxd-builder --build-arg LANGS="${LANGS}"
+COMMIT="$(git rev-parse --short=7 HEAD 2>/dev/null || echo dev)"
+docker compose build --builder goboxd-builder \
+    --build-arg LANGS="${LANGS}" \
+    --build-arg COMMIT="${COMMIT}" \
+    --build-arg VERSION="${VERSION:-0.1.0}"
 
 echo ""
 echo "==> Done."

@@ -6,6 +6,9 @@ services:
         # Comma-separated language subset, e.g. LANGS=py3,c,swift.
         # "all" (default) installs every language.
         LANGS: ${LANGS:-all}
+        # Stamped into /info build_info (see internal/buildinfo).
+        COMMIT: ${COMMIT:-dev}
+        VERSION: ${VERSION:-0.1.0}
     ports:
       - "127.0.0.1:8080:8080"
     privileged: true # Required for nsjail to create namespaces

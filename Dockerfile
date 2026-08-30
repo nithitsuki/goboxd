@@ -21,7 +21,17 @@ RUN make -j$(nproc)
 WORKDIR /app
 COPY go.mod ./
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -o goboxd ./cmd/goboxd
+# Build-time metadata, stamped into the binary via -ldflags (see buildinfo).
+# Docker contexts have no .git, so the commit must be passed explicitly;
+# scripts/build.sh supplies the real HEAD SHA.
+ARG COMMIT=dev
+ARG VERSION=0.1.0
+RUN CGO_ENABLED=0 GOOS=linux go build -o goboxd \
+    -ldflags "-s -w \
+      -X github.com/nithitsuki/goboxd/internal/buildinfo.Commit=${COMMIT} \
+      -X github.com/nithitsuki/goboxd/internal/buildinfo.Version=${VERSION} \
+      -X github.com/nithitsuki/goboxd/internal/buildinfo.BuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    ./cmd/goboxd
 
 # Step 2a: Python 2 source (EOL runtime, not in Debian repos)
 FROM python:2.7-slim@sha256:b68d40df862ac07e8955ea0fc0c5454cb4245b6165e79bc8ea2cc69170d9ba62 AS python2

@@ -18,6 +18,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/nithitsuki/goboxd/internal/buildinfo"
 	"github.com/nithitsuki/goboxd/internal/cgroupv2"
 	"github.com/nithitsuki/goboxd/internal/config"
 	"github.com/nithitsuki/goboxd/internal/models"
@@ -215,16 +216,20 @@ func StartShutdown() { shuttingDown.Store(true) }
 func StopAdmission() { gate.Stop() }
 
 func HandleInfo(w http.ResponseWriter, r *http.Request) {
-	// Git commit from build info
-	commit := "dev"
-	if bi, ok := debug.ReadBuildInfo(); ok {
-		for _, s := range bi.Settings {
-			if s.Key == "vcs.revision" {
-				commit = s.Value
-				if len(commit) > 7 {
-					commit = commit[:7]
+	// Build metadata: ldflags-stamped values win (the Docker path). Fall back
+	// to the Go toolchain's VCS stamping for a plain `go build` outside
+	// Docker — where the .git directory is absent and stamping is skipped.
+	commit := buildinfo.Commit
+	if commit == "" || commit == "dev" {
+		if bi, ok := debug.ReadBuildInfo(); ok {
+			for _, s := range bi.Settings {
+				if s.Key == "vcs.revision" {
+					commit = s.Value
+					if len(commit) > 7 {
+						commit = commit[:7]
+					}
+					break
 				}
-				break
 			}
 		}
 	}
@@ -277,8 +282,9 @@ func HandleInfo(w http.ResponseWriter, r *http.Request) {
 
 	info := map[string]interface{}{
 		"build_info": map[string]interface{}{
-			"version":    "0.1.0",
+			"version":    buildinfo.Version,
 			"commit":     commit,
+			"build_date": buildinfo.BuildDate,
 			"go_version": runtime.Version(),
 		},
 		"nsjail": map[string]interface{}{
