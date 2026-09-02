@@ -54,3 +54,4 @@ erl_crash.dump
 goboxd.log
 # Compiled server binary (built locally; not part of the repo)
 /goboxd
+__pycache__/
