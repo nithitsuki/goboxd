@@ -1,4 +1,4 @@
-.PHONY: build run test integration integration-docker integration-safe lint fmt vulncheck
+.PHONY: build run test integration integration-docker integration-safe lint fmt vulncheck bench
 
 # Pinned Go toolchain (single source of truth: .go-version). The `make lint`
 # target forces GOTOOLCHAIN to this exact version so golangci-lint is
@@ -24,6 +24,9 @@ integration-docker:
 
 integration-safe:
 	$(GOTOOLCHAIN) SKIP_PENETRATION=1 API_URL=http://localhost:8080 go test -v -count=1 ./tests/integration/...
+
+bench:
+	$(GOTOOLCHAIN) go test -bench=BenchmarkRunThroughput -benchtime=5s -run='^$$' ./tests/integration/...
 
 load:
 	./scripts/bench.sh

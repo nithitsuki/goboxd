@@ -1,0 +1,10 @@
+{
+  "language": "smalltalk",
+  "source": "n := (stdin nextLine) asNumber.\nstdout nextPutAll: (n * 2) printString; nl.",
+  "tests": [
+    {
+      "stdin": "21\n",
+      "expected_stdout": "42\n"
+    }
+  ]
+}

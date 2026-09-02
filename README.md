@@ -9,10 +9,12 @@ measures throughput and breaking points.
 
 ## Features
 
-- **28 supported languages** — Python 2, Python 3, C, C++, C#, Go, Rust, Java,
-  Kotlin, Scala, Swift, JavaScript (Node), TypeScript, Bash, Ruby, PHP, Elixir,
-  Haskell, OCaml, Verilog, R, D, Lua (LuaJIT), Perl, Erlang, Lisp (SBCL),
-  Racket, Dart
+- **50 supported languages** — Python 2, Python 3, C, C++, C#, .NET (Mono),
+  Go, Rust, Java, Kotlin, Scala, Swift, JavaScript (Node), TypeScript,
+  CoffeeScript, Bash, Dash, Ruby, PHP, Elixir, Erlang, Haskell, OCaml,
+  Clojure, Groovy, V, Nim, Zig, Crystal, Odin, Pony, Julia, Octave, R, D,
+  Lua (LuaJIT), Perl, Raku, Smalltalk, Prolog, PowerShell,
+  Emacs Lisp, COBOL, NASM, Verilog, Lisp (SBCL), Racket, Dart
 - **nsjail isolation** — every execution runs in a dedicated Linux namespace
   with resource limits (wall time, memory, processes, file size, open files)
 - **Configurable per-language** — add a language with a YAML entry. You do
@@ -98,6 +100,7 @@ curl -s http://localhost:8080/run \
 | `make integration` | Run integration tests against a fresh local server |
 | `make integration-docker` | Run integration tests against a running Docker container |
 | `make integration-safe` | Run integration tests excluding penetration tests |
+| `make bench` | Throughput benchmark: `BenchmarkRunThroughput` (runs/sec, Python trivial) |
 | `make load` | Run load benchmarks with [hey](https://github.com/rakyll/hey) |
 | `make load-save` | Run load benchmarks and save the results |
 | `make lint` | Run golangci-lint and govulncheck |
@@ -199,32 +202,54 @@ See [docs/api.md](docs/api.md) for the full API reference.
 |---|---|---|---|
 | bash | Bash | interpreted | v1.0 |
 | c | C | compiled | v1.0 |
+| clojure | Clojure | interpreted | v1.3 |
+| cobol | COBOL (GnuCOBOL) | compiled | v1.3 |
+| coffeescript | CoffeeScript | compiled | v1.3 |
 | cpp | C++ | compiled | v1.0 |
-| **csharp** | **C# (.NET 10)** | **compiled** | **v1.2** |
+| crystal | Crystal | compiled | v1.3 |
+| csharp | C# (.NET 10) | compiled | v1.2 |
 | d | D (GDC) | compiled | v1.0 |
-| **dart** | **Dart** | **compiled** | **v1.2** |
-| **elixir** | **Elixir** | **interpreted** | **v1.2** |
-| **erl** | **Erlang** | compiled | **v1.1** |
+| dart | Dart | compiled | v1.2 |
+| dash | Dash | interpreted | v1.3 |
+| dotnet | .NET (Mono) | compiled | v1.3 |
+| elisp | Emacs Lisp | interpreted | v1.3 |
+| elixir | Elixir | interpreted | v1.2 |
+| erl | Erlang | compiled | v1.1 |
+| gawk | AWK (gawk) | interpreted | v1.0 |
 | go | Go | compiled | v1.0 |
+| groovy | Groovy | interpreted | v1.3 |
 | haskell | Haskell | compiled | v1.0 |
 | java | Java | compiled | v1.0 |
 | js | JavaScript (Node) | interpreted | v1.0 |
-| **kotlin** | **Kotlin** | **compiled** | **v1.2** |
-| **lisp** | **Lisp (SBCL)** | interpreted | **v1.1** |
+| julia | Julia | interpreted | v1.3 |
+| kotlin | Kotlin | compiled | v1.2 |
+| lisp | Lisp (SBCL) | interpreted | v1.1 |
 | lua | Lua (LuaJIT) | interpreted | v1.0 |
+| nasm | NASM (x86-64) | compiled | v1.3 |
+| nim | Nim | compiled | v1.3 |
 | ocaml | OCaml | compiled | v1.0 |
+| octave | Octave | interpreted | v1.3 |
+| odin | Odin | compiled | v1.3 |
+| pascal | Pascal (Free Pascal) | compiled | v1.2 |
 | perl | Perl | interpreted | v1.0 |
-| **php** | **PHP** | **interpreted** | **v1.2** |
-| **py2** | **Python 2** | **interpreted** | **v1.2** |
+| php | PHP | interpreted | v1.0 |
+| pony | Pony | compiled | v1.3 |
+| prolog | Prolog (SWI) | interpreted | v1.3 |
+| pwsh | PowerShell | interpreted | v1.3 |
+| py2 | Python 2 | interpreted | v1.2 |
 | py3 | Python 3 | interpreted | v1.0 |
 | r | R | interpreted | v1.0 |
-| **racket** | **Racket** | **interpreted** | **v1.2** |
-| **ruby** | **Ruby** | **interpreted** | **v1.2** |
+| racket | Racket | interpreted | v1.1 |
+| raku | Raku | interpreted | v1.3 |
+| ruby | Ruby | interpreted | v1.2 |
 | rust | Rust | compiled | v1.0 |
-| **scala** | **Scala 3** | **compiled** | **v1.2** |
-| **swift** | **Swift** | **compiled** | **v1.2** |
-| **ts** | **TypeScript** | **compiled** | **v1.2** |
+| scala | Scala 3 | compiled | v1.2 |
+| smalltalk | Smalltalk (GNU) | interpreted | v1.3 |
+| swift | Swift | compiled | v1.2 |
+| ts | TypeScript | compiled | v1.2 |
 | verilog | Verilog | compiled | v1.0 |
+| vlang | V | compiled | v1.3 |
+| zig | Zig | compiled | v1.3 |
 
 See [docs/languages.md](docs/languages.md) for configuration details and
 instructions for adding new languages.
@@ -232,10 +257,10 @@ instructions for adding new languages.
 ## Penetration testing
 
 goboxd ships an automated penetration suite organized by attack vector. The
-test cases live in `tests/testcases/*/penetration-*/` and run on **every
-push/PR** in the `sandbox` CI job (which installs every language runtime via
-`scripts/install.sh` and runs the full corpus with penetration enabled — the
-same path the Docker image uses). The table shows the attack vectors and the
+test cases live in `tests/testcases/*/penetration-*/` and run against a real
+nsjail server via `make integration-docker` (which targets a running Docker
+container and runs the full corpus with penetration enabled — the same path
+the service uses in production). The table shows the attack vectors and the
 languages they cover:
 
 | Vector | Languages | What it probes |
@@ -349,4 +374,5 @@ tests/testcases/
 └── ...
 ```
 
-Currently **316 test cases** across 28 languages.
+Currently **493 test cases** across 50 languages (fixture files plus the
+legacy `erlang/` skeleton directory; the registry itself advertises 50).

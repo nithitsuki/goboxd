@@ -1,0 +1,10 @@
+{
+  "language": "dotnet",
+  "source": "using System;\nclass MainClass { public static void Main() { System.Console.WriteLine(int.Parse(System.Console.ReadLine()) * 2); } }",
+  "tests": [
+    {
+      "stdin": "21\n",
+      "expected_stdout": "42\n"
+    }
+  ]
+}

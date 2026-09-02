@@ -1,0 +1,10 @@
+{
+  "language": "crystal",
+  "source": "n = gets.not_nil!.to_i\nputs n * 2",
+  "tests": [
+    {
+      "stdin": "21\n",
+      "expected_stdout": "42\n"
+    }
+  ]
+}

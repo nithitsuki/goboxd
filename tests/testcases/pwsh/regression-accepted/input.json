@@ -1,0 +1,10 @@
+{
+  "language": "pwsh",
+  "source": "$n = [int](Read-Host)\nWrite-Output ($n * 2)",
+  "tests": [
+    {
+      "stdin": "21\n",
+      "expected_stdout": "42\n"
+    }
+  ]
+}

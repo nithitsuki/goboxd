@@ -1,0 +1,10 @@
+{
+  "language": "nim",
+  "source": "echo \"Hello from Nim!\"",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": "Hello from Nim!\n"
+    }
+  ]
+}

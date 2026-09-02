@@ -1,0 +1,10 @@
+{
+  "language": "elisp",
+  "source": "(princ (number-to-string (* (string-to-number (read-string \"\")) 2)))\n(terpri)",
+  "tests": [
+    {
+      "stdin": "21\n",
+      "expected_stdout": "42\n"
+    }
+  ]
+}

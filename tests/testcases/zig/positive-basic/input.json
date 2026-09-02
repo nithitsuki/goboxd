@@ -1,0 +1,10 @@
+{
+  "language": "zig",
+  "source": "const std = @import(\"std\");\n\npub fn main() !void {\n    try std.io.getStdOut().writer().print(\"Hello from Zig!\\n\", .{});\n}\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": "Hello from Zig!\n"
+    }
+  ]
+}

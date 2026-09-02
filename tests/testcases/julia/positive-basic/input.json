@@ -1,0 +1,10 @@
+{
+  "language": "julia",
+  "source": "println(\"Hello from Julia!\")",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": "Hello from Julia!\n"
+    }
+  ]
+}

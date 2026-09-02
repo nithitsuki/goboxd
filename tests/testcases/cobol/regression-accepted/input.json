@@ -1,0 +1,10 @@
+{
+  "language": "cobol",
+  "source": "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. DOUBLE.\n       DATA DIVISION.\n       WORKING-STORAGE SECTION.\n       01 N PIC 9(10).\n       PROCEDURE DIVISION.\n           ACCEPT N.\n           COMPUTE N = N * 2.\n           DISPLAY N.\n           STOP RUN.\n",
+  "tests": [
+    {
+      "stdin": "21\n",
+      "expected_stdout": "42\n"
+    }
+  ]
+}

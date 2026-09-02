@@ -1,0 +1,10 @@
+{
+  "language": "raku",
+  "source": "my $n = get.Int;\nsay $n * 2",
+  "tests": [
+    {
+      "stdin": "21\n",
+      "expected_stdout": "42\n"
+    }
+  ]
+}

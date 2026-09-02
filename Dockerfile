@@ -219,6 +219,113 @@ RUN --mount=type=cache,target=/var/lib/apt/lists \
     --mount=type=cache,target=/var/cache/apt/archives \
     if [ "$LANGS" = "all" ] || echo ",$LANGS," | grep -q ",pascal,"; then /app/scripts/lang_install/pascal.sh; fi
 
+# --- Language backlog layers (2026-09-02) ---
+
+# --- Layer: Clojure (needs the java layer, installed above) ---
+RUN --mount=type=cache,target=/var/cache/goboxd-dl \
+    --mount=type=cache,target=/var/cache/goboxd-toolchains \
+    if [ "$LANGS" = "all" ] || echo ",$LANGS," | grep -q ",clojure,"; then /app/scripts/lang_install/clojure.sh; fi
+
+# --- Layer: COBOL ---
+RUN --mount=type=cache,target=/var/lib/apt/lists \
+    --mount=type=cache,target=/var/cache/apt/archives \
+    if [ "$LANGS" = "all" ] || echo ",$LANGS," | grep -q ",cobol,"; then /app/scripts/lang_install/cobol.sh; fi
+
+# --- Layer: CoffeeScript (needs the nodejs layer) ---
+RUN --mount=type=cache,target=/var/lib/apt/lists \
+    --mount=type=cache,target=/var/cache/apt/archives \
+    if [ "$LANGS" = "all" ] || echo ",$LANGS," | grep -q ",coffeescript,"; then /app/scripts/lang_install/coffeescript.sh; fi
+
+# --- Layer: Crystal ---
+RUN --mount=type=cache,target=/var/cache/goboxd-dl \
+    --mount=type=cache,target=/var/cache/goboxd-toolchains \
+    if [ "$LANGS" = "all" ] || echo ",$LANGS," | grep -q ",crystal,"; then /app/scripts/lang_install/crystal.sh; fi
+
+# --- Layer: Dash ---
+RUN --mount=type=cache,target=/var/lib/apt/lists \
+    --mount=type=cache,target=/var/cache/apt/archives \
+    if [ "$LANGS" = "all" ] || echo ",$LANGS," | grep -q ",dash,"; then /app/scripts/lang_install/dash.sh; fi
+
+# --- Layer: .NET (Mono) ---
+RUN --mount=type=cache,target=/var/lib/apt/lists \
+    --mount=type=cache,target=/var/cache/apt/archives \
+    if [ "$LANGS" = "all" ] || echo ",$LANGS," | grep -q ",dotnet,"; then /app/scripts/lang_install/dotnet.sh; fi
+
+# --- Layer: Emacs Lisp ---
+RUN --mount=type=cache,target=/var/lib/apt/lists \
+    --mount=type=cache,target=/var/cache/apt/archives \
+    if [ "$LANGS" = "all" ] || echo ",$LANGS," | grep -q ",elisp,"; then /app/scripts/lang_install/elisp.sh; fi
+
+# --- Layer: Groovy (needs the java layer) ---
+RUN --mount=type=cache,target=/var/cache/goboxd-dl \
+    --mount=type=cache,target=/var/cache/goboxd-toolchains \
+    if [ "$LANGS" = "all" ] || echo ",$LANGS," | grep -q ",groovy,"; then /app/scripts/lang_install/groovy.sh; fi
+
+# --- Layer: Julia ---
+RUN --mount=type=cache,target=/var/cache/goboxd-dl \
+    --mount=type=cache,target=/var/cache/goboxd-toolchains \
+    if [ "$LANGS" = "all" ] || echo ",$LANGS," | grep -q ",julia,"; then /app/scripts/lang_install/julia.sh; fi
+
+# --- Layer: NASM ---
+RUN --mount=type=cache,target=/var/lib/apt/lists \
+    --mount=type=cache,target=/var/cache/apt/archives \
+    if [ "$LANGS" = "all" ] || echo ",$LANGS," | grep -q ",nasm,"; then /app/scripts/lang_install/nasm.sh; fi
+
+# --- Layer: Nim ---
+RUN --mount=type=cache,target=/var/lib/apt/lists \
+    --mount=type=cache,target=/var/cache/apt/archives \
+    if [ "$LANGS" = "all" ] || echo ",$LANGS," | grep -q ",nim,"; then /app/scripts/lang_install/nim.sh; fi
+
+# --- Layer: Octave ---
+RUN --mount=type=cache,target=/var/lib/apt/lists \
+    --mount=type=cache,target=/var/cache/apt/archives \
+    if [ "$LANGS" = "all" ] || echo ",$LANGS," | grep -q ",octave,"; then /app/scripts/lang_install/octave.sh; fi
+
+# --- Layer: Odin ---
+RUN --mount=type=cache,target=/var/lib/apt/lists \
+    --mount=type=cache,target=/var/cache/apt/archives \
+    --mount=type=cache,target=/var/cache/goboxd-dl \
+    --mount=type=cache,target=/var/cache/goboxd-toolchains \
+    if [ "$LANGS" = "all" ] || echo ",$LANGS," | grep -q ",odin,"; then /app/scripts/lang_install/odin.sh; fi
+
+# --- Layer: Pony ---
+RUN --mount=type=cache,target=/var/cache/goboxd-dl \
+    --mount=type=cache,target=/var/cache/goboxd-toolchains \
+    if [ "$LANGS" = "all" ] || echo ",$LANGS," | grep -q ",pony,"; then /app/scripts/lang_install/pony.sh; fi
+
+# --- Layer: Prolog ---
+RUN --mount=type=cache,target=/var/lib/apt/lists \
+    --mount=type=cache,target=/var/cache/apt/archives \
+    if [ "$LANGS" = "all" ] || echo ",$LANGS," | grep -q ",prolog,"; then /app/scripts/lang_install/prolog.sh; fi
+
+# --- Layer: PowerShell ---
+RUN --mount=type=cache,target=/var/lib/apt/lists \
+    --mount=type=cache,target=/var/cache/apt/archives \
+    --mount=type=cache,target=/var/cache/goboxd-dl \
+    --mount=type=cache,target=/var/cache/goboxd-toolchains \
+    if [ "$LANGS" = "all" ] || echo ",$LANGS," | grep -q ",pwsh,"; then /app/scripts/lang_install/pwsh.sh; fi
+
+# --- Layer: Raku ---
+RUN --mount=type=cache,target=/var/lib/apt/lists \
+    --mount=type=cache,target=/var/cache/apt/archives \
+    if [ "$LANGS" = "all" ] || echo ",$LANGS," | grep -q ",raku,"; then /app/scripts/lang_install/raku.sh; fi
+
+# --- Layer: GNU Smalltalk (source build) ---
+RUN --mount=type=cache,target=/var/lib/apt/lists \
+    --mount=type=cache,target=/var/cache/apt/archives \
+    --mount=type=cache,target=/var/cache/goboxd-dl \
+    if [ "$LANGS" = "all" ] || echo ",$LANGS," | grep -q ",smalltalk,"; then /app/scripts/lang_install/smalltalk.sh; fi
+
+# --- Layer: V ---
+RUN --mount=type=cache,target=/var/cache/goboxd-dl \
+    --mount=type=cache,target=/var/cache/goboxd-toolchains \
+    if [ "$LANGS" = "all" ] || echo ",$LANGS," | grep -q ",vlang,"; then /app/scripts/lang_install/vlang.sh; fi
+
+# --- Layer: Zig ---
+RUN --mount=type=cache,target=/var/cache/goboxd-dl \
+    --mount=type=cache,target=/var/cache/goboxd-toolchains \
+    if [ "$LANGS" = "all" ] || echo ",$LANGS," | grep -q ",zig,"; then /app/scripts/lang_install/zig.sh; fi
+
 # --- Layer 29: Container egress firewall ---
 # iptables for the entrypoint's OUTPUT firewall. Kept as its own layer so
 # the heavy language layers stay cached.

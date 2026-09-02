@@ -1,0 +1,10 @@
+{
+  "language": "pony",
+  "source": "actor Main\n  new create(env: Env) => env.input(recover InputNotifyExample(env) end, 1024)\n\nclass InputNotifyExample is InputNotify\n  let _env: Env\n  var _acc: String = \"\"\n  new create(env: Env) => _env = env\n  fun ref apply(data: Array[U8] iso) => _acc = _acc + String.from_iso_array(consume data)\n  fun ref dispose() =>\n    var n: U64 = 0\n    for c in _acc.values() do\n      if (c >= '0') and (c <= '9') then n = (n * 10) + (c - '0').u64() end\n    end\n    _env.out.print((n * 2).string())\n",
+  "tests": [
+    {
+      "stdin": "21\n",
+      "expected_stdout": "42\n"
+    }
+  ]
+}

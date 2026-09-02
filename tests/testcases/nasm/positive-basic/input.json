@@ -1,0 +1,10 @@
+{
+  "language": "nasm",
+  "source": "global _start\nsection .text\n_start:\n    mov rax, 1\n    mov rdi, 1\n    mov rsi, msg\n    mov rdx, len\n    syscall\n    mov rax, 60\n    xor rdi, rdi\n    syscall\nsection .data\nmsg db 'Hello from NASM!', 10\nlen equ $ - msg\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": "Hello from NASM!\n"
+    }
+  ]
+}

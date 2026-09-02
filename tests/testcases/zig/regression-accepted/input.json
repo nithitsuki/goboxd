@@ -1,0 +1,10 @@
+{
+  "language": "zig",
+  "source": "const std = @import(\"std\");\n\npub fn main() !void {\n    var buf: [32]u8 = undefined;\n    const line = try std.io.getStdIn().reader().readUntilDelimiterOrEof(&buf, '\\n');\n    if (line) |l| {\n        const n = try std.fmt.parseInt(i64, l, 10);\n        try std.io.getStdOut().writer().print(\"{d}\\n\", .{n * 2});\n    }\n}\n",
+  "tests": [
+    {
+      "stdin": "21\n",
+      "expected_stdout": "42\n"
+    }
+  ]
+}

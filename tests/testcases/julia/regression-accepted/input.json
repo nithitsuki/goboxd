@@ -1,0 +1,10 @@
+{
+  "language": "julia",
+  "source": "println(parse(Int, readline()) * 2)",
+  "tests": [
+    {
+      "stdin": "21\n",
+      "expected_stdout": "42\n"
+    }
+  ]
+}

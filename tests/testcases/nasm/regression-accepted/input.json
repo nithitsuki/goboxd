@@ -1,0 +1,10 @@
+{
+  "language": "nasm",
+  "source": "global _start\nsection .text\n_start:\n    ; read one digit + newline from stdin\n    mov rax, 0\n    mov rdi, 0\n    mov rsi, buf\n    mov rdx, 2\n    syscall\n    ; n = digit - '0'; v = n * 2 (two-digit safe: input 0-9)\n    movzx rax, byte [buf]\n    sub rax, '0'\n    add rax, rax\n    ; tens = v / 10, ones = v % 10\n    xor rdx, rdx\n    mov rbx, 10\n    div rbx\n    add rax, '0'\n    add rdx, '0'\n    mov [outbuf+0], al\n    mov [outbuf+1], dl\n    mov [outbuf+2], byte 10\n    mov rax, 1\n    mov rdi, 1\n    mov rsi, outbuf\n    mov rdx, 3\n    syscall\n    mov rax, 60\n    xor rdi, rdi\n    syscall\nsection .data\noutbuf db 0, 0, 10\nsection .bss\nbuf resb 2\n",
+  "tests": [
+    {
+      "stdin": "7\n",
+      "expected_stdout": "14\n"
+    }
+  ]
+}

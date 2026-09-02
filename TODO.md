@@ -25,9 +25,9 @@ The bundled package (the judge layer) wraps /run and owns everything that needs 
 
 12. [x] **Per-language seccomp profiles** — shipped 2026-08-20 (additive-merge). New optional per-language `seccomp:` YAML field lists extra deny syscalls (comma/space-separated). seccomp.CombinedWith merges extras into the global deny-list, ALWAYS carrying every global entry (never-weaker invariant, derived policy name/action). A profile is applied via --seccomp_string; languages without one keep --seccomp_policy byte-identical. Mechanism demonstrated by a denied-syscall test (chmod → SIGSYS); ptrace already globally denied so no production profile currently adds value. Verified: exact-set global-coverage test, runtime chmod denial, empty-case byte-identical, graded by dropping a global entry and removing the wiring. M3 follow-up tracked: a bad syscall name surfaces as nsjail failing to start; classifying it as internal_error is a one-line follow-up.
 13. [x] **Mask /proc and /etc/hosts** — shipped 2026-08-20. /proc is mounted per-jail (fresh pid ns, no host processes) via --disable_proc + manual mount; /proc/sys is masked with a tmpfs (no kernel config); /etc/hosts is masked to localhost-only (no container hostname). Residual: /proc/mounts leaks the host mount table (nsjail bind API cannot overlay the symlink target); /proc/self/environ shows the allowlisted jail env; proc is mounted rw (nsjail's `-m` forces rw; ro proc via --proc_path would shadow the /proc/sys mask). Bounded: jailed uid has no caps, mount/unshare are seccomp-denied, /proc/sys is masked; only cosmetic /proc/self writes (e.g. comm) are possible. Verified: TestJailProcAndHostsMasked (localhost-only hosts, /proc/sys empty count 0), graded by removing each mask. Decision: Option A (rw proc + masked /proc/sys). /proc must stay mounted: Go/Java/Python/Node read /proc/self/* and /proc/meminfo/cpuinfo at runtime (--disable_proc alone breaks them). Exploration (Option C): resolve the rw-vs-masked /proc/sys conflict by having server-side code mount proc read-only and overlay /proc/sys AFTER nsjail's own mount pass (needs custom mount wiring or an nsjail feature) — open question.
-14. [ ] **Leak/soak tests** — fd, goroutine, /tmp growth, and cgroup-leaf leaks over N×1000 runs, in CI. Executors die slowly. This is the test that catches it. The fixture corpus is the moat — extend it (add a fuzz target for POST /run parsing while you are at it).
+14. [x] **Leak/soak tests** — shipped 2026-09-02. TestSoakNoLeaks snapshots jail dirs (the /tmp-growth signal), cgroup leaves, the server's open fds (/proc/<pid>/fd), and its goroutines (env-gated pprof at /debug/pprof, mounted only when GOBOXD_PPROF=1) before/after N runs, and fails on any growth or leftover. N defaults to 200 fast iterations; GOBOXD_SOAK_ITERATIONS lifts it to 1000+ for deep leak runs. FuzzRunParsing feeds malformed and well-formed POST /run payloads (seeds extended with the P1 contract fields: max_parallel, max_output_bytes, ceilings, advisory builders) and fails on any panic or non-JSON response. Verified: TestSoakNoLeaks + FuzzRunParsing in the root+nsjail harness, TestPprofGated pins the 404-off/200-on pprof gate, lint clean. The fd/goroutine checks run against the local harness server (PID + pprof); a remote API_URL target skips those two.
 15. [x] **/readyz fixups + probe module (C4)** — shipped 2026-08-19. One probe module (internal/api/probes.go) with a TTL cache serves both /readyz and /info: a warm cache spawns zero subprocesses (kills the 5s watchdog's 30-exec-per-tick tax). Per-language entries keyed independently so a SIGHUP registry swap re-probes on the next request. nsjail version is discovered from the binary (no hardcoded "3.6"). Probe execs bounded by a 5s timeout (a hung runtime can't wedge the cache mutex process-wide). Verified: TestProbeCacheTTL, TestReadyzCacheWarm, TestInfoSharesReadyzCache, TestNsjailVersionDiscovered, TestReadyzWarmCacheNoSpawn, graded by disabling the cache and restoring the hardcoded version. Subsumes arch review C4.
-16. [ ] **Measurable SLOs + benchmark regression in CI** — publish per-language baselines (docs/benchmarks.md exists. Add go test -bench regression gates) with targets like "jail setup p50 < X ms", "N runs/min/core", "0 leaks over 24h soak". "Fast" needs numbers you can defend.
+16. [x] **Measurable SLOs + benchmark regression gates** — shipped 2026-09-02. The docs/benchmarks.md SLO table is now enforced code, not prose: the soak loop records per-request latencies and asserts p50 < 50 ms (the documented jail-setup SLO, Python trivial, single client), and BenchmarkRunThroughput (tests/integration/bench_test.go, `make bench`) reports the per-core runs/sec number. CI wiring itself stayed deferred: the sandbox CI job cannot fit the GitHub runner (ci commit ca4acda), so the gates run locally via `make integration` / `make integration-docker` / `make bench`. Verified: soak p50 assertion + fd/goroutine deltas in the harness, benchmark compiles and reports ns/op (runs/sec), lint clean.
 
 ## Architecture review — 2026-08-18 (from /tmp/architecture-review-20260818-2119.html)
 
@@ -47,17 +47,44 @@ Batch endpoints, callbacks, checkers, submission history, tokens — all of it l
 
 ## Language backlog
 
-Missing languages:
+All backlog languages shipped 2026-09-02: **clojure, cobol, coffeescript,
+crystal, dash, dotnet (Mono), elisp, groovy, julia, nasm, nim,
+octave, odin, pony, prolog, pwsh, raku, smalltalk, vlang, zig** — each
+with a pinned install script (`scripts/lang_install/`), a registry entry
+(`config/languages.yml`), fixture cases (`tests/testcases/{id}/`), a Docker
+layer, and docs. julia's half-install blocker is resolved by installing the
+official 1.11.2 tarball in the image; smalltalk is not in
+Debian bookworm (source build, documented in docs/languages.md).
+All install scripts were verified end-to-end in a Debian bookworm container
+(2026-09-02).
 
-- **Mainstream**: clojure, cobol, coffeescript, crystal, dash, dotnet, dragon, emacs (elisp), freebasic, groovy, julia, nasm, nim, octave, odin, ponylang, prolog, pure, pwsh, raku, smalltalk, vlang, zig
-- **julia**: the host has only a juliaup launcher with no installed channel (half-install).
+Deferred with blockers (project precedent: deno, juliaup):
+
+- **dragon**: the only live release (aaveshdev/dragon v1.0.7) has a broken
+  print implementation — `show`/`showln` emit nothing to stdout, stderr, or a
+  PTY (verified 2026-09-02). A language that cannot produce output cannot
+  pass fixtures. The old dragon-lang/dragon repo is gone. Re-add when the
+  toolchain's stdout works; the install script and pin layout were verified
+  (binary + libdragon_lib.so at the tarball root, `dragon --version` works).
+- **pure**: pure 0.68 supports only LLVM 2.5–3.5 (pre-MCJIT JIT; upstream
+  port issue open since 2015) and bookworm ships LLVM 13+ — the source build
+  fails at `llvm/ExecutionEngine/JIT.h` (verified in a bookworm container
+  2026-09-02; no bookworm LLVM can build it). Re-add if pure lands a
+  modern-LLVM port; the pinned source tarball is
+  agraef/pure-lang pure-0.68.
+- **freebasic**: the pinned fbc 1.10.1 runtime calls `ioperm` at program
+  startup, which the global seccomp deny-list kills with SIGSYS (verified in
+  a bookworm container 2026-09-02: exit 159 on build and run). The
+  per-language seccomp mechanism is additive-deny only, so ioperm cannot be
+  re-allowed without weakening the global policy. Re-add if a future fbc
+  drops the ioperm call or a per-language allow-list lands.
 
 Notes:
 
 - One pinned version per language, matching the current YAML registry design. Multi-version (semver, for example python 2.7.18 + 3.12.0) is out of scope for the executor roadmap.
 - Reuse the `scripts/lang_install/` pattern. Each language needs an install script, a YAML entry, and fixture tests (tests/testcases/{lang}/)
 - The deleted `need-to-port-payloads/` archive contained read-N-print-N*2 fixtures for 34 languages. Regenerate from piston's packages/ tests if needed.
-- Once every language above ships, replace the per-layer installs with a prebuilt golden languages image (Dockerfile.langs built on a schedule, pushed to GHCR with dated tags). Then goboxd builds with zero downloads (decision 2025-08-13).
+- With every language shipped, the remaining build-efficiency item is the prebuilt golden languages image (Dockerfile.langs built on a schedule, pushed to GHCR with dated tags). Then goboxd builds with zero downloads (decision 2025-08-13).
 
 ## Shipped — prior phases
 

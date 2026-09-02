@@ -8,6 +8,8 @@ package api
 
 import (
 	"net/http"
+	"net/http/pprof"
+	"os"
 	"time"
 )
 
@@ -33,12 +35,29 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("POST /run", HandleRun)
 	mux.HandleFunc("GET /testcases", HandleTestcasesList)
 	mux.HandleFunc("GET /testcases/{lang}/{name}", HandleTestcasesGet)
+	maybeMountPprof(mux)
 	if PlaygroundExists() {
 		mux.Handle("GET /playground", http.RedirectHandler("/playground/", http.StatusMovedPermanently))
 		mux.Handle("GET /playground/", http.StripPrefix("/playground", http.HandlerFunc(HandlePlayground)))
 	}
 
 	return RecoveryMiddleware(RequestIDMiddleware(LoggingMiddleware(RateLimitMiddleware(AuthMiddleware(mux)))))
+}
+
+// maybeMountPprof registers the standard net/http/pprof handlers when
+// GOBOXD_PPROF=1. Off by default: pprof exposes stack traces and heap dumps
+// that belong on a loopback-only test surface, never on the public API. The
+// leak/soak integration tests enable it on their harness server to count
+// server goroutines across runs.
+func maybeMountPprof(mux *http.ServeMux) {
+	if os.Getenv("GOBOXD_PPROF") != "1" {
+		return
+	}
+	mux.HandleFunc("GET /debug/pprof/", pprof.Index)
+	mux.HandleFunc("GET /debug/pprof/cmdline", pprof.Cmdline)
+	mux.HandleFunc("GET /debug/pprof/profile", pprof.Profile)
+	mux.HandleFunc("GET /debug/pprof/symbol", pprof.Symbol)
+	mux.HandleFunc("GET /debug/pprof/trace", pprof.Trace)
 }
 
 // NewServer builds the HTTP server with Slowloris mitigations: bounded header

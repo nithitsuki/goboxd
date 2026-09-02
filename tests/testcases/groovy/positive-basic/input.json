@@ -1,0 +1,10 @@
+{
+  "language": "groovy",
+  "source": "println \"Hello from Groovy!\"",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": "Hello from Groovy!\n"
+    }
+  ]
+}

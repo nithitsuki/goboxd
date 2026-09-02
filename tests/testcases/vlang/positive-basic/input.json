@@ -1,0 +1,10 @@
+{
+  "language": "vlang",
+  "source": "println(\"Hello from V!\")",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": "Hello from V!\n"
+    }
+  ]
+}

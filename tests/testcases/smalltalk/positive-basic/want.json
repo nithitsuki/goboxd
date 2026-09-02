@@ -1,0 +1,7 @@
+{
+  "status": "accepted",
+  "build": { "status": "ok" },
+  "tests": [
+    { "status": "accepted", "stdout": "Hello from GNU Smalltalk!\n" }
+  ]
+}

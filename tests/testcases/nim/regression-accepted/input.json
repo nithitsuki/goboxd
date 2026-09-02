@@ -1,0 +1,10 @@
+{
+  "language": "nim",
+  "source": "import strutils\nlet n = stdin.readLine().parseInt\necho n * 2",
+  "tests": [
+    {
+      "stdin": "21\n",
+      "expected_stdout": "42\n"
+    }
+  ]
+}

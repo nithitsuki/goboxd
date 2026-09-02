@@ -1,0 +1,10 @@
+{
+  "language": "cobol",
+  "source": "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. HELLO.\n       PROCEDURE DIVISION.\n           DISPLAY \"Hello from COBOL!\".\n           STOP RUN.\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": "Hello from COBOL!\n"
+    }
+  ]
+}

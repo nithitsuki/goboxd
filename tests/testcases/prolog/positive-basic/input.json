@@ -1,0 +1,10 @@
+{
+  "language": "prolog",
+  "source": "main :- write('Hello from Prolog!'), nl, halt.\n:- initialization(main).",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": "Hello from Prolog!\n"
+    }
+  ]
+}

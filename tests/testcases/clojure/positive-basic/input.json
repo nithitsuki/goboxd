@@ -1,0 +1,10 @@
+{
+  "language": "clojure",
+  "source": "(println \"Hello from Clojure!\")",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": "Hello from Clojure!\n"
+    }
+  ]
+}

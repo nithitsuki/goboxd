@@ -36,22 +36,32 @@ service degrades gracefully. It returns clean timeouts. No crashes occur.
 
 See `docs/loadtest/` for the full CSV, graphs, and analysis.
 
-## SLOs and regression gates (TODO #16)
+## SLOs and regression gates
 
 "Fast" needs numbers we can defend, so the following are treated as the
-performance contract. They are enforced, not just documented:
+performance contract. They are enforced by the integration suite, not just
+documented:
 
 | Target | Baseline | Gate |
 |---|---|---|
-| Jail setup p50 | < 50 ms (Python trivial, single client) | asserted by the soak loop's per-request latency ceiling |
-| Sustained throughput | ~11–12k RPS (Python trivial, 50 clients) | load job trend, not a hard CI fail |
-| Soak stability | 0 leaked jail dirs / cgroup leaves over 200 runs | `TestSoakNoLeaks` (CI `sandbox` job) |
-| Parser robustness | every payload returns a valid JSON envelope, never a crash | `FuzzRunParsing` (CI `sandbox` job) |
+| Jail setup p50 | < 50 ms (Python trivial, single client) | soak loop per-request latency p50 (`TestSoakNoLeaks`) |
+| Sustained throughput | ~11–12k RPS (Python trivial, 50 clients) | load job trend (`make load-save`), not a hard fail |
+| Soak stability | 0 leaked jail dirs / cgroup leaves / fds / goroutines over N runs | `TestSoakNoLeaks` |
+| Parser robustness | every payload returns a valid JSON envelope, never a crash | `FuzzRunParsing` |
+| Per-core run rate | runs/sec, Python trivial | `BenchmarkRunThroughput` (`make bench`) |
 | Graceful overload | clean 503 + `queue_full` at the cap, no crashes | `TestShutdown*` + admission tests |
 
-The soak and fuzz gates run on every push in the `sandbox` CI job against a
-freshly built nsjail and the full language set. A regression that leaks jail
-directories, dangles cgroup leaves, or panics the parser fails the build.
+The soak, fuzz, and benchmark gates run against a real nsjail server via
+`make integration` (harness-spawned) or `make integration-docker` (against a
+running container). The soak defaults to 200 runs and accepts
+`GOBOXD_SOAK_ITERATIONS` (for example `GOBOXD_SOAK_ITERATIONS=1000`) for
+deeper leak runs; its per-request latency p50 is asserted against the
+jail-setup SLO above, and it fails on any leaked jail dir, dangling cgroup
+leaf, or fd/goroutine growth in the server process. `FuzzRunParsing` feeds
+malformed and well-formed `POST /run` payloads and fails on any panic or
+non-JSON response. `BenchmarkRunThroughput` reports the per-core Python
+trivial run rate (`go test -bench=BenchmarkRunThroughput -benchtime=5s
+./tests/integration/`).
 
 To extend the load baseline: `make load` (hey) and `make load-save`
 (vegeta, CSV + graphs under `docs/loadtest/`). The Python trivial baseline

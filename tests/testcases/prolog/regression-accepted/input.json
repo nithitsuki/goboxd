@@ -1,0 +1,10 @@
+{
+  "language": "prolog",
+  "source": "main :- read_line_to_string(user_input, S), atom_number(S, N), M is N*2, writeln(M), halt.\n:- initialization(main).",
+  "tests": [
+    {
+      "stdin": "21\n",
+      "expected_stdout": "42\n"
+    }
+  ]
+}

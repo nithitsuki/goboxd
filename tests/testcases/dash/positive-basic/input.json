@@ -1,0 +1,10 @@
+{
+  "language": "dash",
+  "source": "echo \"Hello from Dash!\"",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": "Hello from Dash!\n"
+    }
+  ]
+}

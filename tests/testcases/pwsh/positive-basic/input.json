@@ -1,0 +1,10 @@
+{
+  "language": "pwsh",
+  "source": "Write-Output \"Hello from PowerShell!\"",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": "Hello from PowerShell!\n"
+    }
+  ]
+}

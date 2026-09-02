@@ -1,0 +1,10 @@
+{
+  "language": "odin",
+  "source": "package main\n\nimport \"core:fmt\"\n\nmain :: proc() {\n    fmt.println(\"Hello from Odin!\")\n}\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": "Hello from Odin!\n"
+    }
+  ]
+}

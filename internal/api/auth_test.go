@@ -22,9 +22,9 @@ func TestAuthMiddleware(t *testing.T) {
 		t.Setenv("GOBOXD_ALLOWED_ORIGINS", "")
 
 		for name, hdr := range map[string]string{
-			"no_header":    "",
-			"wrong_token":  "Bearer wrong",
-			"malformed":    "sekrit",
+			"no_header":   "",
+			"wrong_token": "Bearer wrong",
+			"malformed":   "sekrit",
 		} {
 			t.Run(name, func(t *testing.T) {
 				req := post()

@@ -1,0 +1,10 @@
+{
+  "language": "clojure",
+  "source": "(println (* 2 (Long/parseLong (read-line))))",
+  "tests": [
+    {
+      "stdin": "21\n",
+      "expected_stdout": "42\n"
+    }
+  ]
+}

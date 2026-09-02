@@ -1,0 +1,10 @@
+{
+  "language": "octave",
+  "source": "disp(\"Hello from Octave!\")",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": "Hello from Octave!\n"
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "language": "crystal",
+  "source": "puts \"Hello from Crystal!\"",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": "Hello from Crystal!\n"
+    }
+  ]
+}

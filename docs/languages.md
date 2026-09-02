@@ -39,6 +39,26 @@ image, you also add an install script in `scripts/lang_install/`.
 | erl | Erlang | compiled | `/usr/bin/erlc` | `erl -noshell -pa /app -s solution start -s init stop` |
 | lisp | Lisp (SBCL) | interpreted | — | `/usr/bin/sbcl --script {{source}}` |
 | pascal | Pascal (Free Pascal) | compiled | `/usr/bin/fpc` | `./{{artifact}}` |
+| clojure | Clojure | interpreted | — | `/usr/local/clojure/bin/clojure -M {{source}}` |
+| cobol | COBOL (GnuCOBOL) | compiled | `/usr/bin/cobc` | `./{{artifact}}` |
+| coffeescript | CoffeeScript | compiled | `/usr/local/bin/coffee -c` | `/usr/bin/node` |
+| crystal | Crystal | compiled | `/usr/local/crystal/bin/crystal build` | `./{{artifact}}` |
+| dash | Dash | interpreted | — | `/bin/dash {{source}}` |
+| dotnet | .NET (Mono) | compiled | `/usr/bin/mcs` | `/usr/bin/mono {{artifact}}` |
+| elisp | Emacs Lisp | interpreted | — | `/usr/bin/emacs -Q --batch --script {{source}}` |
+| groovy | Groovy | interpreted | — | `/usr/local/groovy/bin/groovy {{source}}` |
+| julia | Julia | interpreted | — | `/usr/local/julia/bin/julia {{source}}` |
+| nasm | NASM (x86-64) | compiled | `nasm-build` wrapper (nasm + gcc) | `./{{artifact}}` |
+| nim | Nim | compiled | `/usr/bin/nim c` | `./{{artifact}}` |
+| octave | Octave | interpreted | — | `/usr/bin/octave --no-gui {{source}}` |
+| odin | Odin | compiled | `/usr/local/odin/odin build` | `./{{artifact}}` |
+| pony | Pony | compiled | `pony-build` wrapper (ponyc) | `./{{artifact}}` |
+| prolog | Prolog (SWI) | interpreted | — | `/usr/bin/swipl -q -f {{source}} -t halt` |
+| pwsh | PowerShell | interpreted | — | `/usr/local/powershell/pwsh -File {{source}}` |
+| raku | Raku | interpreted | — | `/usr/bin/raku {{source}}` |
+| smalltalk | Smalltalk (GNU) | interpreted | — | `/usr/local/bin/gst -q {{source}}` |
+| vlang | V | compiled | `/usr/local/v/v {{source}} -o` | `./{{artifact}}` |
+| zig | Zig | compiled | `/usr/local/zig/zig build-exe` | `./{{artifact}}` |
 
 ## Version notes
 
@@ -53,6 +73,16 @@ environments:
   Kotlin 2.1.10, Dart 3.2.6, TypeScript 5.7.3, and Racket 8.15 (Chez).
   Python 2.7.18 is copied from the `python:2.7-slim` image because Debian
   bookworm does not ship Python 2.
+- Backlog additions (2026-09-02, pinned): Clojure CLI 1.12.0.1530,
+  GnuCOBOL 3.1.2-5+b1 (metapackage gnucobol=5), CoffeeScript 2.7.0 (npm 9),
+  Crystal 1.13.2-1 (bundled LLVM tarball), dash 0.5.12-2, Mono 6.8.0
+  (mcs) as the `dotnet` language, Emacs 28.2 (emacs-nox),
+  juliaup half-install blocker), NASM 2.16.01-1, Nim 1.6.10-2, Octave 7.3.0-2,
+  Odin dev-2026-09 (+ clang-14), Pony 0.58.6 (ubuntu22.04 tarball), SWI-Prolog
+  9.0.4+dfsg-2, PowerShell 7.6.5 (8GB run limit: CoreCLR needs >4GB VA under
+  the tight RLIMIT_AS guard, mirrors the elixir virtual-cap decision), Raku 2022.12 (rakudo),
+  GNU Smalltalk 3.2.5 (source build; dropped from bookworm), V 0.4.9,
+  Zig 0.14.1.
 
 ## Adding a new language
 

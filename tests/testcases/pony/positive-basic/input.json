@@ -1,0 +1,10 @@
+{
+  "language": "pony",
+  "source": "actor Main\n  new create(env: Env) =>\n    env.out.print(\"Hello from Pony!\")\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": "Hello from Pony!\n"
+    }
+  ]
+}

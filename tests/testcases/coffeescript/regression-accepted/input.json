@@ -1,0 +1,10 @@
+{
+  "language": "coffeescript",
+  "source": "input = ''\nprocess.stdin.on 'data', (d) -> input += d\nprocess.stdin.on 'end', -> console.log parseInt(input) * 2",
+  "tests": [
+    {
+      "stdin": "21\n",
+      "expected_stdout": "42\n"
+    }
+  ]
+}

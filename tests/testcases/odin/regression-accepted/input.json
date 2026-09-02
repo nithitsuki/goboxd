@@ -1,0 +1,10 @@
+{
+  "language": "odin",
+  "source": "package main\n\nimport \"core:fmt\"\nimport \"core:os\"\nimport \"core:strings\"\n\nmain :: proc() {\n    buf: [256]byte\n    n, err := os.read(os.stdin, buf[:])\n    if err != os.ERROR_NONE { return }\n    s := strings.trim_space(string(buf[:n]))\n    n2 := 0\n    for c in s { n2 = n2 * 10 + int(c - '0') }\n    fmt.println(n2 * 2)\n}",
+  "tests": [
+    {
+      "stdin": "21\n",
+      "expected_stdout": "42\n"
+    }
+  ]
+}

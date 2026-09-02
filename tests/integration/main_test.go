@@ -14,6 +14,11 @@ import (
 
 var apiURL string
 
+// serverPID is the harness-spawned server's process id (0 when the tests
+// target a remote server via API_URL). The soak test uses it to count the
+// server's open fds across runs; remote targets skip that check.
+var serverPID int
+
 // flagLang and flagCase narrow TestFixtures to one language and/or one case:
 //
 //	go test ./tests/integration/ -lang go -case positive-basic
@@ -65,13 +70,17 @@ func runWithServer(m *testing.M) int {
 	// root, so the server must start there (the test binary's cwd is the
 	// package dir).
 	cmd.Dir = repoRoot
-	cmd.Env = append(os.Environ(), "PORT="+testPort)
+	// GOBOXD_PPROF=1 mounts /debug/pprof on the harness server so the soak
+	// test can count server goroutines. The production compose never sets it;
+	// the endpoint stays off on the public API (see api.maybeMountPprof).
+	cmd.Env = append(os.Environ(), "PORT="+testPort, "GOBOXD_PPROF=1")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
 	if err := cmd.Start(); err != nil {
 		log.Fatalf("starting goboxd: %v", err)
 	}
+	serverPID = cmd.Process.Pid
 	defer func() {
 		if err := cmd.Process.Kill(); err != nil {
 			log.Printf("killing server process: %v", err)

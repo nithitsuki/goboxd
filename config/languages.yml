@@ -401,6 +401,8 @@ languages:
     name: C#
     source_filename: solution.cs
     artifact: solution.dll
+    smoke_cmd: /usr/local/dotnet/dotnet
+    smoke_args: ["--version"]
     build:
       cmd: /usr/local/bin/csharp-build
       args: ["{{source}}"]
@@ -412,8 +414,6 @@ languages:
       # P1-10: measured-safe maximum for build wall time (2x the default).
       ceiling:
         wall_time_s: 40
-      smoke_cmd: /usr/local/dotnet/dotnet
-      smoke_args: ["--version"]
     run:
       cmd: /usr/local/dotnet/dotnet
       args: ["{{artifact}}"]
@@ -516,6 +516,344 @@ languages:
         wall_time_s: 10
         cpu_time_s: 80
         memory_kb: 1048576
+        max_processes: 100
+    run:
+      cmd: ./{{artifact}}
+      limits:
+        wall_time_s: 9
+        cpu_time_s: 36
+        memory_kb: 524288
+        max_processes: 64
+
+  # --- Language backlog (2026-09-02) ---
+
+  - id: clojure
+    name: Clojure
+    source_filename: solution.clj
+    run:
+      cmd: /usr/local/clojure/bin/clojure
+      args: ["-M", "{{source}}"]
+      limits:
+        wall_time_s: 9
+        cpu_time_s: 36
+        memory_kb: 4194304
+        max_processes: 100
+
+  - id: cobol
+    name: COBOL (GnuCOBOL)
+    source_filename: solution.cob
+    artifact: solution
+    build:
+      cmd: /usr/bin/cobc
+      args: ["-x", "-o", "{{artifact}}", "{{source}}"]
+      limits:
+        wall_time_s: 10
+        cpu_time_s: 80
+        memory_kb: 1048576
+        max_processes: 100
+    run:
+      cmd: ./{{artifact}}
+      limits:
+        wall_time_s: 5
+        cpu_time_s: 20
+        memory_kb: 524288
+        max_processes: 64
+
+  - id: coffeescript
+    name: CoffeeScript
+    source_filename: solution.coffee
+    artifact: solution.js
+    build:
+      cmd: /usr/local/bin/coffee
+      args: ["-c", "{{source}}"]
+      limits:
+        wall_time_s: 10
+        cpu_time_s: 80
+        memory_kb: 1048576
+        max_processes: 100
+    run:
+      cmd: /usr/bin/node
+      args: ["{{artifact}}"]
+      limits:
+        wall_time_s: 9
+        cpu_time_s: 11
+        memory_kb: 524288
+        max_processes: 64
+
+  - id: crystal
+    name: Crystal
+    source_filename: solution.cr
+    artifact: solution
+    build:
+      cmd: /usr/local/crystal/bin/crystal
+      args: ["build", "{{source}}", "-o", "{{artifact}}"]
+      limits:
+        wall_time_s: 30
+        cpu_time_s: 240
+        memory_kb: 4194304
+        max_processes: 100
+    run:
+      cmd: ./{{artifact}}
+      limits:
+        wall_time_s: 9
+        cpu_time_s: 36
+        memory_kb: 524288
+        max_processes: 64
+
+  - id: dash
+    name: Dash
+    source_filename: solution.sh
+    run:
+      cmd: /bin/dash
+      args: ["{{source}}"]
+      limits:
+        wall_time_s: 9
+        cpu_time_s: 11
+        memory_kb: 102400
+        max_processes: 100
+
+  - id: dotnet
+    name: .NET (Mono)
+    source_filename: solution.cs
+    artifact: solution.exe
+    build:
+      cmd: /usr/bin/mcs
+      args: ["-out:{{artifact}}", "{{source}}"]
+      limits:
+        wall_time_s: 20
+        cpu_time_s: 160
+        memory_kb: 2097152
+        max_processes: 100
+    run:
+      cmd: /usr/bin/mono
+      args: ["{{artifact}}"]
+      limits:
+        wall_time_s: 9
+        cpu_time_s: 36
+        memory_kb: 2097152
+        max_processes: 64
+
+  - id: elisp
+    name: Emacs Lisp
+    source_filename: solution.el
+    run:
+      cmd: /usr/bin/emacs
+      args: ["-Q", "--batch", "--script", "{{source}}"]
+      limits:
+        wall_time_s: 9
+        cpu_time_s: 36
+        memory_kb: 262144
+        max_processes: 100
+
+  - id: groovy
+    name: Groovy
+    source_filename: solution.groovy
+    run:
+      cmd: /usr/local/groovy/bin/groovy
+      args: ["{{source}}"]
+      limits:
+        wall_time_s: 9
+        cpu_time_s: 36
+        memory_kb: 4194304
+        max_processes: 100
+
+  - id: julia
+    name: Julia
+    source_filename: solution.jl
+    run:
+      cmd: /usr/local/julia/bin/julia
+      args: ["{{source}}"]
+      limits:
+        wall_time_s: 9
+        cpu_time_s: 36
+        memory_kb: 4194304
+        max_processes: 100
+
+  - id: nasm
+    name: NASM (x86-64)
+    source_filename: solution.asm
+    artifact: solution
+    smoke_cmd: /usr/bin/nasm
+    smoke_args: ["-v"]
+    build:
+      cmd: /usr/local/bin/nasm-build
+      args: ["{{source}}"]
+      limits:
+        wall_time_s: 10
+        cpu_time_s: 80
+        memory_kb: 1048576
+        max_processes: 100
+    run:
+      cmd: ./{{artifact}}
+      limits:
+        wall_time_s: 5
+        cpu_time_s: 20
+        memory_kb: 524288
+        max_processes: 64
+
+  - id: nim
+    name: Nim
+    source_filename: solution.nim
+    artifact: solution
+    build:
+      cmd: /usr/bin/nim
+      args: ["c", "--hints:off", "-o:{{artifact}}", "{{source}}"]
+      limits:
+        wall_time_s: 15
+        cpu_time_s: 120
+        memory_kb: 2097152
+        max_processes: 100
+    run:
+      cmd: ./{{artifact}}
+      limits:
+        wall_time_s: 5
+        cpu_time_s: 20
+        memory_kb: 524288
+        max_processes: 64
+
+  - id: octave
+    name: Octave
+    source_filename: solution.m
+    run:
+      cmd: /usr/bin/octave
+      args: ["--no-gui", "--no-window-system", "{{source}}"]
+      limits:
+        wall_time_s: 9
+        cpu_time_s: 11
+        memory_kb: 1048576
+        max_processes: 100
+
+  - id: odin
+    name: Odin
+    source_filename: solution.odin
+    artifact: solution
+    # odin --version prints usage and exits 1; the version subcommand works.
+    smoke_cmd: /usr/local/odin/odin
+    smoke_args: ["version"]
+    build:
+      cmd: /usr/local/odin/odin
+      # -file: treat the single source file as a self-contained package
+      # (odin build normally takes a package directory).
+      args: ["build", "{{source}}", "-file", "-out:{{artifact}}", "-o:speed"]
+      limits:
+        wall_time_s: 30
+        cpu_time_s: 240
+        memory_kb: 4194304
+        max_processes: 100
+    run:
+      cmd: ./{{artifact}}
+      limits:
+        wall_time_s: 9
+        cpu_time_s: 36
+        memory_kb: 524288
+        max_processes: 64
+
+  - id: pony
+    name: Pony
+    source_filename: solution.pony
+    artifact: solution
+    smoke_cmd: /usr/local/pony/bin/ponyc
+    smoke_args: ["--version"]
+    build:
+      cmd: /usr/local/bin/pony-build
+      args: ["{{source}}"]
+      limits:
+        wall_time_s: 30
+        cpu_time_s: 240
+        memory_kb: 4194304
+        max_processes: 100
+    run:
+      cmd: ./{{artifact}}
+      limits:
+        wall_time_s: 9
+        cpu_time_s: 36
+        memory_kb: 524288
+        max_processes: 64
+
+  - id: prolog
+    name: Prolog (SWI)
+    source_filename: solution.pl
+    run:
+      cmd: /usr/bin/swipl
+      args: ["-q", "-f", "{{source}}", "-t", "halt"]
+      limits:
+        wall_time_s: 9
+        cpu_time_s: 11
+        memory_kb: 524288
+        max_processes: 100
+
+  - id: pwsh
+    name: PowerShell
+    source_filename: solution.ps1
+    run:
+      cmd: /usr/local/powershell/pwsh
+      args: ["-NoProfile", "-NonInteractive", "-File", "{{source}}"]
+      limits:
+        wall_time_s: 9
+        cpu_time_s: 36
+        # CoreCLR reserves a large VA range at startup (measured: >4GB needed
+        # under the tight RLIMIT_AS guard; 6GB and 8GB verified on 7.6.5).
+        # The 8GB virtual cap mirrors the elixir decision: RSS stays small,
+        # the cap doubles as the cgroup resident cap where cgroup v2 is
+        # active.
+        memory_kb: 8388608
+        max_processes: 100
+
+  - id: raku
+    name: Raku
+    source_filename: solution.p6
+    run:
+      cmd: /usr/bin/raku
+      args: ["{{source}}"]
+      limits:
+        wall_time_s: 9
+        cpu_time_s: 36
+        memory_kb: 1048576
+        max_processes: 100
+
+  - id: smalltalk
+    name: Smalltalk (GNU)
+    source_filename: solution.st
+    run:
+      cmd: /usr/local/bin/gst
+      args: ["-q", "{{source}}"]
+      limits:
+        wall_time_s: 9
+        cpu_time_s: 11
+        memory_kb: 262144
+        max_processes: 100
+
+  - id: vlang
+    name: V
+    source_filename: solution.v
+    artifact: solution
+    build:
+      cmd: /usr/local/v/v
+      args: ["{{source}}", "-o", "{{artifact}}"]
+      limits:
+        wall_time_s: 30
+        cpu_time_s: 240
+        memory_kb: 2097152
+        max_processes: 100
+    run:
+      cmd: ./{{artifact}}
+      limits:
+        wall_time_s: 9
+        cpu_time_s: 36
+        memory_kb: 524288
+        max_processes: 64
+
+  - id: zig
+    name: Zig
+    source_filename: solution.zig
+    artifact: solution
+    build:
+      cmd: /usr/local/zig/zig
+      args: ["build-exe", "{{source}}", "-O", "ReleaseSafe", "-femit-bin={{artifact}}"]
+      limits:
+        wall_time_s: 30
+        cpu_time_s: 240
+        memory_kb: 2097152
         max_processes: 100
     run:
       cmd: ./{{artifact}}
