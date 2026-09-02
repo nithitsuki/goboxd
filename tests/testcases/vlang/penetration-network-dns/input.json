@@ -1,0 +1,17 @@
+{
+  "language": "vlang",
+  "source": "import net\nfn main() { ips := net.resolve_addrs('example.com', .ip, .tcp) or { return }; println(ips) }\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 4,
+      "memory_kb": 524288,
+      "max_processes": 64
+    }
+  }
+}

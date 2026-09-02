@@ -1,0 +1,17 @@
+{
+  "language": "pwsh",
+  "source": "[System.IO.File]::WriteAllText('/etc/hosts','x')\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 8,
+      "memory_kb": 8388608,
+      "max_processes": 64
+    }
+  }
+}

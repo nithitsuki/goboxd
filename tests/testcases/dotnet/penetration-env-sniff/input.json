@@ -1,0 +1,17 @@
+{
+  "language": "dotnet",
+  "source": "using System;class P{static void Main(){foreach(System.Collections.DictionaryEntry e in Environment.GetEnvironmentVariables())Console.WriteLine(e.Key);}}\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 8,
+      "memory_kb": 1048576,
+      "max_processes": 64
+    }
+  }
+}

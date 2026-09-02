@@ -1,0 +1,17 @@
+{
+  "language": "pony",
+  "source": "use \"files\"\nactor Main\n  new create(env: Env) =>\n    try\n      let path = FilePath(FileAuth(env.root), \"/etc/passwd\")\n      let f = File(path)\n      if f.errno() is FileOK then env.out.print(f.read_string(1 << 20)) end\n    end\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 4,
+      "memory_kb": 2097152,
+      "max_processes": 64
+    }
+  }
+}

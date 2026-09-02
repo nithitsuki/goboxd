@@ -29,7 +29,7 @@ measures throughput and breaking points.
 - **Environment controls** — `GOBOXD_UID_MIN` (first jail uid),
   `GOBOXD_CGROUPV2` (auto/on/off), `GOBOXD_EXCLUDE_LANGS` (registry filter,
   empty = all languages). See docs/security.md.
-- **Penetration test suite** — 145 test cases across 22 languages. They probe
+- **Penetration test suite** — 510 test cases across all 50 languages. They probe
   file reads, shell injection, network isolation, write protection, symlink
   escapes, eval injection, and more.
 - **Regression payload suite** — 74 test cases covering accepted, build_failed,
@@ -256,22 +256,25 @@ instructions for adding new languages.
 
 ## Penetration testing
 
-goboxd ships an automated penetration suite organized by attack vector. The
-test cases live in `tests/testcases/*/penetration-*/` and run against a real
-nsjail server via `make integration-docker` (which targets a running Docker
-container and runs the full corpus with penetration enabled — the same path
-the service uses in production). The table shows the attack vectors and the
-languages they cover:
+goboxd ships an automated penetration suite organized by attack vector, run
+against a real nsjail server via `make integration-docker`. The corpus is
+catalog-driven (`tests/pentest-catalog.md` + `scripts/gen-pentests.py`) with
+**per-language idiomatic payloads** (raw syscalls for nasm, `CALL "SYSTEM"`
+for cobol, `PipeStream` for smalltalk, sudoers for none, etc.), per-language
+run limits so VM/CLR runtimes can boot and *attempt* the attack, and a
+harvest step that fails the gate on **any** non-empty stdout (a leak is an
+exploit). The table shows the attack vectors and the languages they cover:
 
 | Vector | Languages | What it probes |
 |---|---|---|
-| File reads | bash, c, cpp, csharp, dart, elixir, erl, go, java, js, kotlin, lisp, php, py2, py3, racket, ruby, rust, scala, swift, ts | Access to `/etc/passwd`, `/etc/shadow`, `/proc/1/environ` |
-| Shell injection | c, cpp, csharp, dart, elixir, erl, go, java, js, kotlin, lisp, php, py2, py3, racket, ruby, rust, scala, swift, ts | `system()`, `exec()`, `popen()`, `subprocess` |
-| Network isolation | bash, c, cpp, csharp, dart, elixir, erl, go, java, js, kotlin, lisp, php, py2, py3, racket, ruby, rust, scala, swift, ts | Outbound TCP connections (blocked by CLONE_NEWNET) |
-| Write protection | bash, c, cpp, csharp, dart, elixir, erl, go, java, js, kotlin, lisp, php, py2, py3, racket, ruby, rust, scala, swift, ts | Attempts to write to `/etc/hosts` (read-only mounts) |
-| Eval injection | elixir, js, php, py2, py3, racket, ruby, ts | `eval()` and `exec()` of arbitrary code |
-| Symlink escapes | php, py2, py3, ruby | Symlink attacks across mount boundaries |
-| Reverse shells | bash | `/dev/tcp` reverse shell attempts |
+| File reads | all 50 languages | Access to `/etc/passwd`, `/etc/shadow`, `/root/.ssh/*`, `/proc/1/environ`, `/proc/cpuinfo`, `/proc/self/maps` |
+| Shell injection | 49 (all expressible; pony has no process spawn) | `system()`, `exec()`, `popen()`, `subprocess`, `$system`, `CALL "SYSTEM"`, `PipeStream`, raw `execve` syscalls |
+| Network isolation | 31 | Outbound TCP connects + DNS lookups (blocked by CLONE_NEWNET + masked resolv.conf) |
+| Write protection | all 50 | Attempts to write `/etc/hosts`, `/etc/passwd`, `/proc/sys/*`, symlink escapes |
+| Eval injection | bash, clojure, coffeescript, dash, elisp, elixir, groovy, js, julia, lisp, lua, octave, perl, php, pwsh, py2, py3, r, raku, ruby, ts | `eval()`/`exec()`/`loadstring`/`EVAL`/`iex` of arbitrary code |
+| Symlink escapes | clojure, crystal, nim, php, py2, py3 | Symlink attacks across mount boundaries |
+| Reverse shells | bash, py2, py3 | `/dev/tcp`, `socket` reverse shell attempts |
+| Resource exhaustion | per language (fork-bomb, infinite-loop, oom, fd-exhaust, deep-recursion) | Bounded by jail limits — verified the server never feels them |
 
 Run with `SKIP_PENETRATION=1 make integration-docker` to exclude penetration
 tests during normal development.
@@ -374,5 +377,6 @@ tests/testcases/
 └── ...
 ```
 
-Currently **493 test cases** across 50 languages (fixture files plus the
-legacy `erlang/` skeleton directory; the registry itself advertises 50).
+Currently **736 test cases** across 50 languages — 510 of them penetration
+fixtures probing every sandbox boundary (plus the legacy fixture directories;
+the registry itself advertises 50).

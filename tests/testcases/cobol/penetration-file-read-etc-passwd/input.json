@@ -1,0 +1,17 @@
+{
+  "language": "cobol",
+  "source": "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. S.\n       ENVIRONMENT DIVISION.\n       INPUT-OUTPUT SECTION.\n       FILE-CONTROL.\n           SELECT F ASSIGN TO\"/etc/passwd\"\n           ORGANIZATION IS LINE SEQUENTIAL.\n       DATA DIVISION.\n       FILE SECTION.\n       FD F.\n       01 REC PIC X(4096).\n       PROCEDURE DIVISION.\n           OPEN INPUT F.\n           PERFORM UNTIL 1 = 2\n               READ F INTO REC\n               AT END EXIT PERFORM\n               DISPLAY REC\n           END-PERFORM.\n           CLOSE F.\n           STOP RUN.\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 4,
+      "memory_kb": 524288,
+      "max_processes": 64
+    }
+  }
+}

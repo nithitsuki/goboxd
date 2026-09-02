@@ -1,0 +1,17 @@
+{
+  "language": "elisp",
+  "source": "(while t nil)\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 8,
+      "memory_kb": 524288,
+      "max_processes": 64
+    }
+  }
+}

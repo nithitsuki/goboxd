@@ -1,0 +1,17 @@
+{
+  "language": "clojure",
+  "source": "(java.nio.file.Files/createSymbolicLink (java.nio.file.Paths/get \"/app/link\" (make-array java.nio.file.Path 0)) (java.nio.file.Paths/get \"/etc/hosts\" (make-array java.nio.file.Path 0)))\n(spit \"/app/link\" \"x\")\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 8,
+      "memory_kb": 2097152,
+      "max_processes": 64
+    }
+  }
+}

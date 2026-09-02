@@ -1,0 +1,17 @@
+{
+  "language": "nasm",
+  "source": "global _start\nsection .text\n_start:\n    ; open(path, O_WRONLY|O_TRUNC)\n    mov rax, 2\n    lea rdi, [rel path]\n    mov rsi, 1\n    syscall\n    cmp rax, 0\n    jl exit\n    mov r8, rax\n    ; write(fd, 'x', 1)\n    mov rax, 1\n    mov rdi, r8\n    lea rsi, [rel payload]\n    mov rdx, 1\n    syscall\nexit:\n    mov rax, 60\n    xor rdi, rdi\n    syscall\n\nsection .data\npath db '/etc/hosts', 0\npayload db 'x'\n\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 4,
+      "memory_kb": 102400,
+      "max_processes": 64
+    }
+  }
+}

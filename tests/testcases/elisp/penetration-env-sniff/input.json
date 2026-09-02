@@ -1,0 +1,17 @@
+{
+  "language": "elisp",
+  "source": "(mapc (lambda (e) (princ e) (terpri)) process-environment)\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 8,
+      "memory_kb": 524288,
+      "max_processes": 64
+    }
+  }
+}

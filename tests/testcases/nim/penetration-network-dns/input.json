@@ -1,0 +1,17 @@
+{
+  "language": "nim",
+  "source": "import std/net\nlet s = newSocket()\ntry:\n    s.connect(\"example.com\", Port(80))\nexcept:\n    discard\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 4,
+      "memory_kb": 524288,
+      "max_processes": 64
+    }
+  }
+}

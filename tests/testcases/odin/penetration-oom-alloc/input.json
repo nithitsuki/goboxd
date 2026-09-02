@@ -1,0 +1,17 @@
+{
+  "language": "odin",
+  "source": "package main\nimport \"core:fmt\"\nimport \"core:slice\"\nmain :: proc() { \n    data: [dynamic][1 << 20]byte\n    defer delete(data)\n    for { append(&data, [1 << 20]byte{}) }\n}\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 4,
+      "memory_kb": 524288,
+      "max_processes": 64
+    }
+  }
+}

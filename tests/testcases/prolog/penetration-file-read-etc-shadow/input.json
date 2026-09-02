@@ -1,0 +1,17 @@
+{
+  "language": "prolog",
+  "source": "main :- catch((open('/etc/shadow', read, S), read_string(S, _, T), write(T), close(S)), _, true).\n:- initialization(main).\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 4,
+      "memory_kb": 524288,
+      "max_processes": 64
+    }
+  }
+}

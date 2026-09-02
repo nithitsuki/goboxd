@@ -1,0 +1,12 @@
+{
+  "status": "time_exceeded",
+  "build": {
+    "status": "ok"
+  },
+  "tests": [
+    {
+      "status": "time_exceeded",
+      "stdout": ""
+    }
+  ]
+}

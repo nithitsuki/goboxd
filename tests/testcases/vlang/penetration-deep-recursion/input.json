@@ -1,0 +1,17 @@
+{
+  "language": "vlang",
+  "source": "fn f(n int) int { return f(n + 1) }\nfn main() { f(0) }\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 4,
+      "memory_kb": 524288,
+      "max_processes": 64
+    }
+  }
+}

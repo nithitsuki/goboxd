@@ -1,0 +1,17 @@
+{
+  "language": "smalltalk",
+  "source": "o := OrderedCollection new.\n[ true ] whileTrue: [ o add: (String new: 1000000) ]\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 4,
+      "memory_kb": 262144,
+      "max_processes": 64
+    }
+  }
+}

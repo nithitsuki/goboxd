@@ -1,0 +1,17 @@
+{
+  "language": "zig",
+  "source": "const std = @import(\"std\");\npub fn main() !void { while (true) {} }\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 4,
+      "memory_kb": 524288,
+      "max_processes": 64
+    }
+  }
+}

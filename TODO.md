@@ -86,6 +86,35 @@ Notes:
 - The deleted `need-to-port-payloads/` archive contained read-N-print-N*2 fixtures for 34 languages. Regenerate from piston's packages/ tests if needed.
 - With every language shipped, the remaining build-efficiency item is the prebuilt golden languages image (Dockerfile.langs built on a schedule, pushed to GHCR with dated tags). Then goboxd builds with zero downloads (decision 2025-08-13).
 
+## Penetration corpus — full 50-language coverage (2026-09-02)
+
+- **510 penetration fixtures across all 50 registry languages** (was ~145
+  across 22). Catalog-driven: `scripts/gen-pentests.py` instantiates
+  per-language idiomatic payloads (raw x86-64 syscalls for nasm,
+  `CALL "SYSTEM"` for cobol, `PipeStream` for smalltalk, `os.process_exec`
+  for odin, `std.net` for zig, etc.) with per-language run limits so
+  VM/CLR runtimes boot and genuinely *attempt* the attack. Re-gen preserves
+  pinned `want.json`; the harvest step flags compile-failed snippets and
+  treats ANY non-empty stdout as EXPLOIT/LEAK (0 leaks on the host run).
+- **Harvest status:** host-verified clean for the 15 new host-runnable
+  languages (crystal, dash, elisp, nim, octave*, odin, pony, prolog,
+  coffeescript*, dotnet, vlang, zig, pwsh, nasm, erl). Host-bucket
+  exceptions that await a docker-image harvest to pin observed statuses
+  (same stance as the pre-existing JVM family): *octave (Arch builds ship
+  UCX, whose masked-`/proc/sys` boot-id error leaks onto stdout; bookworm
+  octave 7.3 is clean), *coffeescript (host node 24 needs >1GB VA at build;
+  pinned node 18 is clean), plus clojure/groovy/julia/cobol/raku/smalltalk
+  (container-only runtimes). Until then those fixtures keep the placeholder
+  contract (accepted + empty stdout) — a docker `make integration-docker`
+  harvest overwrites them with observed statuses.
+- **OPEN FINDING:** the vendored nsjail submodule fails to link on Debian
+  bookworm (`undefined __isoc23_strtoimax`, needs glibc >= 2.38; protobuf
+  absl ABI mismatch with bookworm 3.21), which the shipped Dockerfile's
+  bookworm builder stage would hit. The current image predates the submodule
+  bump; verify the submodule pin still builds the image (or vendor the
+  glibc guard) before the next image build. Dev-host nsjail is unaffected
+  (built against the host toolchain).
+
 ## Shipped — prior phases
 
 ### Phase 1 — Security hardening (all shipped 2026-08-14)

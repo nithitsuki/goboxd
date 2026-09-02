@@ -1,0 +1,17 @@
+{
+  "language": "pwsh",
+  "source": "try { $c = [System.Net.Sockets.TcpClient]::new('93.184.216.34', 80) } catch {}\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 8,
+      "memory_kb": 8388608,
+      "max_processes": 64
+    }
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "language": "dotnet",
+  "source": "using System.Net.Sockets;class P{static void Main(){var c=new TcpClient();c.Connect(\"93.184.216.34\",80);}}\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 8,
+      "memory_kb": 1048576,
+      "max_processes": 64
+    }
+  }
+}

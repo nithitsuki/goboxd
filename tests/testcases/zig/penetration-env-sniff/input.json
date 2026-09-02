@@ -1,0 +1,17 @@
+{
+  "language": "zig",
+  "source": "const std = @import(\"std\");\npub fn main() !void {\n    for (std.os.environ) |e| {\n        try std.io.getStdOut().writer().print(\"{s}\\n\", .{e});\n    }\n}\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 4,
+      "memory_kb": 524288,
+      "max_processes": 64
+    }
+  }
+}

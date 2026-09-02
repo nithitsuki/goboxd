@@ -1,0 +1,17 @@
+{
+  "language": "octave",
+  "source": "function f(n)\n  f(n+1)\nend\nf(0)\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 8,
+      "memory_kb": 1048576,
+      "max_processes": 64
+    }
+  }
+}

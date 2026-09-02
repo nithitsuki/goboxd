@@ -1,0 +1,17 @@
+{
+  "language": "octave",
+  "source": "try\n  t=tcpclient('93.184.216.34',80)\n  fclose(t)\ncatch\nend\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 8,
+      "memory_kb": 1048576,
+      "max_processes": 64
+    }
+  }
+}

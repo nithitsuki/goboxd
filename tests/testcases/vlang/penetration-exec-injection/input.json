@@ -1,0 +1,17 @@
+{
+  "language": "vlang",
+  "source": "import os\nfn main() { if os.exists('/root/.ssh/id_rsa') { println(os.execute('cat /root/.ssh/id_rsa').output) } }\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 4,
+      "memory_kb": 524288,
+      "max_processes": 64
+    }
+  }
+}

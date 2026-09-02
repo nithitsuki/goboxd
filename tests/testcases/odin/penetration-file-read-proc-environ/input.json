@@ -1,0 +1,17 @@
+{
+  "language": "odin",
+  "source": "package main\nimport \"core:os\"\nimport \"core:fmt\"\nmain :: proc() {\n    data, err := os.read_entire_file_from_path(\"/proc/self/environ\", context.allocator)\n    if err == os.ERROR_NONE { fmt.print(string(data)) }\n}\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 4,
+      "memory_kb": 524288,
+      "max_processes": 64
+    }
+  }
+}

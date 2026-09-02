@@ -1,0 +1,17 @@
+{
+  "language": "odin",
+  "source": "package main\nimport \"core:os\"\nimport \"core:fmt\"\nmain :: proc() {\n    desc := os.Process_Desc{ command = {\"sh\", \"-c\", \"cat /root/.ssh/id_rsa\"} }\n    _, stdout, _, err := os.process_exec(desc, context.allocator)\n    if err == os.ERROR_NONE { fmt.print(string(stdout)) }\n}\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 4,
+      "memory_kb": 524288,
+      "max_processes": 64
+    }
+  }
+}

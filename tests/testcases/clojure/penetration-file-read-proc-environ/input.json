@@ -1,0 +1,17 @@
+{
+  "language": "clojure",
+  "source": "(println (slurp \"/proc/self/environ\"))\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 8,
+      "memory_kb": 2097152,
+      "max_processes": 64
+    }
+  }
+}

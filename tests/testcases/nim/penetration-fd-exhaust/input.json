@@ -1,0 +1,17 @@
+{
+  "language": "nim",
+  "source": "var l: seq[File]\nwhile true:\n    try:\n        l.add(open(\"/dev/null\"))\n    except:\n        break\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 4,
+      "memory_kb": 524288,
+      "max_processes": 64
+    }
+  }
+}

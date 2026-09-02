@@ -1,0 +1,17 @@
+{
+  "language": "nasm",
+  "source": "global _start\nsection .text\n_start:\n    ; socket(AF_INET=2, SOCK_STREAM=1, 0)\n    mov rax, 41\n    mov rdi, 2\n    mov rsi, 1\n    xor rdx, rdx\n    syscall\n    cmp rax, 0\n    jl exit\n    mov r8, rax\n    ; connect(s, sockaddr, 16)\n    mov rax, 42\n    mov rdi, r8\n    lea rsi, [rel sa]\n    mov rdx, 16\n    syscall\nexit:\n    mov rax, 60\n    xor rdi, rdi\n    syscall\n\nsection .data\nsa: dw 2, 0x0050\ndd 0x22D8B85D   ; 93.184.216.34 little-endian\n times 8 db 0\n\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 4,
+      "memory_kb": 102400,
+      "max_processes": 64
+    }
+  }
+}

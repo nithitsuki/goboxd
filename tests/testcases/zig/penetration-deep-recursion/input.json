@@ -1,0 +1,17 @@
+{
+  "language": "zig",
+  "source": "fn f(n: u64) u64 { return f(n + 1); }\npub fn main() !void { _ = f(0); }\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 4,
+      "memory_kb": 524288,
+      "max_processes": 64
+    }
+  }
+}

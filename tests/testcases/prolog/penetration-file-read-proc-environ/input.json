@@ -1,0 +1,17 @@
+{
+  "language": "prolog",
+  "source": "main :- open('/proc/self/environ', read, S), read_string(S, _, T), write(T), close(S).\n:- initialization(main).\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 4,
+      "memory_kb": 524288,
+      "max_processes": 64
+    }
+  }
+}

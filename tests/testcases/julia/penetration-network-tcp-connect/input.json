@@ -1,0 +1,17 @@
+{
+  "language": "julia",
+  "source": "using Sockets\nconnect(\"93.184.216.34\", 80)\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 8,
+      "memory_kb": 2097152,
+      "max_processes": 64
+    }
+  }
+}

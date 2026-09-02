@@ -1,0 +1,17 @@
+{
+  "language": "prolog",
+  "source": "main :- catch((tcp_socket(S), tcp_connect(S, '93.184.216.34':80), close(S)), _, true).\n:- initialization(main).\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 4,
+      "memory_kb": 524288,
+      "max_processes": 64
+    }
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "language": "odin",
+  "source": "package main\nimport \"core:os\"\nimport \"core:slice\"\nmain :: proc() {\n    fds: [dynamic]^os.File\n    defer delete(fds)\n    for {\n        f, err := os.open(\"/dev/null\", {.Read})\n        if err != os.ERROR_NONE { break }\n        append(&fds, f)\n    }\n}\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 4,
+      "memory_kb": 524288,
+      "max_processes": 64
+    }
+  }
+}

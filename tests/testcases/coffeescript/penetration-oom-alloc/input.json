@@ -1,0 +1,17 @@
+{
+  "language": "coffeescript",
+  "source": "a = []\nwhile true\n    a.push new Array(200000).join('x')\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 4,
+      "memory_kb": 524288,
+      "max_processes": 64
+    }
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "language": "crystal",
+  "source": "a = [] of Array(UInt8)\nloop { a << Array(UInt8).new(1048576) }\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 4,
+      "memory_kb": 524288,
+      "max_processes": 64
+    }
+  }
+}

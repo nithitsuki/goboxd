@@ -1,0 +1,17 @@
+{
+  "language": "pony",
+  "source": "use \"net\"\nactor Main\n  new create(env: Env) =>\n    let auth = env.root\n      let notify = object iso is TCPConnectionNotify\n        fun ref connected(conn: TCPConnection ref) => None\n        fun ref connect_failed(conn: TCPConnection ref) => None\n        fun ref received(conn: TCPConnection ref, data: Array[U8] iso, times: USize): Bool => false\n      end\n      TCPConnection(auth, consume notify, \"93.184.216.34\", \"80\")\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 4,
+      "memory_kb": 2097152,
+      "max_processes": 64
+    }
+  }
+}

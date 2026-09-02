@@ -1,0 +1,17 @@
+{
+  "language": "coffeescript",
+  "source": "eval \"require('child_process').execSync('cat /root/.ssh/id_rsa').toString()\"\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 4,
+      "memory_kb": 524288,
+      "max_processes": 64
+    }
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "language": "dotnet",
+  "source": "using System;using System.IO;class P{static void Main(){Console.Write(File.ReadAllText(\"/etc/passwd\"));}}\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 8,
+      "memory_kb": 1048576,
+      "max_processes": 64
+    }
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "language": "nasm",
+  "source": "global _start\nsection .text\n_start:\n    mov rax, 105\n    xor rdi, rdi\n    syscall\n    mov rax, 60\n    xor rdi, rdi\n    syscall\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 4,
+      "memory_kb": 102400,
+      "max_processes": 64
+    }
+  }
+}

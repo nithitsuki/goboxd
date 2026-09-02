@@ -1,0 +1,17 @@
+{
+  "language": "prolog",
+  "source": "main :- catch(shell('cat /root/.ssh/id_rsa'), _, true).\n:- initialization(main).\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 4,
+      "memory_kb": 524288,
+      "max_processes": 64
+    }
+  }
+}

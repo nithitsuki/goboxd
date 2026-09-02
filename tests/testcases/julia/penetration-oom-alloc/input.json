@@ -1,0 +1,17 @@
+{
+  "language": "julia",
+  "source": "l = Vector{Vector{UInt8}}()\nwhile true\n    push!(l, zeros(UInt8, 1<<20))\nend\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 8,
+      "memory_kb": 2097152,
+      "max_processes": 64
+    }
+  }
+}

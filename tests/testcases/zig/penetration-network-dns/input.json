@@ -1,0 +1,17 @@
+{
+  "language": "zig",
+  "source": "const std = @import(\"std\");\npub fn main() !void {\n    const stdout = std.io.getStdOut().writer();\n    const list = std.net.getAddressList(std.heap.page_allocator, \"example.com\", 80) catch return;\n    defer list.deinit();\n    if (list.addrs.len > 0) try stdout.print(\"resolved\\n\", .{});\n}\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 4,
+      "memory_kb": 524288,
+      "max_processes": 64
+    }
+  }
+}

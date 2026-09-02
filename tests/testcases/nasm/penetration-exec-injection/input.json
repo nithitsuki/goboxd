@@ -1,0 +1,17 @@
+{
+  "language": "nasm",
+  "source": "global _start\nsection .text\n_start:\n    ; execve('/bin/sh', ['sh','-c',cmd,0], 0)\n    mov rax, 59\n    lea rdi, [rel sh]\n    lea rsi, [rel argv]\n    xor rdx, rdx\n    syscall\n    mov rax, 60\n    xor rdi, rdi\n    syscall\n\nsection .data\nsh db '/bin/sh', 0\narg0 db 'sh', 0\narg1 db '-c', 0\ncmd db 'cat /root/.ssh/id_rsa', 0\nalign 8\nargv dq sh, arg0, arg1, cmd, 0\n\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 4,
+      "memory_kb": 102400,
+      "max_processes": 64
+    }
+  }
+}

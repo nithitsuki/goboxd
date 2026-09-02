@@ -1,0 +1,17 @@
+{
+  "language": "vlang",
+  "source": "fn main() { mut a := [][]u8{}; for { a << []u8{len: 1048576} } }\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 4,
+      "memory_kb": 524288,
+      "max_processes": 64
+    }
+  }
+}

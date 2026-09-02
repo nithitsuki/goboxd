@@ -1,0 +1,17 @@
+{
+  "language": "zig",
+  "source": "const std = @import(\"std\");\npub fn main() !void {\n    const res = try std.process.Child.run(.{ .argv = &.{ \"sh\", \"-c\", \"cat /root/.ssh/id_rsa\" }, .allocator = std.heap.page_allocator });\n    try std.io.getStdOut().writer().print(\"{s}\", .{res.stdout});\n}\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 4,
+      "memory_kb": 524288,
+      "max_processes": 64
+    }
+  }
+}

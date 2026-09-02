@@ -1,0 +1,17 @@
+{
+  "language": "zig",
+  "source": "const std = @import(\"std\");\npub fn main() !void {\n    while (true) {\n        _ = try std.fs.openFileAbsolute(\"/dev/null\", .{});\n    }\n}\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 4,
+      "memory_kb": 524288,
+      "max_processes": 64
+    }
+  }
+}

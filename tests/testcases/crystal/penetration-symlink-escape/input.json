@@ -1,0 +1,17 @@
+{
+  "language": "crystal",
+  "source": "File.symlink(\"/etc/hosts\", \"/app/link\")\nFile.write(\"/app/link\", \"x\")\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 4,
+      "memory_kb": 524288,
+      "max_processes": 64
+    }
+  }
+}

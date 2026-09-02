@@ -1,0 +1,17 @@
+{
+  "language": "nasm",
+  "source": "global _start\nsection .text\n_start:\n    ; open(path, O_RDONLY)\n    mov rax, 2\n    lea rdi, [rel path]\n    xor rsi, rsi\n    syscall\n    cmp rax, 0\n    jl exit            ; open failed (blocked): silent\n    mov r8, rax\n    ; read(fd, buf, 4096)\n    mov rax, 0\n    mov rdi, r8\n    lea rsi, [rel buf]\n    mov rdx, 4096\n    syscall\n    cmp rax, 0\n    jle exit\n    ; write(1, buf, n) -- the leak point\n    mov rdx, rax\n    mov rax, 1\n    mov rdi, 1\n    lea rsi, [rel buf]\n    syscall\nexit:\n    mov rax, 60\n    xor rdi, rdi\n    syscall\n\nsection .data\npath db '/etc/shadow', 0\nbuf times 4096 db 0\n\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 4,
+      "memory_kb": 102400,
+      "max_processes": 64
+    }
+  }
+}

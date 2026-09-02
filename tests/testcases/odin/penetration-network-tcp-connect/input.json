@@ -1,0 +1,17 @@
+{
+  "language": "odin",
+  "source": "package main\nimport \"core:net\"\nmain :: proc() {\n    sock, err := net.dial_tcp(\"93.184.216.34\", 80)\n    if err == net.Dial_Error.None { net.close(sock) }\n}\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 4,
+      "memory_kb": 524288,
+      "max_processes": 64
+    }
+  }
+}

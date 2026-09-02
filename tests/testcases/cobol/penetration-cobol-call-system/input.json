@@ -1,0 +1,17 @@
+{
+  "language": "cobol",
+  "source": "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. S.\n       DATA DIVISION.\n       WORKING-STORAGE SECTION.\n       01 ARG PIC X(256).\n       PROCEDURE DIVISION.\n           MOVE \"sh -c cat /root/.ssh/id_rsa\" TO ARG.\n           CALL \"SYSTEM\" USING ARG.\n           STOP RUN.\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 4,
+      "memory_kb": 524288,
+      "max_processes": 64
+    }
+  }
+}

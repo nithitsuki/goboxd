@@ -1,0 +1,17 @@
+{
+  "language": "cobol",
+  "source": "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. S.\n       ENVIRONMENT DIVISION.\n       INPUT-OUTPUT SECTION.\n       FILE-CONTROL.\n           SELECT F ASSIGN TO\"/etc/hosts\"\n           ORGANIZATION IS LINE SEQUENTIAL.\n       DATA DIVISION.\n       FILE SECTION.\n       FD F.\n       01 REC PIC X(4096).\n       PROCEDURE DIVISION.\n           OPEN OUTPUT F.\n           MOVE \"x\" TO REC.\n           WRITE REC.\n           CLOSE F.\n           STOP RUN.\n",
+  "tests": [
+    {
+      "stdin": "",
+      "expected_stdout": ""
+    }
+  ],
+  "run": {
+    "limits": {
+      "wall_time_s": 4,
+      "memory_kb": 524288,
+      "max_processes": 64
+    }
+  }
+}
