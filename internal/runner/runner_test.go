@@ -2093,15 +2093,17 @@ func intPtr(v int) *int { return &v }
 // Option C (resolved 2026-09-04) adds the third assertion: /proc itself must
 // be mounted read-only (a /proc/self/comm write fails EROFS, and the mount
 // table shows an ro /proc) so the cosmetic write surface is closed while
-// reads keep working. The ro assertion is gated on kernel >= 6.3: older
-// kernels take nsjail's legacy mount path, which silently drops the `:ro`
-// option (mount data procfs ignores), leaving proc rw there. Jail and test
-// share the host kernel, so uname in the test is authoritative.
+// reads keep working. This holds on every supported kernel, not just new
+// ones: nsjail's legacy mount(2) path passes the `:ro` through as mount
+// data, and the kernel's generic monolithic parser translates it to
+// SB_RDONLY before proc's own option parser runs (vfs_parse_sb_flag,
+// verified in v6.0 source and live on 7.2) — pre-fs_context kernels would
+// EINVAL the mandatory mount instead, failing loud, never silently rw.
 //
 // It is a M-tier grading gate: removing the /etc/hosts mask makes the
 // hosts assertions fail; removing the /proc/sys mask makes the sys
 // assertions fail; removing `:ro` from the proc mount makes the RO
-// assertions fail (on new kernels).
+// assertions fail.
 func TestJailProcAndHostsMasked(t *testing.T) {
 	if _, err := exec.LookPath("nsjail"); err != nil {
 		t.Skip("nsjail not found in PATH, skipping runner tests (run inside docker-compose)")
@@ -2232,60 +2234,31 @@ print("` + marker + `")
 		t.Errorf("/proc/sys is not masked; got %q (want 0 entries)", sys)
 	}
 
-	// Option C: /proc itself must be read-only (kernels >= 6.3 take nsjail's
-	// new mount path, which honors the `:ro`; older kernels silently mount
-	// rw and keep that as documented residual).
-	if kernelNewMountAPI(t) {
-		ro := extractBetween(res.Stdout, "RO_BEGIN", "RO_END")
-		if strings.Contains(ro, "COMM_WRITABLE") {
-			t.Errorf("/proc is writable (comm write succeeded) — the :ro mount is not effective")
-		}
-		if want := fmt.Sprintf("COMM_ERR %d", syscall.EROFS); !strings.Contains(ro, want) {
-			t.Errorf("/proc/self/comm write did not fail EROFS; got %q (want %q)", ro, want)
-		}
-		mounts := extractBetween(res.Stdout, "MOUNT_BEGIN", "MOUNT_END")
-		if strings.Contains(mounts, "MOUNT_ERR") {
-			t.Errorf("could not read the jail mount table: %q", mounts)
-		}
-		foundRO := false
-		for _, line := range strings.Split(mounts, "\n") {
-			// Probe echoes "PROC_MOUNT <src> <dst> <fstype> <opts> ...".
-			f := strings.Fields(line)
-			if len(f) >= 6 && f[2] == "/proc" && strings.HasPrefix(f[4], "ro,") {
-				foundRO = true
-			}
-		}
-		if !foundRO {
-			t.Errorf("no read-only /proc mount in the jail mount table: %q", mounts)
-		}
-	} else {
-		t.Logf("kernel predates 6.3 mount API; skipping /proc read-only assertions (legacy path mounts rw)")
+	// Option C: /proc itself must be read-only on every supported kernel
+	// (see the test doc comment for why the `:ro` holds beyond the new
+	// mount API). A writable proc reopens the cosmetic write surface.
+	ro := extractBetween(res.Stdout, "RO_BEGIN", "RO_END")
+	if strings.Contains(ro, "COMM_WRITABLE") {
+		t.Errorf("/proc is writable (comm write succeeded) — the :ro mount is not effective")
 	}
-}
-
-// kernelNewMountAPI reports whether the host kernel takes nsjail's new mount
-// path (>= 6.3), which honors per-mount options like `:ro`. The jail shares
-// the host kernel, so uname here is authoritative for in-jail behavior.
-func kernelNewMountAPI(t *testing.T) bool {
-	t.Helper()
-	var u syscall.Utsname
-	if err := syscall.Uname(&u); err != nil {
-		t.Fatalf("uname: %v", err)
+	if want := fmt.Sprintf("COMM_ERR %d", syscall.EROFS); !strings.Contains(ro, want) {
+		t.Errorf("/proc/self/comm write did not fail EROFS; got %q (want %q)", ro, want)
 	}
-	releaseBytes := make([]byte, 0, len(u.Release))
-	for _, c := range u.Release {
-		if c == 0 {
-			break
+	mounts := extractBetween(res.Stdout, "MOUNT_BEGIN", "MOUNT_END")
+	if strings.Contains(mounts, "MOUNT_ERR") {
+		t.Errorf("could not read the jail mount table: %q", mounts)
+	}
+	foundRO := false
+	for _, line := range strings.Split(mounts, "\n") {
+		// Probe echoes "PROC_MOUNT <src> <dst> <fstype> <opts> ...".
+		f := strings.Fields(line)
+		if len(f) >= 6 && f[2] == "/proc" && strings.HasPrefix(f[4], "ro,") {
+			foundRO = true
 		}
-		releaseBytes = append(releaseBytes, byte(c))
 	}
-	release := string(releaseBytes)
-	// Release looks like "7.2.2-zen1-1-zen" or "5.15.0-91-generic".
-	var major, minor int
-	if _, err := fmt.Sscanf(release, "%d.%d", &major, &minor); err != nil {
-		t.Fatalf("parsing kernel release %q: %v", release, err)
+	if !foundRO {
+		t.Errorf("no read-only /proc mount in the jail mount table: %q", mounts)
 	}
-	return major > 6 || (major == 6 && minor >= 3)
 }
 
 // TestJailDNSMasked (DNS-exfil fix) proves the jail has no working resolver:
