@@ -15,3 +15,14 @@ goboxd
 TODO.md
 README.md
 LICENSE
+# nsjail build artifacts must never enter the build context. The builder
+# stage compiles nsjail from source; stale host-built objects in the
+# worktree would silently satisfy make(1) and ship a host-linked binary
+# into the image (observed: a protobuf-36-linked nsjail in a bookworm
+# image, dead on arrival). Sources only past this line.
+external/nsjail/nsjail
+external/nsjail/*.o
+external/nsjail/*.pb.cc
+external/nsjail/*.pb.h
+external/nsjail/kafel/**/*.o
+external/nsjail/kafel/**/*.a

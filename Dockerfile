@@ -12,10 +12,13 @@ RUN apt-get update && apt-get install -y \
     protobuf-compiler=3.21.12-3+deb12u1 \
     libnl-route-3-dev=3.7.0-0.2+b1
 
-# Build nsjail
+# Build nsjail from pristine source. The `make clean` is deliberate:
+# build artifacts are .dockerignored out of the context, and the clean
+# guarantees no stale object file can ever satisfy the build and ship a
+# foreign-linked binary into the image.
 COPY external/nsjail /nsjail-src
 WORKDIR /nsjail-src
-RUN make -j$(nproc)
+RUN make clean && make -j$(nproc)
 
 # Build goboxd
 WORKDIR /app

@@ -107,13 +107,22 @@ Notes:
   (container-only runtimes). Until then those fixtures keep the placeholder
   contract (accepted + empty stdout) — a docker `make integration-docker`
   harvest overwrites them with observed statuses.
-- **OPEN FINDING:** the vendored nsjail submodule fails to link on Debian
-  bookworm (`undefined __isoc23_strtoimax`, needs glibc >= 2.38; protobuf
-  absl ABI mismatch with bookworm 3.21), which the shipped Dockerfile's
-  bookworm builder stage would hit. The current image predates the submodule
-  bump; verify the submodule pin still builds the image (or vendor the
-  glibc guard) before the next image build. Dev-host nsjail is unaffected
-  (built against the host toolchain).
+- **RESOLVED (2026-09-04): nsjail-in-image was silently host-built — real bug,
+  now fixed.** The Sep-02 link failure (`__isoc23_strtoimax`, protobuf absl
+  ABI) was a stale-object artifact: a container relinked Aug-28 host-built
+  `.o` files against bookworm libs. But chasing it exposed the worse latent
+  defect: `COPY external/nsjail` carried the worktree's `.o` files and
+  `nsjail` binary into the builder, so `make` was a no-op and the image
+  shipped a **host-linked nsjail** (protobuf 36) into bookworm (protobuf
+  3.21) — dead on arrival (`libprotobuf.so.36: cannot open shared object`).
+  Fix: `.dockerignore` excludes all nsjail build artifacts (`nsjail`,
+  `*.o`, `*.pb.cc/h`, kafel `*.o/*.a`) and the builder runs
+  `make clean && make`. Verified 2026-09-04: pristine-source compile in a
+  bookworm container with the exact Dockerfile pins, full `LANGS=py3,c`
+  image build, and a live smoke (py3/c execute; /etc/shadow read blocked
+  with empty stdout; infinite loop bounded as time_exceeded). Note for a
+  future `LANGS=all` build (~33GB disk): the builder now always compiles
+  nsjail from source, so the full build is hermetic too.
 
 ## Shipped — prior phases
 
