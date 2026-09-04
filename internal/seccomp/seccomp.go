@@ -16,6 +16,7 @@ import (
 	_ "embed"
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 	"sync"
 	"unicode"
@@ -55,8 +56,8 @@ func PolicyPath() (string, error) {
 }
 
 // ParseSyscallNames splits a per-language `seccomp:` directive (whitespace- or
-// comma-separated) into individual syscall names. Unknown or empty tokens are
-// not validated here: kafel surfaces a bad syscall name at nsjail startup.
+// comma-separated) into individual syscall names. Names are not validated
+// here; CombinedWith rejects unknown ones (M3).
 func ParseSyscallNames(s string) []string {
 	if strings.TrimSpace(s) == "" {
 		return nil
@@ -64,6 +65,18 @@ func ParseSyscallNames(s string) []string {
 	return strings.FieldsFunc(s, func(r rune) bool {
 		return r == ',' || unicode.IsSpace(r)
 	})
+}
+
+// syscallNumRe matches kafel's numeric syscall form (e.g. SYSCALL[166],
+// the umount2 workaround: kafel's amd64 table has no such name). It is the
+// only non-name shape CombinedWith accepts.
+var syscallNumRe = regexp.MustCompile(`^SYSCALL\[\d+\]$`)
+
+// validSyscall reports whether kafel accepts the extra on amd64: either a
+// name from its table (validSyscalls, generated from the vendored kafel) or
+// the numeric SYSCALL[n] form.
+func validSyscall(name string) bool {
+	return validSyscalls[name] || syscallNumRe.MatchString(name)
 }
 
 // CombinedWith returns a kafel policy equivalent to the embedded global policy
@@ -74,6 +87,19 @@ func ParseSyscallNames(s string) []string {
 // global list are skipped (dedup). The extras are raw kafel syscall names or
 // expressions (e.g. "chmod" or "SYSCALL[166]").
 func CombinedWith(extraSyscalls []string) ([]byte, error) {
+	// M3: reject unknown names up front. kafel would fail to compile the
+	// policy at jail startup and nsjail would exit 255 — byte-identical to a
+	// missing binary or a user program exiting 255, i.e. a misleading
+	// build_failed/runtime_error. Failing here returns through nsjailArgs as
+	// Infra, which both interpreters map to internal_error: an operator
+	// config error reads as one.
+	for _, e := range extraSyscalls {
+		e = strings.TrimSpace(e)
+		if e == "" || validSyscall(e) {
+			continue
+		}
+		return nil, fmt.Errorf("seccomp: unknown syscall %q (not in kafel amd64 table; numeric SYSCALL[n] form is accepted)", e)
+	}
 	names, header, name, defAction, err := parseGlobalPolicy()
 	if err != nil {
 		return nil, err

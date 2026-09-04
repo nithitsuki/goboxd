@@ -237,6 +237,56 @@ func TestSeccompDeniedSyscall(t *testing.T) {
 	}
 }
 
+// TestSeccompBadSyscallIsInfraError (M3) locks the failure attribution for a
+// misconfigured per-language profile: a `seccomp:` extra kafel cannot
+// compile must read as internal_error (operator config error), never as
+// build_failed/runtime_error (user error). Without CombinedWith's up-front
+// validation, nsjail would exit 255 — byte-identical to a missing binary or
+// a user program exiting 255 — and the run would misclassify. The error
+// must also name the offender so the YAML is fixable.
+func TestSeccompBadSyscallIsInfraError(t *testing.T) {
+	if _, err := exec.LookPath("nsjail"); err != nil {
+		t.Skip("nsjail not found in PATH, skipping runner tests (run inside docker-compose)")
+	}
+	if os.Geteuid() != 0 {
+		t.Skip("requires root to run nsjail")
+	}
+
+	lc := config.LanguageConfig{
+		ID:             "py3",
+		Name:           "Python 3",
+		RunCmd:         []string{"/usr/bin/python3", "main.py"},
+		SourceFilename: "main.py",
+		RunLimits: config.Limits{
+			WallTimeS:    5,
+			MemoryKB:     102400,
+			MaxProcesses: 100,
+		},
+		Seccomp: "nosuchsyscall_xyz",
+	}
+	req := models.RunRequest{
+		Language: "py3",
+		Source:   "print('ok')",
+		Tests:    []models.TestCase{{Stdin: "", ExpectedStdout: "ok\n"}},
+	}
+
+	_, results, err := ExecuteRun(context.Background(), req, lc)
+	if err != nil {
+		t.Fatalf("ExecuteRun dropped a hard error: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	res := results[0]
+	if res.Status != models.ResultInternalError {
+		t.Errorf("status = %q, want internal_error (bad seccomp extra is operator config, not user code; stderr: %q)",
+			res.Status, res.Stderr)
+	}
+	if !strings.Contains(res.Stderr, "nosuchsyscall_xyz") {
+		t.Errorf("stderr %q must name the offending syscall", res.Stderr)
+	}
+}
+
 // TestExecuteRunContextCancel proves client-disconnect cancellation: a run
 // with a 60s wall time must return ~1s after the request context is canceled,
 // classify the test as "cancelled", free the uid, and leave no jail dir.
@@ -2040,9 +2090,18 @@ func intPtr(v int) *int { return &v }
 // hostname, /etc/hosts contains "localhost" but not the host hostname, and
 // listing /proc/sys/sys fails or is empty (the mask).
 //
+// Option C (resolved 2026-09-04) adds the third assertion: /proc itself must
+// be mounted read-only (a /proc/self/comm write fails EROFS, and the mount
+// table shows an ro /proc) so the cosmetic write surface is closed while
+// reads keep working. The ro assertion is gated on kernel >= 6.3: older
+// kernels take nsjail's legacy mount path, which silently drops the `:ro`
+// option (mount data procfs ignores), leaving proc rw there. Jail and test
+// share the host kernel, so uname in the test is authoritative.
+//
 // It is a M-tier grading gate: removing the /etc/hosts mask makes the
 // hosts assertions fail; removing the /proc/sys mask makes the sys
-// assertions fail.
+// assertions fail; removing `:ro` from the proc mount makes the RO
+// assertions fail (on new kernels).
 func TestJailProcAndHostsMasked(t *testing.T) {
 	if _, err := exec.LookPath("nsjail"); err != nil {
 		t.Skip("nsjail not found in PATH, skipping runner tests (run inside docker-compose)")
@@ -2091,6 +2150,25 @@ try:
 except Exception as e:
     print("SYS_ERR", e)
 print("SYS_END")
+print("RO_BEGIN")
+try:
+    with open("/proc/self/comm", "w") as f:
+        f.write("x")
+    print("COMM_WRITABLE")
+except OSError as e:
+    print("COMM_ERR", e.errno)
+print("RO_END")
+print("MOUNT_BEGIN")
+try:
+    # /proc/mounts lines are "src dst fstype opts ..." (no "on"/"type"
+    # words like mount(1) prints); only /proc-dst lines are echoed.
+    for line in open("/proc/mounts", "rb").read().decode().splitlines():
+        parts = line.split()
+        if len(parts) > 3 and parts[1] == "/proc":
+            print("PROC_MOUNT", line)
+except Exception as e:
+    print("MOUNT_ERR", e)
+print("MOUNT_END")
 print("` + marker + `")
 `
 
@@ -2153,6 +2231,61 @@ print("` + marker + `")
 		}
 		t.Errorf("/proc/sys is not masked; got %q (want 0 entries)", sys)
 	}
+
+	// Option C: /proc itself must be read-only (kernels >= 6.3 take nsjail's
+	// new mount path, which honors the `:ro`; older kernels silently mount
+	// rw and keep that as documented residual).
+	if kernelNewMountAPI(t) {
+		ro := extractBetween(res.Stdout, "RO_BEGIN", "RO_END")
+		if strings.Contains(ro, "COMM_WRITABLE") {
+			t.Errorf("/proc is writable (comm write succeeded) — the :ro mount is not effective")
+		}
+		if want := fmt.Sprintf("COMM_ERR %d", syscall.EROFS); !strings.Contains(ro, want) {
+			t.Errorf("/proc/self/comm write did not fail EROFS; got %q (want %q)", ro, want)
+		}
+		mounts := extractBetween(res.Stdout, "MOUNT_BEGIN", "MOUNT_END")
+		if strings.Contains(mounts, "MOUNT_ERR") {
+			t.Errorf("could not read the jail mount table: %q", mounts)
+		}
+		foundRO := false
+		for _, line := range strings.Split(mounts, "\n") {
+			// Probe echoes "PROC_MOUNT <src> <dst> <fstype> <opts> ...".
+			f := strings.Fields(line)
+			if len(f) >= 6 && f[2] == "/proc" && strings.HasPrefix(f[4], "ro,") {
+				foundRO = true
+			}
+		}
+		if !foundRO {
+			t.Errorf("no read-only /proc mount in the jail mount table: %q", mounts)
+		}
+	} else {
+		t.Logf("kernel predates 6.3 mount API; skipping /proc read-only assertions (legacy path mounts rw)")
+	}
+}
+
+// kernelNewMountAPI reports whether the host kernel takes nsjail's new mount
+// path (>= 6.3), which honors per-mount options like `:ro`. The jail shares
+// the host kernel, so uname here is authoritative for in-jail behavior.
+func kernelNewMountAPI(t *testing.T) bool {
+	t.Helper()
+	var u syscall.Utsname
+	if err := syscall.Uname(&u); err != nil {
+		t.Fatalf("uname: %v", err)
+	}
+	releaseBytes := make([]byte, 0, len(u.Release))
+	for _, c := range u.Release {
+		if c == 0 {
+			break
+		}
+		releaseBytes = append(releaseBytes, byte(c))
+	}
+	release := string(releaseBytes)
+	// Release looks like "7.2.2-zen1-1-zen" or "5.15.0-91-generic".
+	var major, minor int
+	if _, err := fmt.Sscanf(release, "%d.%d", &major, &minor); err != nil {
+		t.Fatalf("parsing kernel release %q: %v", release, err)
+	}
+	return major > 6 || (major == 6 && minor >= 3)
 }
 
 // TestJailDNSMasked (DNS-exfil fix) proves the jail has no working resolver:

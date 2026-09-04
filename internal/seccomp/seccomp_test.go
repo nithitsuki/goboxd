@@ -2,6 +2,8 @@ package seccomp
 
 import (
 	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -159,5 +161,69 @@ func TestPolicyPath(t *testing.T) {
 	}
 	if p2 != p {
 		t.Errorf("PolicyPath not stable: got %q then %q", p, p2)
+	}
+}
+
+// TestCombinedWithRejectsUnknownSyscall (M3): a per-language extra kafel
+// cannot compile must fail HERE, not at jail startup. Without this check
+// nsjail exits 255 — byte-identical to a missing binary or a user program
+// exiting 255 — and the run misreads as build_failed/runtime_error. The
+// error must name the offender so the operator can fix the YAML, and it
+// must flow through nsjailArgs as Infra (internal_error), which the
+// end-to-end test below locks.
+func TestCombinedWithRejectsUnknownSyscall(t *testing.T) {
+	for _, bad := range []string{"nosuchsyscall_xyz", "CHMOD", "SYSCALL[]", "SYSCALL[x]", "umount2"} {
+		if _, err := CombinedWith([]string{bad}); err == nil {
+			t.Errorf("CombinedWith(%q) = nil error, want rejection", bad)
+		} else if !strings.Contains(err.Error(), strings.TrimSpace(bad)) {
+			t.Errorf("CombinedWith(%q) error %q must name the offender", bad, err)
+		}
+	}
+
+	// Valid shapes still merge: a table name, the numeric form (the umount2
+	// workaround), and empties (defensive: ParseSyscallNames never emits
+	// them, but direct callers might).
+	for _, tc := range [][]string{
+		{"chmod"},
+		{"SYSCALL[166]"},
+		{"chmod", "SYSCALL[166]"},
+		{""},
+		{},
+	} {
+		if _, err := CombinedWith(tc); err != nil {
+			t.Errorf("CombinedWith(%q) = %v, want success", tc, err)
+		}
+	}
+}
+
+// TestSyscallTableInSync guards the generated table against drift: the Go
+// set must equal the vendored kafel amd64 table exactly, or CombinedWith
+// could reject a name kafel accepts (false internal_error) or accept one
+// kafel rejects (back to the misleading 255). Skips when the nsjail
+// submodule is absent (CI checks out without submodules); re-run
+// scripts/gen-seccomp-table.sh after any submodule bump.
+func TestSyscallTableInSync(t *testing.T) {
+	f := filepath.Join("..", "..", "external", "nsjail", "kafel", "src", "syscalls", "amd64_syscalls.c")
+	data, err := os.ReadFile(f)
+	if err != nil {
+		t.Skipf("vendored kafel table absent (%v); run with submodules for the sync check", err)
+	}
+	re := regexp.MustCompile(`(?m)^\s+\{"([a-z0-9_]+)",`)
+	got := map[string]bool{}
+	for _, m := range re.FindAllStringSubmatch(string(data), -1) {
+		got[m[1]] = true
+	}
+	if len(got) < 300 {
+		t.Fatalf("extracted only %d names from kafel table, extraction is broken", len(got))
+	}
+	for n := range got {
+		if !validSyscalls[n] {
+			t.Errorf("kafel name %q missing from validSyscalls (re-run scripts/gen-seccomp-table.sh)", n)
+		}
+	}
+	for n := range validSyscalls {
+		if !got[n] {
+			t.Errorf("validSyscalls has %q absent from kafel table (re-run scripts/gen-seccomp-table.sh)", n)
+		}
 	}
 }
